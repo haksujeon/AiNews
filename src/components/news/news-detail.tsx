@@ -50,13 +50,23 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
       </div>
 
       {imageUrl && (
-        <div className="mb-8 rounded-xl overflow-hidden">
+        <div className="mb-8 rounded-xl overflow-hidden relative bg-muted">
           <img
             src={imageUrl}
             alt={title}
+            referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
             className="w-full h-auto max-h-[400px] object-cover"
             onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
+              const img = e.target as HTMLImageElement;
+              img.style.display = "none";
+              const parent = img.parentElement!;
+              if (!parent.querySelector(".img-fallback")) {
+                const fallback = document.createElement("div");
+                fallback.className = "img-fallback flex items-center justify-center h-48 bg-muted text-muted-foreground";
+                fallback.textContent = "AI NEWS";
+                parent.appendChild(fallback);
+              }
             }}
           />
         </div>
@@ -149,6 +159,11 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
             <CardTitle className="text-base flex items-center gap-2">
               <Lightbulb className="w-5 h-5 text-yellow-500" />
               {t("aiInsights")}
+              {locale !== "en" && (
+                <Badge variant="outline" className="text-xs font-normal ml-1">
+                  EN
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>

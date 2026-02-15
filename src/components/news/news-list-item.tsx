@@ -18,13 +18,23 @@ export function NewsListItem({ item }: { item: NewsItem }) {
       <article className="group bg-card rounded-xl border hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer">
         <div className="flex flex-col sm:flex-row">
           {imageUrl && (
-            <div className="sm:w-56 h-48 sm:h-auto flex-shrink-0 overflow-hidden bg-muted">
+            <div className="sm:w-56 h-48 sm:h-auto flex-shrink-0 overflow-hidden bg-muted relative">
               <img
                 src={imageUrl}
                 alt={title}
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).parentElement!.style.display = "none";
+                  const img = e.target as HTMLImageElement;
+                  const parent = img.parentElement!;
+                  img.style.display = "none";
+                  if (!parent.querySelector(".img-fallback")) {
+                    const fallback = document.createElement("div");
+                    fallback.className = "img-fallback absolute inset-0 flex items-center justify-center bg-muted text-muted-foreground text-sm";
+                    fallback.textContent = "AI NEWS";
+                    parent.appendChild(fallback);
+                  }
                 }}
               />
             </div>

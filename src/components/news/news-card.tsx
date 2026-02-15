@@ -18,13 +18,23 @@ export function NewsCard({ item }: { item: NewsItem }) {
     <Link href={`/news/${item.id}`}>
       <Card className="group h-full overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer">
         {imageUrl && (
-          <div className="h-48 overflow-hidden bg-muted">
+          <div className="h-48 overflow-hidden bg-muted relative">
             <img
               src={imageUrl}
               alt={title}
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
+                const img = e.target as HTMLImageElement;
+                const parent = img.parentElement!;
+                img.style.display = "none";
+                if (!parent.querySelector(".img-fallback")) {
+                  const fallback = document.createElement("div");
+                  fallback.className = "img-fallback absolute inset-0 flex items-center justify-center bg-muted text-muted-foreground text-sm";
+                  fallback.textContent = "AI NEWS";
+                  parent.appendChild(fallback);
+                }
               }}
             />
           </div>
