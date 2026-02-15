@@ -1,0 +1,25 @@
+{
+  "common": {
+    "appName": "AI NEWS PORTAL",
+    "loading": "로딩 중...",
+    "search": "검색",
+    "footerText": "AI 뉴스 데이터는 자동화 시스템을 통해 수집 및 번역됩니다."
+  },
+  "filter": {
+    "searchPlaceholder": "기사 제목, 내용으로 검색...",
+    "country": "국가",
+    "category": "카테고리",
+    "allCountries": "전체 국가",
+    "allCategories": "전체 카테고리",
+    "reset": "초기화",
+    "totalCount": "총 {count}개의 기사"
+  },
+  "detail": {
+    "backToList": "목록으로",
+    "aiSummary": "AI 요약",
+    "aiInsights": "AI 인사이트",
+    "keyTerms": "핵심 용어",
+    "viewOriginal": "원문 보기",
+    "relatedNews": "관련 기사"
+  }
+}

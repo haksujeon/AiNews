@@ -1,0 +1,25 @@
+{
+  "common": {
+    "appName": "AI NEWS PORTAL",
+    "loading": "加载中...",
+    "search": "搜索",
+    "footerText": "AI新闻数据通过自动化系统收集和翻译。"
+  },
+  "filter": {
+    "searchPlaceholder": "按标题或内容搜索...",
+    "country": "国家",
+    "category": "分类",
+    "allCountries": "所有国家",
+    "allCategories": "所有分类",
+    "reset": "重置",
+    "totalCount": "共 {count} 篇文章"
+  },
+  "detail": {
+    "backToList": "返回列表",
+    "aiSummary": "AI摘要",
+    "aiInsights": "AI洞察",
+    "keyTerms": "关键术语",
+    "viewOriginal": "查看原文",
+    "relatedNews": "相关新闻"
+  }
+}

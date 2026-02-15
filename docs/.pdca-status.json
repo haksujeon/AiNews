@@ -1,0 +1,169 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-02-15T13:55:14.126Z",
+  "activeFeatures": [
+    "AiNews",
+    "news",
+    "layout",
+    "[locale]",
+    "[id]"
+  ],
+  "primaryFeature": "AiNews",
+  "features": {
+    "AiNews": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-15T13:51:44.736Z",
+        "lastUpdated": "2026-02-15T13:55:14.126Z"
+      },
+      "lastFile": "/home/swingken/project/AiNews/next.config.ts"
+    },
+    "news": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-15T13:52:05.238Z",
+        "lastUpdated": "2026-02-15T13:53:15.948Z"
+      },
+      "lastFile": "/home/swingken/project/AiNews/src/components/news/news-detail.tsx"
+    },
+    "layout": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-15T13:53:42.054Z",
+        "lastUpdated": "2026-02-15T13:53:46.794Z"
+      },
+      "lastFile": "/home/swingken/project/AiNews/src/components/layout/footer.tsx"
+    },
+    "[locale]": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-15T13:53:54.876Z",
+        "lastUpdated": "2026-02-15T13:53:54.876Z"
+      },
+      "lastFile": "/home/swingken/project/AiNews/src/app/[locale]/page.tsx"
+    },
+    "[id]": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-15T13:54:14.276Z",
+        "lastUpdated": "2026-02-15T13:54:14.276Z"
+      },
+      "lastFile": "/home/swingken/project/AiNews/src/app/[locale]/news/[id]/page.tsx"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-02-15T10:43:35.518Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-02-15T13:55:14.126Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-02-15T13:51:44.736Z",
+      "feature": "AiNews",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:52:05.238Z",
+      "feature": "news",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:52:16.324Z",
+      "feature": "news",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:52:27.121Z",
+      "feature": "AiNews",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:52:40.848Z",
+      "feature": "news",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:52:52.915Z",
+      "feature": "news",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:53:15.949Z",
+      "feature": "news",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:53:42.054Z",
+      "feature": "layout",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:53:46.794Z",
+      "feature": "layout",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:53:54.876Z",
+      "feature": "[locale]",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:54:14.276Z",
+      "feature": "[id]",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:54:48.623Z",
+      "feature": "AiNews",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-15T13:55:14.126Z",
+      "feature": "AiNews",
+      "phase": "do",
+      "action": "updated"
+    }
+  ]
+}

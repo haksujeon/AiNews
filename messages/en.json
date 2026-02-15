@@ -1,0 +1,25 @@
+{
+  "common": {
+    "appName": "AI NEWS PORTAL",
+    "loading": "Loading...",
+    "search": "Search",
+    "footerText": "AI news data is collected and translated through an automated system."
+  },
+  "filter": {
+    "searchPlaceholder": "Search by title or content...",
+    "country": "Country",
+    "category": "Category",
+    "allCountries": "All Countries",
+    "allCategories": "All Categories",
+    "reset": "Reset",
+    "totalCount": "{count} articles"
+  },
+  "detail": {
+    "backToList": "Back to list",
+    "aiSummary": "AI Summary",
+    "aiInsights": "AI Insights",
+    "keyTerms": "Key Terms",
+    "viewOriginal": "View Original",
+    "relatedNews": "Related News"
+  }
+}
