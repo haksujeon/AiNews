@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import {
@@ -7,9 +8,10 @@ import {
   Calendar,
   ExternalLink,
   Globe,
-  User,
   Lightbulb,
   BookOpen,
+  Languages,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +24,12 @@ import {
   getTitle,
   getSummary,
   getContent,
+  getCategoryStyle,
+  getSentimentStyle,
+  getSentimentLabel,
 } from "@/lib/news-utils";
 import { NewsCard } from "./news-card";
+import { NewsPlaceholder } from "./news-placeholder";
 
 interface NewsDetailProps {
   news: NewsItem;
@@ -33,10 +39,15 @@ interface NewsDetailProps {
 export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
   const locale = useLocale();
   const t = useTranslations("detail");
-  const title = getTitle(news, locale);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const translatedTitle = getTitle(news, locale);
+  const hasOriginalTitle = !!news.original_title && news.original_title !== translatedTitle;
+  const title = showOriginal && hasOriginalTitle ? news.original_title! : translatedTitle;
   const summary = getSummary(news, locale);
   const content = getContent(news, locale);
   const imageUrl = news.thumbnail_url || news.og_image_url;
+  const catStyle = getCategoryStyle(news.category);
+  const sentStyle = getSentimentStyle(news.sentiment);
 
   return (
     <article className="max-w-4xl mx-auto">
@@ -49,7 +60,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
         </Link>
       </div>
 
-      {imageUrl && (
+      {imageUrl ? (
         <div className="mb-8 rounded-xl overflow-hidden relative bg-muted">
           <img
             src={imageUrl}
@@ -70,6 +81,10 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
             }}
           />
         </div>
+      ) : (
+        <div className="mb-8 rounded-xl overflow-hidden">
+          <NewsPlaceholder category={news.category} className="h-64" />
+        </div>
       )}
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -80,34 +95,53 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
           </Badge>
         )}
         {news.category && (
-          <Badge variant="outline" className="capitalize">
+          <Badge
+            variant="outline"
+            className={`capitalize ${catStyle.text} ${catStyle.border}`}
+          >
             {news.category}
           </Badge>
         )}
         {news.sentiment && (
           <Badge
             variant="outline"
-            className={
-              news.sentiment === "positive"
-                ? "text-green-600 border-green-300"
-                : news.sentiment === "negative"
-                  ? "text-red-600 border-red-300"
-                  : ""
-            }
+            className={`${sentStyle.text} ${sentStyle.border}`}
           >
-            {news.sentiment}
+            <span className={`w-2 h-2 rounded-full ${sentStyle.dot} mr-1.5`} />
+            {getSentimentLabel(news.sentiment, locale)}
           </Badge>
         )}
       </div>
 
+      {hasOriginalTitle && (
+        <div className="flex items-center gap-1 mb-3">
+          <Button
+            variant={showOriginal ? "ghost" : "default"}
+            size="sm"
+            onClick={() => setShowOriginal(false)}
+          >
+            <Languages className="w-3.5 h-3.5 mr-1.5" />
+            {t("aiTranslation")}
+          </Button>
+          <Button
+            variant={showOriginal ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setShowOriginal(true)}
+          >
+            <FileText className="w-3.5 h-3.5 mr-1.5" />
+            {t("originalTitle")}
+          </Button>
+        </div>
+      )}
+
       <h1 className="text-3xl sm:text-4xl font-bold mb-4">{title}</h1>
 
-      {locale === "ko" && news.title_en && (
+      {!showOriginal && locale === "ko" && news.title_en && (
         <p className="text-lg text-muted-foreground italic mb-4">
           {news.title_en}
         </p>
       )}
-      {locale === "en" && news.title_kr && (
+      {!showOriginal && locale === "en" && news.title_kr && (
         <p className="text-lg text-muted-foreground italic mb-4">
           {news.title_kr}
         </p>
@@ -124,12 +158,6 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
           <span className="flex items-center gap-1">
             <BookOpen className="w-4 h-4" />
             {news.source_name}
-          </span>
-        )}
-        {news.author && (
-          <span className="flex items-center gap-1">
-            <User className="w-4 h-4" />
-            {news.author}
           </span>
         )}
       </div>

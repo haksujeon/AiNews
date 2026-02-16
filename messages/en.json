@@ -3,6 +3,7 @@
     "appName": "AI NEWS PORTAL",
     "loading": "Loading...",
     "search": "Search",
+    "statistics": "Statistics",
     "footerText": "AI news data is collected and translated through an automated system."
   },
   "filter": {
@@ -12,7 +13,10 @@
     "allCountries": "All Countries",
     "allCategories": "All Categories",
     "reset": "Reset",
-    "totalCount": "{count} articles"
+    "totalCount": "{count} articles",
+    "filters": "Filters",
+    "applyFilters": "Apply Filters",
+    "activeFilters": "Active filters"
   },
   "detail": {
     "backToList": "Back to list",
@@ -20,6 +24,23 @@
     "aiInsights": "AI Insights",
     "keyTerms": "Key Terms",
     "viewOriginal": "View Original",
+    "viewFullDetail": "View Full Detail",
+    "viewFullArticle": "View Full Article",
+    "close": "Close",
+    "aiTranslation": "AI Translation",
+    "originalTitle": "Original Title",
     "relatedNews": "Related News"
+  },
+  "statistics": {
+    "title": "Statistics Dashboard",
+    "totalNews": "Total News",
+    "todayNews": "Today",
+    "categories": "Categories",
+    "countries": "Countries",
+    "categoryDistribution": "Category Distribution",
+    "sentimentAnalysis": "Sentiment Analysis",
+    "countryBreakdown": "Country Breakdown",
+    "dailyVolume": "Daily News Volume",
+    "articles": "articles"
   }
 }

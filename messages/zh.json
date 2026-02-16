@@ -3,6 +3,7 @@
     "appName": "AI NEWS PORTAL",
     "loading": "加载中...",
     "search": "搜索",
+    "statistics": "统计",
     "footerText": "AI新闻数据通过自动化系统收集和翻译。"
   },
   "filter": {
@@ -12,7 +13,10 @@
     "allCountries": "所有国家",
     "allCategories": "所有分类",
     "reset": "重置",
-    "totalCount": "共 {count} 篇文章"
+    "totalCount": "共 {count} 篇文章",
+    "filters": "筛选",
+    "applyFilters": "应用筛选",
+    "activeFilters": "已应用筛选"
   },
   "detail": {
     "backToList": "返回列表",
@@ -20,6 +24,23 @@
     "aiInsights": "AI洞察",
     "keyTerms": "关键术语",
     "viewOriginal": "查看原文",
+    "viewFullDetail": "查看详情",
+    "viewFullArticle": "查看完整文章",
+    "close": "关闭",
+    "aiTranslation": "AI翻译",
+    "originalTitle": "原文标题",
     "relatedNews": "相关新闻"
+  },
+  "statistics": {
+    "title": "统计仪表板",
+    "totalNews": "新闻总数",
+    "todayNews": "今日新闻",
+    "categories": "分类数",
+    "countries": "国家数",
+    "categoryDistribution": "分类分布",
+    "sentimentAnalysis": "情感分析",
+    "countryBreakdown": "各国分布",
+    "dailyVolume": "每日新闻量",
+    "articles": "篇"
   }
 }

@@ -20,12 +20,11 @@ export interface NewsItem {
   category: string | null;
   thumbnail_url: string | null;
   og_image_url: string | null;
-  author: string | null;
   country: string | null;
-  description: string | null;
 }
 
-const NEWS_SELECT_FIELDS = [
+// FR-06: 목록용 경량 필드 (ai_insights, key_terms, description, author 제거)
+const LIST_SELECT_FIELDS = [
   "id",
   "created_at",
   "source_name",
@@ -36,21 +35,20 @@ const NEWS_SELECT_FIELDS = [
   "title_en",
   "summary_kr",
   "summary_en",
-  "ai_insights",
-  "key_terms",
   "sentiment",
   "category",
   "thumbnail_url",
   "og_image_url",
-  "author",
   "country",
-  "description",
 ].join(",");
 
+// 상세용 전체 필드
 const DETAIL_SELECT_FIELDS = [
-  ...NEWS_SELECT_FIELDS.split(","),
+  ...LIST_SELECT_FIELDS.split(","),
   "content_kr",
   "content_en",
+  "ai_insights",
+  "key_terms",
 ].join(",");
 
 async function supabaseFetch<T>(path: string): Promise<T> {
@@ -70,8 +68,9 @@ async function supabaseFetch<T>(path: string): Promise<T> {
 }
 
 export async function fetchNewsList(): Promise<NewsItem[]> {
+  // FR-04: 중복 뉴스 필터링 (is_duplicate=false)
   return supabaseFetch<NewsItem[]>(
-    `ai_news_ex?select=${NEWS_SELECT_FIELDS}&order=news_date.desc&limit=100`
+    `ai_news_ex?select=${LIST_SELECT_FIELDS}&is_duplicate=is.false&order=news_date.desc&limit=100`
   );
 }
 
@@ -87,7 +86,8 @@ export async function fetchRelatedNews(
   country: string | null,
   category: string | null
 ): Promise<NewsItem[]> {
-  let query = `ai_news_ex?select=${NEWS_SELECT_FIELDS}&id=neq.${newsId}&order=news_date.desc&limit=4`;
+  // FR-04: 관련 뉴스에서도 중복 제외
+  let query = `ai_news_ex?select=${LIST_SELECT_FIELDS}&id=neq.${newsId}&is_duplicate=is.false&order=news_date.desc&limit=4`;
 
   if (country) {
     query += `&country=eq.${country}`;

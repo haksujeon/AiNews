@@ -2,41 +2,48 @@
 
 import { useLocale } from "next-intl";
 import Link from "next/link";
-import { Calendar, ExternalLink, Globe } from "lucide-react";
+import Image from "next/image";
+import { Calendar, Globe } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { NewsItem } from "@/lib/supabase";
-import { getCountryLabel, formatDate, getTitle, getSummary } from "@/lib/news-utils";
+import {
+  getCountryLabel,
+  formatDate,
+  getTitle,
+  getSummary,
+  getCategoryStyle,
+  getSentimentStyle,
+  getSentimentLabel,
+} from "@/lib/news-utils";
+import { NewsPlaceholder } from "./news-placeholder";
 
 export function NewsListItem({ item }: { item: NewsItem }) {
   const locale = useLocale();
   const title = getTitle(item, locale);
   const summary = getSummary(item, locale);
   const imageUrl = item.thumbnail_url || item.og_image_url;
+  const catStyle = getCategoryStyle(item.category);
+  const sentStyle = getSentimentStyle(item.sentiment);
 
   return (
     <Link href={`/news/${item.id}`}>
       <article className="group bg-card rounded-xl border hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer">
         <div className="flex flex-col sm:flex-row">
-          {imageUrl && (
+          {imageUrl ? (
             <div className="sm:w-56 h-48 sm:h-auto flex-shrink-0 overflow-hidden bg-muted relative">
-              <img
+              <Image
                 src={imageUrl}
                 alt={title}
+                fill
+                className="object-cover group-hover:scale-105 transition-transform duration-300"
+                sizes="(max-width: 640px) 100vw, 224px"
                 referrerPolicy="no-referrer"
-                crossOrigin="anonymous"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                onError={(e) => {
-                  const img = e.target as HTMLImageElement;
-                  const parent = img.parentElement!;
-                  img.style.display = "none";
-                  if (!parent.querySelector(".img-fallback")) {
-                    const fallback = document.createElement("div");
-                    fallback.className = "img-fallback absolute inset-0 flex items-center justify-center bg-muted text-muted-foreground text-sm";
-                    fallback.textContent = "AI NEWS";
-                    parent.appendChild(fallback);
-                  }
-                }}
+                unoptimized
               />
+            </div>
+          ) : (
+            <div className="sm:w-56 h-48 sm:h-auto flex-shrink-0">
+              <NewsPlaceholder category={item.category} className="h-full" />
             </div>
           )}
 
@@ -49,8 +56,20 @@ export function NewsListItem({ item }: { item: NewsItem }) {
                 </Badge>
               )}
               {item.category && (
-                <Badge variant="outline" className="text-xs capitalize">
+                <Badge
+                  variant="outline"
+                  className={`text-xs capitalize ${catStyle.text} ${catStyle.border}`}
+                >
                   {item.category}
+                </Badge>
+              )}
+              {item.sentiment && (
+                <Badge
+                  variant="outline"
+                  className={`text-xs ${sentStyle.text} ${sentStyle.border}`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${sentStyle.dot} mr-1`} />
+                  {getSentimentLabel(item.sentiment, locale)}
                 </Badge>
               )}
               {item.news_date && (
@@ -76,11 +95,10 @@ export function NewsListItem({ item }: { item: NewsItem }) {
               </p>
             )}
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center">
               <span className="text-sm text-primary font-medium">
                 {locale === "ko" ? "상세보기" : locale === "zh" ? "查看详情" : "Read more"} →
               </span>
-              <ExternalLink className="w-4 h-4 text-muted-foreground" />
             </div>
           </div>
         </div>
