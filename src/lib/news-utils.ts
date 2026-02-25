@@ -22,40 +22,49 @@ export type CategoryStyle = {
 };
 
 const CATEGORY_STYLES: Record<string, CategoryStyle> = {
-  industry: {
-    bg: "bg-blue-100 dark:bg-blue-950",
-    text: "text-blue-700 dark:text-blue-300",
-    border: "border-blue-300 dark:border-blue-700",
-    gradient: "from-blue-500 to-blue-700",
-    icon: "Factory",
-  },
-  policy: {
-    bg: "bg-purple-100 dark:bg-purple-950",
-    text: "text-purple-700 dark:text-purple-300",
-    border: "border-purple-300 dark:border-purple-700",
-    gradient: "from-purple-500 to-purple-700",
-    icon: "Landmark",
-  },
-  research: {
-    bg: "bg-emerald-100 dark:bg-emerald-950",
-    text: "text-emerald-700 dark:text-emerald-300",
-    border: "border-emerald-300 dark:border-emerald-700",
-    gradient: "from-emerald-500 to-emerald-700",
-    icon: "FlaskConical",
-  },
-  investment: {
-    bg: "bg-amber-100 dark:bg-amber-950",
-    text: "text-amber-700 dark:text-amber-300",
-    border: "border-amber-300 dark:border-amber-700",
-    gradient: "from-amber-500 to-amber-700",
-    icon: "TrendingUp",
-  },
-  product: {
+  // ─── AI categories ───
+  "ai-tech": {
     bg: "bg-cyan-100 dark:bg-cyan-950",
     text: "text-cyan-700 dark:text-cyan-300",
     border: "border-cyan-300 dark:border-cyan-700",
     gradient: "from-cyan-500 to-cyan-700",
-    icon: "Package",
+    icon: "BrainCircuit",
+  },
+  "ai-product": {
+    bg: "bg-blue-100 dark:bg-blue-950",
+    text: "text-blue-700 dark:text-blue-300",
+    border: "border-blue-300 dark:border-blue-700",
+    gradient: "from-blue-500 to-blue-700",
+    icon: "Cpu",
+  },
+  "ai-biz": {
+    bg: "bg-violet-100 dark:bg-violet-950",
+    text: "text-violet-700 dark:text-violet-300",
+    border: "border-violet-300 dark:border-violet-700",
+    gradient: "from-violet-500 to-violet-700",
+    icon: "TrendingUp",
+  },
+  // ─── General categories ───
+  politics: {
+    bg: "bg-red-100 dark:bg-red-950",
+    text: "text-red-700 dark:text-red-300",
+    border: "border-red-300 dark:border-red-700",
+    gradient: "from-red-500 to-red-700",
+    icon: "Landmark",
+  },
+  economy: {
+    bg: "bg-amber-100 dark:bg-amber-950",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-300 dark:border-amber-700",
+    gradient: "from-amber-500 to-amber-700",
+    icon: "BarChart3",
+  },
+  society: {
+    bg: "bg-emerald-100 dark:bg-emerald-950",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-300 dark:border-emerald-700",
+    gradient: "from-emerald-500 to-emerald-700",
+    icon: "Users",
   },
   culture: {
     bg: "bg-pink-100 dark:bg-pink-950",
@@ -64,14 +73,34 @@ const CATEGORY_STYLES: Record<string, CategoryStyle> = {
     gradient: "from-pink-500 to-pink-700",
     icon: "Palette",
   },
-  education: {
+  tech: {
     bg: "bg-orange-100 dark:bg-orange-950",
     text: "text-orange-700 dark:text-orange-300",
     border: "border-orange-300 dark:border-orange-700",
     gradient: "from-orange-500 to-orange-700",
-    icon: "GraduationCap",
+    icon: "Rocket",
   },
 };
+
+// Category labels for display (localized)
+const CATEGORY_LABELS: Record<string, Record<string, string>> = {
+  "ai-tech":   { ko: "AI 기술", en: "AI Tech", zh: "AI技术" },
+  "ai-product":{ ko: "AI 제품", en: "AI Products", zh: "AI产品" },
+  "ai-biz":    { ko: "AI 비즈니스", en: "AI Business", zh: "AI商业" },
+  politics:    { ko: "정치", en: "Politics", zh: "政治" },
+  economy:     { ko: "경제", en: "Economy", zh: "经济" },
+  society:     { ko: "사회", en: "Society", zh: "社会" },
+  culture:     { ko: "문화", en: "Culture", zh: "文化" },
+  tech:        { ko: "IT/과학", en: "Tech & Science", zh: "科技" },
+};
+
+export function getCategoryLabel(category: string, locale: string): string {
+  return CATEGORY_LABELS[category]?.[locale] ?? category;
+}
+
+export function isAiCategory(category: string | null): boolean {
+  return !!category && category.startsWith("ai-");
+}
 
 const DEFAULT_CATEGORY_STYLE: CategoryStyle = {
   bg: "bg-gray-100 dark:bg-gray-800",

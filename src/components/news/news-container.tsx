@@ -171,20 +171,23 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
                 variants={itemVariants}
                 className="space-y-4"
               >
-                <div className="flex items-center gap-2 mb-4 pb-2 border-b">
-                  <CalendarDays className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold text-muted-foreground">
-                    {group.date === "unknown"
-                      ? locale === "ko"
-                        ? "날짜 미지정"
-                        : locale === "zh"
-                          ? "日期未指定"
-                          : "Unknown date"
-                      : formatDateGroup(group.date, locale)}
-                  </h3>
-                  <span className="text-xs text-muted-foreground">
-                    ({group.items.length})
-                  </span>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card/40 border border-border/30 backdrop-blur-sm">
+                    <CalendarDays className="w-3.5 h-3.5 text-primary/60" />
+                    <h3 className="text-xs font-medium text-muted-foreground">
+                      {group.date === "unknown"
+                        ? locale === "ko"
+                          ? "날짜 미지정"
+                          : locale === "zh"
+                            ? "日期未指定"
+                            : "Unknown date"
+                        : formatDateGroup(group.date, locale)}
+                    </h3>
+                    <span className="text-[10px] text-muted-foreground/50">
+                      {group.items.length}
+                    </span>
+                  </div>
+                  <div className="flex-1 h-px bg-gradient-to-r from-border/30 to-transparent" />
                 </div>
                 
                 <AnimatePresence mode="wait">

@@ -31,6 +31,7 @@ import {
   getContent,
   getAiInsights,
   getCategoryStyle,
+  getCategoryLabel,
   getSentimentStyle,
   getSentimentLabel,
 } from "@/lib/news-utils";
@@ -82,7 +83,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto p-0 gap-0">
+      <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto p-0 gap-0 border-border/50 bg-card/95 backdrop-blur-xl">
         {/* Hero image */}
         {imageUrl ? (
           <div className="relative w-full h-48 bg-muted overflow-hidden rounded-t-lg">
@@ -116,9 +117,9 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
             {fullItem.category && (
               <Badge
                 variant="outline"
-                className={`capitalize ${catStyle.text} ${catStyle.border}`}
+                className={`${catStyle.text} ${catStyle.border}`}
               >
-                {fullItem.category}
+                {getCategoryLabel(fullItem.category, locale)}
               </Badge>
             )}
             {fullItem.sentiment && (
@@ -136,7 +137,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
 
           {/* Title + metadata */}
           <DialogHeader className="text-left space-y-2">
-            <DialogTitle className="text-3xl font-bold leading-tight">
+            <DialogTitle className="font-display text-3xl font-bold leading-tight">
               {title}
             </DialogTitle>
             <DialogDescription asChild>
@@ -168,7 +169,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
             <>
               {/* 1. AI Summary */}
               {summary && (
-                <Card className="border-l-4 border-l-blue-500">
+                <Card className="border-l-4 border-l-blue-500 bg-blue-500/5 border-border/30">
                   <CardHeader className="pb-2 pt-4">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Lightbulb className="w-4 h-4 text-blue-500" />
@@ -183,7 +184,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
 
               {/* 2. News Content */}
               {content && (
-                <Card className="border-l-4 border-l-emerald-500">
+                <Card className="border-l-4 border-l-emerald-500 bg-emerald-500/5 border-border/30">
                   <CardHeader className="pb-2 pt-4">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-emerald-500" />
@@ -200,7 +201,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
 
               {/* 3. AI Insights */}
               {aiInsights && (
-                <Card className="border-l-4 border-l-amber-500">
+                <Card className="border-l-4 border-l-amber-500 bg-amber-500/5 border-border/30">
                   <CardHeader className="pb-2 pt-4">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Lightbulb className="w-4 h-4 text-amber-500" />
@@ -217,7 +218,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
 
               {/* Key terms */}
               {fullItem.key_terms && fullItem.key_terms.length > 0 && (
-                <Card className="border-l-4 border-l-violet-500">
+                <Card className="border-l-4 border-l-violet-500 bg-violet-500/5 border-border/30">
                   <CardHeader className="pb-2 pt-4">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-violet-500" />
@@ -300,7 +301,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {item.category && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          {item.category}
+                          {getCategoryLabel(item.category, locale)}
                         </Badge>
                       )}
                       {item.news_date && <span>{formatDate(item.news_date, locale)}</span>}

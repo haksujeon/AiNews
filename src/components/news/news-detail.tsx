@@ -30,6 +30,7 @@ import {
   getContent,
   getAiInsights,
   getCategoryStyle,
+  getCategoryLabel,
   getSentimentStyle,
   getSentimentLabel,
 } from "@/lib/news-utils";
@@ -164,9 +165,9 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
         {news.category && (
           <Badge
             variant="outline"
-            className={`capitalize ${catStyle.text} ${catStyle.border}`}
+            className={`${catStyle.text} ${catStyle.border}`}
           >
-            {news.category}
+            {getCategoryLabel(news.category, locale)}
           </Badge>
         )}
         {news.sentiment && (
@@ -181,7 +182,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
       </div>
 
       {/* Title */}
-      <h1 className="text-4xl sm:text-5xl font-bold mb-4 leading-tight">{title}</h1>
+      <h1 className="font-display text-4xl sm:text-5xl font-bold mb-4 leading-tight">{title}</h1>
 
       {/* Meta: date, source, read time */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-6">
@@ -214,7 +215,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
           {/* AI Summary */}
           {summary && (
             <section id="summary" className="mb-6 scroll-mt-20">
-              <Card className="border-l-4 border-l-blue-500">
+              <Card className="border-l-4 border-l-blue-500 bg-blue-500/5 border-border/30">
                 <CardHeader className="pb-2 pt-4">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Lightbulb className="w-4 h-4 text-blue-500" />
@@ -231,7 +232,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
           {/* News Content */}
           {content && (
             <section id="content" className="mb-6 scroll-mt-20">
-              <Card className="border-l-4 border-l-emerald-500">
+              <Card className="border-l-4 border-l-emerald-500 bg-emerald-500/5 border-border/30">
                 <CardHeader className="pb-2 pt-4">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-emerald-500" />
@@ -289,7 +290,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
             {/* AI Insights */}
             {aiInsights && (
               <section id="insights" className="scroll-mt-20">
-                <Card className="border-l-4 border-l-amber-500">
+                <Card className="border-l-4 border-l-amber-500 bg-amber-500/5 border-border/30">
                   <CardHeader className="pb-2 pt-4">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Lightbulb className="w-4 h-4 text-amber-500" />
@@ -308,7 +309,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
             {/* Key Terms */}
             {news.key_terms && news.key_terms.length > 0 && (
               <section id="keywords" className="scroll-mt-20">
-                <Card className="border-l-4 border-l-violet-500">
+                <Card className="border-l-4 border-l-violet-500 bg-violet-500/5 border-border/30">
                   <CardHeader className="pb-2 pt-4">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-violet-500" />

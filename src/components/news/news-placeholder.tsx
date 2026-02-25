@@ -1,23 +1,25 @@
 import {
-  Factory,
-  Landmark,
-  FlaskConical,
+  BrainCircuit,
+  Cpu,
   TrendingUp,
-  Package,
+  Landmark,
+  BarChart3,
+  Users,
   Palette,
-  GraduationCap,
+  Rocket,
   Newspaper,
 } from "lucide-react";
 import { getCategoryStyle } from "@/lib/news-utils";
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  Factory,
-  Landmark,
-  FlaskConical,
+  BrainCircuit,
+  Cpu,
   TrendingUp,
-  Package,
+  Landmark,
+  BarChart3,
+  Users,
   Palette,
-  GraduationCap,
+  Rocket,
   Newspaper,
 };
 
