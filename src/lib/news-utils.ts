@@ -137,51 +137,94 @@ export function getSentimentLabel(
 
 // ─── Date / Text helpers ──────────────────────────────────
 
+const EN_MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const EN_MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const EN_WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const KO_WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** Parse "YYYY-MM-DD" without timezone issues (avoids new Date() UTC pitfall) */
+function parseDateParts(dateString: string): { y: number; m: number; d: number; w: number } {
+  const parts = dateString.split("T")[0].split("-");
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1; // 0-based month
+  const d = parseInt(parts[2], 10);
+  // Zeller-like weekday: create date with explicit year/month/day to avoid UTC offset
+  const date = new Date(y, m, d);
+  const w = date.getDay();
+  return { y, m, d, w };
+}
+
 export function formatDate(
   dateString: string,
   locale: string = "ko"
 ): string {
-  const date = new Date(dateString);
-  const loc =
-    locale === "ko" ? "ko-KR" : locale === "zh" ? "zh-CN" : "en-US";
-  return date.toLocaleDateString(loc, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  const { y, m, d } = parseDateParts(dateString);
+  if (locale === "ko") return `${y}년 ${m + 1}월 ${d}일`;
+  if (locale === "zh") return `${y}年${m + 1}月${d}日`;
+  return `${EN_MONTHS_SHORT[m]} ${d}, ${y}`;
 }
 
 export function formatDateGroup(
   dateString: string,
   locale: string = "ko"
 ): string {
-  const date = new Date(dateString);
-  const loc =
-    locale === "ko" ? "ko-KR" : locale === "zh" ? "zh-CN" : "en-US";
-  return date.toLocaleDateString(loc, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  });
+  const { y, m, d, w } = parseDateParts(dateString);
+  if (locale === "ko") return `${y}년 ${m + 1}월 ${d}일 (${KO_WEEKDAYS[w]})`;
+  if (locale === "zh") return `${y}年${m + 1}月${d}日`;
+  return `${EN_WEEKDAYS_SHORT[w]}, ${EN_MONTHS_LONG[m]} ${d}, ${y}`;
 }
 
 export function getTitle(item: NewsItem, locale: string): string {
-  if (locale === "en")
-    return item.title_en || item.title_kr || item.original_title || "";
   if (locale === "zh")
-    return item.original_title || item.title_kr || item.title_en || "";
-  return item.title_kr || item.title_en || item.original_title || "";
+    return item.title_cn || item.title_kr || item.title_en || "";
+  if (locale === "en")
+    return item.title_en || item.title_kr || item.title_cn || "";
+  return item.title_kr || item.title_en || item.title_cn || "";
 }
 
 export function getSummary(item: NewsItem, locale: string): string {
-  if (locale === "en") return item.summary_en || item.summary_kr || "";
-  return item.summary_kr || item.summary_en || "";
+  if (locale === "zh")
+    return item.summary_cn || item.summary_kr || item.summary_en || "";
+  if (locale === "en")
+    return item.summary_en || item.summary_kr || item.summary_cn || "";
+  return item.summary_kr || item.summary_en || item.summary_cn || "";
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<img[^>]*>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/h[1-6]>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function getContent(item: NewsItem, locale: string): string {
-  if (locale === "en") return item.content_en || item.content_kr || "";
-  return item.content_kr || item.content_en || "";
+  let raw = "";
+  if (locale === "zh")
+    raw = item.content_cn || item.content_kr || item.content_en || "";
+  else if (locale === "en")
+    raw = item.content_en || item.content_kr || item.content_cn || "";
+  else
+    raw = item.content_kr || item.content_en || item.content_cn || "";
+  return stripHtml(raw);
+}
+
+export function getAiInsights(item: NewsItem, locale: string): string {
+  if (locale === "zh")
+    return item.ai_insights_cn || item.ai_insights_en || item.ai_insights_kr || "";
+  if (locale === "en")
+    return item.ai_insights_en || item.ai_insights_kr || item.ai_insights_cn || "";
+  return item.ai_insights_kr || item.ai_insights_en || item.ai_insights_cn || "";
 }
 
 export function getUniqueCountries(news: NewsItem[]): string[] {

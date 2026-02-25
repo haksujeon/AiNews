@@ -18,12 +18,13 @@ import { DailyVolumeChart } from "./daily-volume-chart";
 
 interface StatisticsContainerProps {
   news: NewsItem[];
+  today: string;
 }
 
-export function StatisticsContainer({ news }: StatisticsContainerProps) {
+export function StatisticsContainer({ news, today }: StatisticsContainerProps) {
   const t = useTranslations("statistics");
 
-  const kpis = useMemo(() => calculateKPIs(news), [news]);
+  const kpis = useMemo(() => calculateKPIs(news, today), [news, today]);
   const categoryStats = useMemo(() => calculateCategoryStats(news), [news]);
   const sentimentStats = useMemo(() => calculateSentimentStats(news), [news]);
   const countryStats = useMemo(() => calculateCountryStats(news), [news]);

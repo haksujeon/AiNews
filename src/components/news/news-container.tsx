@@ -16,6 +16,7 @@ import { NewsCard } from "./news-card";
 import { NewsListItem } from "./news-list-item";
 import { NewsFilter } from "./news-filter";
 import { NewsContainerSkeleton } from "./news-skeleton";
+import { NewsDetailModal } from "./news-detail-modal";
 
 interface NewsContainerProps {
   news: NewsItem[];
@@ -64,7 +65,7 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
   const [selectedCountry, setSelectedCountry] = useState("ALL");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<NewsItem | null>(null);
 
   const countries = useMemo(() => getUniqueCountries(news), [news]);
   const categories = useMemo(() => getUniqueCategories(news), [news]);
@@ -85,10 +86,9 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
     setSelectedCategory("ALL");
   };
 
-  // Handle view mode change with animation reset
+  // Handle view mode change
   const handleViewModeChange = (mode: "grid" | "list") => {
     setViewMode(mode);
-    setExpandedId(null);
   };
 
   if (isLoading) {
@@ -201,15 +201,10 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
                         <motion.div
                           key={item.id}
                           variants={itemVariants}
-                          layout
-                          className={expandedId === item.id ? "col-span-full" : ""}
                         >
                           <NewsCard
                             item={item}
-                            isExpanded={expandedId === item.id}
-                            onToggle={() =>
-                              setExpandedId(expandedId === item.id ? null : item.id)
-                            }
+                            onClick={() => setSelectedItem(item)}
                           />
                         </motion.div>
                       ))}
@@ -225,7 +220,7 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
                     >
                       {group.items.map((item) => (
                         <motion.div key={item.id} variants={listVariants}>
-                          <NewsListItem item={item} />
+                          <NewsListItem item={item} onClick={() => setSelectedItem(item)} />
                         </motion.div>
                       ))}
                     </motion.div>
@@ -236,6 +231,15 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <NewsDetailModal
+        news={selectedItem}
+        open={!!selectedItem}
+        onOpenChange={(open) => {
+          if (!open) setSelectedItem(null);
+        }}
+        onSelectNews={(item) => setSelectedItem(item)}
+      />
     </div>
   );
 }

@@ -6,15 +6,23 @@ export interface NewsItem {
   created_at: string;
   source_name: string | null;
   source_url: string | null;
-  original_title: string | null;
   news_date: string | null;
+  // 제목 (CN/KR/EN)
+  title_cn: string | null;
   title_kr: string | null;
   title_en: string | null;
+  // 요약 (CN/KR/EN)
+  summary_cn: string | null;
   summary_kr: string | null;
   summary_en: string | null;
+  // 본문 (CN/KR/EN)
+  content_cn: string | null;
   content_kr: string | null;
   content_en: string | null;
-  ai_insights: string | null;
+  // AI 인사이트 (CN/KR/EN)
+  ai_insights_cn: string | null;
+  ai_insights_kr: string | null;
+  ai_insights_en: string | null;
   key_terms: { term: string; explanation_kr: string }[] | null;
   sentiment: string | null;
   category: string | null;
@@ -29,10 +37,11 @@ const LIST_SELECT_FIELDS = [
   "created_at",
   "source_name",
   "source_url",
-  "original_title",
   "news_date",
+  "title_cn",
   "title_kr",
   "title_en",
+  "summary_cn",
   "summary_kr",
   "summary_en",
   "sentiment",
@@ -45,9 +54,12 @@ const LIST_SELECT_FIELDS = [
 // 상세용 전체 필드
 const DETAIL_SELECT_FIELDS = [
   ...LIST_SELECT_FIELDS.split(","),
+  "content_cn",
   "content_kr",
   "content_en",
-  "ai_insights",
+  "ai_insights_cn",
+  "ai_insights_kr",
+  "ai_insights_en",
   "key_terms",
 ].join(",");
 

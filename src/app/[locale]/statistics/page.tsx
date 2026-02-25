@@ -10,7 +10,7 @@ export default async function StatisticsPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
-        <StatisticsContainer news={news} />
+        <StatisticsContainer news={news} today={new Date().toISOString().split("T")[0]} />
       </main>
       <Footer />
     </div>

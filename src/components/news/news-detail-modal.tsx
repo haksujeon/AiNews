@@ -1,14 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import Link from "next/link";
 import {
   Calendar,
   ExternalLink,
   BookOpen,
   Lightbulb,
-  Maximize2,
+  Loader2,
+  Minus,
+  Plus,
 } from "lucide-react";
 import {
   Dialog,
@@ -19,12 +20,16 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import type { NewsItem } from "@/lib/supabase";
+import { fetchNewsDetailClient, fetchRelatedNewsClient } from "@/lib/supabase-client";
 import {
   formatDate,
   getTitle,
   getSummary,
+  getContent,
+  getAiInsights,
   getCategoryStyle,
   getSentimentStyle,
   getSentimentLabel,
@@ -32,27 +37,51 @@ import {
 import { NewsPlaceholder } from "./news-placeholder";
 
 interface NewsDetailModalProps {
-  news: NewsItem;
+  news: NewsItem | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelectNews?: (item: NewsItem) => void;
 }
 
-export function NewsDetailModal({ news }: NewsDetailModalProps) {
-  const router = useRouter();
+export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: NewsDetailModalProps) {
   const locale = useLocale();
   const t = useTranslations("detail");
+  const [detail, setDetail] = useState<NewsItem | null>(null);
+  const [relatedNews, setRelatedNews] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [relatedCount, setRelatedCount] = useState(2);
 
-  const title = getTitle(news, locale);
-  const summary = getSummary(news, locale);
-  const imageUrl = news.thumbnail_url || news.og_image_url;
-  const catStyle = getCategoryStyle(news.category);
-  const sentStyle = getSentimentStyle(news.sentiment);
+  useEffect(() => {
+    if (open && news) {
+      setLoading(true);
+      Promise.all([
+        fetchNewsDetailClient(news.id),
+        fetchRelatedNewsClient(news.category, news.id, 4),
+      ]).then(([detailData, related]) => {
+        setDetail(detailData);
+        setRelatedNews(related);
+        setLoading(false);
+      });
+    }
+    if (!open) {
+      setDetail(null);
+      setRelatedNews([]);
+    }
+  }, [open, news?.id]);
+
+  if (!news) return null;
+
+  const fullItem = detail ?? news;
+  const title = getTitle(fullItem, locale);
+  const summary = getSummary(fullItem, locale);
+  const content = getContent(fullItem, locale);
+  const aiInsights = getAiInsights(fullItem, locale);
+  const imageUrl = fullItem.thumbnail_url || fullItem.og_image_url;
+  const catStyle = getCategoryStyle(fullItem.category);
+  const sentStyle = getSentimentStyle(fullItem.sentiment);
 
   return (
-    <Dialog
-      defaultOpen
-      onOpenChange={(open) => {
-        if (!open) router.back();
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto p-0 gap-0">
         {/* Hero image */}
         {imageUrl ? (
@@ -78,21 +107,21 @@ export function NewsDetailModal({ news }: NewsDetailModalProps) {
             />
           </div>
         ) : (
-          <NewsPlaceholder category={news.category} className="h-48 rounded-t-lg rounded-b-none" />
+          <NewsPlaceholder category={fullItem.category} className="h-48 rounded-t-lg rounded-b-none" />
         )}
 
         <div className="p-6 space-y-4">
           {/* Badges */}
           <div className="flex flex-wrap items-center gap-2">
-            {news.category && (
+            {fullItem.category && (
               <Badge
                 variant="outline"
                 className={`capitalize ${catStyle.text} ${catStyle.border}`}
               >
-                {news.category}
+                {fullItem.category}
               </Badge>
             )}
-            {news.sentiment && (
+            {fullItem.sentiment && (
               <Badge
                 variant="outline"
                 className={`${sentStyle.text} ${sentStyle.border}`}
@@ -100,68 +129,123 @@ export function NewsDetailModal({ news }: NewsDetailModalProps) {
                 <span
                   className={`w-2 h-2 rounded-full ${sentStyle.dot} mr-1.5`}
                 />
-                {getSentimentLabel(news.sentiment, locale)}
+                {getSentimentLabel(fullItem.sentiment, locale)}
               </Badge>
             )}
           </div>
 
           {/* Title + metadata */}
           <DialogHeader className="text-left space-y-2">
-            <DialogTitle className="text-xl leading-tight">
+            <DialogTitle className="text-3xl font-bold leading-tight">
               {title}
             </DialogTitle>
             <DialogDescription asChild>
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                {news.news_date && (
+                {fullItem.news_date && (
                   <span className="flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
-                    {formatDate(news.news_date, locale)}
+                    {formatDate(fullItem.news_date, locale)}
                   </span>
                 )}
-                {news.source_name && (
+                {fullItem.source_name && (
                   <span className="flex items-center gap-1">
                     <BookOpen className="w-3.5 h-3.5" />
-                    {news.source_name}
+                    {fullItem.source_name}
                   </span>
                 )}
               </div>
             </DialogDescription>
           </DialogHeader>
 
-          {/* AI Summary */}
-          {summary && (
-            <Card className="border-l-4 border-l-primary">
-              <CardContent className="pt-4 pb-4">
-                <p className="text-sm font-semibold text-primary mb-1.5">
-                  {t("aiSummary")}
-                </p>
-                <p className="text-sm leading-relaxed">{summary}</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* AI Insights (line-clamped) */}
-          {news.ai_insights && (
-            <div className="space-y-1.5">
-              <p className="text-sm font-semibold flex items-center gap-1.5">
-                <Lightbulb className="w-4 h-4 text-yellow-500" />
-                {t("aiInsights")}
-              </p>
-              <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
-                {news.ai_insights}
-              </p>
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">
+                {locale === "ko" ? "로딩 중..." : locale === "zh" ? "加载中..." : "Loading..."}
+              </span>
             </div>
+          ) : (
+            <>
+              {/* 1. AI Summary */}
+              {summary && (
+                <Card className="border-l-4 border-l-blue-500">
+                  <CardHeader className="pb-2 pt-4">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Lightbulb className="w-4 h-4 text-blue-500" />
+                      {t("aiSummary")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-4">
+                    <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* 2. News Content */}
+              {content && (
+                <Card className="border-l-4 border-l-emerald-500">
+                  <CardHeader className="pb-2 pt-4">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-emerald-500" />
+                      {locale === "ko" ? "뉴스 본문" : locale === "zh" ? "新闻正文" : "News Content"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-4">
+                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap line-clamp-12">
+                      {content}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* 3. AI Insights */}
+              {aiInsights && (
+                <Card className="border-l-4 border-l-amber-500">
+                  <CardHeader className="pb-2 pt-4">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Lightbulb className="w-4 h-4 text-amber-500" />
+                      {t("aiInsights")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-4">
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      {aiInsights}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Key terms */}
+              {fullItem.key_terms && fullItem.key_terms.length > 0 && (
+                <Card className="border-l-4 border-l-violet-500">
+                  <CardHeader className="pb-2 pt-4">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-violet-500" />
+                      {t("keyTerms")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-4">
+                    <div className="space-y-3">
+                      {fullItem.key_terms.map((term, index) => (
+                        <div key={index} className="flex gap-3 items-start">
+                          <Badge variant="secondary" className="text-xs shrink-0 mt-0.5">
+                            {term.term}
+                          </Badge>
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            {term.explanation_kr}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
 
           {/* Action buttons */}
-          <div className="flex gap-2 pt-2">
-            <Link href={`/${locale}/news/${news.id}`}>
-              <Button variant="default" size="sm">
-                <Maximize2 className="w-4 h-4 mr-1.5" />
-                {t("viewFullDetail")}
-              </Button>
-            </Link>
-            {news.source_url && (
+          {news.source_url && (
+            <div className="flex gap-2 pt-2">
               <a
                 href={news.source_url}
                 target="_blank"
@@ -172,8 +256,60 @@ export function NewsDetailModal({ news }: NewsDetailModalProps) {
                   {t("viewOriginal")}
                 </Button>
               </a>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Related news */}
+          {relatedNews.length > 0 && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold">{t("relatedNews")}</h3>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={relatedCount <= 1}
+                    onClick={() => setRelatedCount((c) => Math.max(1, c - 1))}
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground w-5 text-center">{relatedCount}</span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={relatedCount >= Math.min(4, relatedNews.length)}
+                    onClick={() => setRelatedCount((c) => Math.min(4, relatedNews.length, c + 1))}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <div className={`grid gap-3 ${relatedCount <= 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-2"}`}>
+                {relatedNews.slice(0, relatedCount).map((item) => (
+                  <button
+                    key={item.id}
+                    className="text-left p-3 rounded-lg border hover:bg-accent/50 transition-colors"
+                    onClick={() => onSelectNews?.(item)}
+                  >
+                    <p className="text-sm font-medium line-clamp-2 mb-1">
+                      {getTitle(item, locale)}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {item.category && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          {item.category}
+                        </Badge>
+                      )}
+                      {item.news_date && <span>{formatDate(item.news_date, locale)}</span>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

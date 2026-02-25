@@ -111,8 +111,8 @@ export function calculateDailyVolume(news: NewsItem[]): DailyVolume[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function calculateKPIs(news: NewsItem[]): KPIData {
-  const today = new Date().toISOString().split("T")[0];
+export function calculateKPIs(news: NewsItem[], today?: string): KPIData {
+  const todayStr = today ?? new Date().toISOString().split("T")[0];
   const categories = new Set<string>();
   const countries = new Set<string>();
   let todayCount = 0;
@@ -120,7 +120,7 @@ export function calculateKPIs(news: NewsItem[]): KPIData {
   for (const item of news) {
     if (item.category) categories.add(item.category);
     if (item.country) countries.add(item.country);
-    if (item.news_date === today) todayCount++;
+    if (item.news_date === todayStr) todayCount++;
   }
 
   return {

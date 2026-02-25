@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Search, Filter, X, Grid3X3, List, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -59,11 +59,11 @@ export function NewsFilter({
   const debouncedSearch = useDebounce(localSearch, 300);
   
   // Update parent when debounced value changes
-  useState(() => {
+  useEffect(() => {
     if (debouncedSearch !== searchQuery) {
       onSearchChange(debouncedSearch);
     }
-  });
+  }, [debouncedSearch]);
 
   const hasActiveFilter = searchQuery || selectedCountry !== "ALL" || selectedCategory !== "ALL";
 

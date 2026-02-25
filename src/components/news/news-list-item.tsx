@@ -1,7 +1,6 @@
 "use client";
 
 import { useLocale } from "next-intl";
-import Link from "next/link";
 import Image from "next/image";
 import { Calendar, Globe } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +16,12 @@ import {
 } from "@/lib/news-utils";
 import { NewsPlaceholder } from "./news-placeholder";
 
-export function NewsListItem({ item }: { item: NewsItem }) {
+interface NewsListItemProps {
+  item: NewsItem;
+  onClick?: () => void;
+}
+
+export function NewsListItem({ item, onClick }: NewsListItemProps) {
   const locale = useLocale();
   const title = getTitle(item, locale);
   const summary = getSummary(item, locale);
@@ -26,8 +30,8 @@ export function NewsListItem({ item }: { item: NewsItem }) {
   const sentStyle = getSentimentStyle(item.sentiment);
 
   return (
-    <Link href={`/news/${item.id}`}>
-      <article className="group bg-card rounded-xl border hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer">
+    <div onClick={onClick} className="cursor-pointer">
+      <article className="group bg-card rounded-xl border hover:shadow-lg transition-all duration-300 overflow-hidden">
         <div className="flex flex-col sm:flex-row">
           {imageUrl ? (
             <div className="sm:w-56 h-48 sm:h-auto flex-shrink-0 overflow-hidden bg-muted relative">
@@ -103,6 +107,6 @@ export function NewsListItem({ item }: { item: NewsItem }) {
           </div>
         </div>
       </article>
-    </Link>
+    </div>
   );
 }

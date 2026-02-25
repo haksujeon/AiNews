@@ -12,6 +12,10 @@ import {
   BookOpen,
   Languages,
   FileText,
+  Clock,
+  List,
+  Minus,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +28,7 @@ import {
   getTitle,
   getSummary,
   getContent,
+  getAiInsights,
   getCategoryStyle,
   getSentimentStyle,
   getSentimentLabel,
@@ -36,30 +41,91 @@ interface NewsDetailProps {
   relatedNews: NewsItem[];
 }
 
+function estimateReadTime(text: string, locale: string): string {
+  const len = text.length;
+  const cpm = locale === "en" ? 1200 : 600;
+  const minutes = Math.max(1, Math.round(len / cpm));
+  if (locale === "ko") return `${minutes}분 소요`;
+  if (locale === "zh") return `${minutes}分钟阅读`;
+  return `${minutes} min read`;
+}
+
+type ViewLang = "translated" | "cn";
+
 export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
   const locale = useLocale();
   const t = useTranslations("detail");
-  const [showOriginal, setShowOriginal] = useState(false);
-  const translatedTitle = getTitle(news, locale);
-  const hasOriginalTitle = !!news.original_title && news.original_title !== translatedTitle;
-  const title = showOriginal && hasOriginalTitle ? news.original_title! : translatedTitle;
-  const summary = getSummary(news, locale);
-  const content = getContent(news, locale);
+  const [viewLang, setViewLang] = useState<ViewLang>("translated");
+  const [relatedCount, setRelatedCount] = useState(3);
+
+  const showOriginal = viewLang === "cn";
+  const hasChinese = locale !== "zh" && !!news.title_cn;
+
+  const title = showOriginal && hasChinese
+    ? news.title_cn!
+    : getTitle(news, locale);
+
+  const summary = showOriginal && hasChinese
+    ? (news.summary_cn || getSummary(news, locale))
+    : getSummary(news, locale);
+
+  const content = showOriginal && hasChinese
+    ? getContent({ ...news, content_kr: null, content_en: null } as NewsItem, "zh")
+    : getContent(news, locale);
+
+  const aiInsights = showOriginal && hasChinese
+    ? (news.ai_insights_cn || getAiInsights(news, locale))
+    : getAiInsights(news, locale);
+
   const imageUrl = news.thumbnail_url || news.og_image_url;
   const catStyle = getCategoryStyle(news.category);
   const sentStyle = getSentimentStyle(news.sentiment);
+  const readTime = content ? estimateReadTime(content, showOriginal ? "zh" : locale) : null;
+
+  const tocItems = [
+    { id: "summary", label: locale === "ko" ? "AI 요약" : locale === "zh" ? "AI摘要" : "AI Summary", show: !!summary },
+    { id: "content", label: locale === "ko" ? "뉴스 본문" : locale === "zh" ? "新闻正文" : "News Content", show: !!content },
+    { id: "insights", label: locale === "ko" ? "AI 인사이트" : locale === "zh" ? "AI洞察" : "AI Insights", show: !!aiInsights },
+    { id: "keywords", label: locale === "ko" ? "핵심 키워드" : locale === "zh" ? "关键词" : "Key Terms", show: !!(news.key_terms && news.key_terms.length > 0) },
+  ].filter((item) => item.show);
 
   return (
-    <article className="max-w-4xl mx-auto">
-      <div className="mb-6">
+    <article className="max-w-6xl mx-auto">
+      {/* Top bar */}
+      <div className="mb-6 flex items-center justify-between">
         <Link href="/">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
             {t("backToList")}
           </Button>
         </Link>
+
+        {/* Language toggle */}
+        {hasChinese && (
+          <div className="flex items-center gap-1 border rounded-lg p-0.5">
+            <Button
+              variant={!showOriginal ? "default" : "ghost"}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setViewLang("translated")}
+            >
+              <Languages className="w-3.5 h-3.5 mr-1" />
+              {locale === "ko" ? "번역" : "Translation"}
+            </Button>
+            <Button
+              variant={showOriginal ? "default" : "ghost"}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setViewLang("cn")}
+            >
+              <FileText className="w-3.5 h-3.5 mr-1" />
+              {locale === "ko" ? "중문 원문" : "中文原文"}
+            </Button>
+          </div>
+        )}
       </div>
 
+      {/* Hero image */}
       {imageUrl ? (
         <div className="mb-8 rounded-xl overflow-hidden relative bg-muted">
           <img
@@ -87,6 +153,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
         </div>
       )}
 
+      {/* Badges */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         {news.country && (
           <Badge variant="secondary">
@@ -113,40 +180,10 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
         )}
       </div>
 
-      {hasOriginalTitle && (
-        <div className="flex items-center gap-1 mb-3">
-          <Button
-            variant={showOriginal ? "ghost" : "default"}
-            size="sm"
-            onClick={() => setShowOriginal(false)}
-          >
-            <Languages className="w-3.5 h-3.5 mr-1.5" />
-            {t("aiTranslation")}
-          </Button>
-          <Button
-            variant={showOriginal ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setShowOriginal(true)}
-          >
-            <FileText className="w-3.5 h-3.5 mr-1.5" />
-            {t("originalTitle")}
-          </Button>
-        </div>
-      )}
+      {/* Title */}
+      <h1 className="text-4xl sm:text-5xl font-bold mb-4 leading-tight">{title}</h1>
 
-      <h1 className="text-3xl sm:text-4xl font-bold mb-4">{title}</h1>
-
-      {!showOriginal && locale === "ko" && news.title_en && (
-        <p className="text-lg text-muted-foreground italic mb-4">
-          {news.title_en}
-        </p>
-      )}
-      {!showOriginal && locale === "en" && news.title_kr && (
-        <p className="text-lg text-muted-foreground italic mb-4">
-          {news.title_kr}
-        </p>
-      )}
-
+      {/* Meta: date, source, read time */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-6">
         {news.news_date && (
           <span className="flex items-center gap-1">
@@ -160,90 +197,180 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
             {news.source_name}
           </span>
         )}
-      </div>
-
-      <Separator className="mb-6" />
-
-      {summary && (
-        <Card className="mb-6 border-l-4 border-l-primary">
-          <CardContent className="pt-4">
-            <p className="text-sm font-semibold text-primary mb-2">
-              {t("aiSummary")}
-            </p>
-            <p className="text-foreground leading-relaxed">{summary}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {content && (
-        <div className="prose prose-neutral dark:prose-invert max-w-none mb-8">
-          <div className="whitespace-pre-wrap leading-relaxed">{content}</div>
-        </div>
-      )}
-
-      {news.ai_insights && (
-        <Card className="mb-8 bg-accent/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Lightbulb className="w-5 h-5 text-yellow-500" />
-              {t("aiInsights")}
-              {locale !== "en" && (
-                <Badge variant="outline" className="text-xs font-normal ml-1">
-                  EN
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {news.ai_insights}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {news.key_terms && news.key_terms.length > 0 && (
-        <Card className="mb-8">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{t("keyTerms")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {news.key_terms.map((term, index) => (
-                <div key={index} className="flex gap-3">
-                  <Badge variant="secondary" className="h-fit shrink-0">
-                    {term.term}
-                  </Badge>
-                  <p className="text-sm text-muted-foreground">
-                    {term.explanation_kr}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="flex gap-3 mb-12">
-        {news.source_url && (
-          <a href={news.source_url} target="_blank" rel="noopener noreferrer">
-            <Button>
-              <ExternalLink className="w-4 h-4 mr-2" />
-              {t("viewOriginal")}
-            </Button>
-          </a>
+        {readTime && (
+          <span className="flex items-center gap-1">
+            <Clock className="w-4 h-4" />
+            {readTime}
+          </span>
         )}
-        <Link href="/">
-          <Button variant="outline">{t("backToList")}</Button>
-        </Link>
       </div>
 
+      <Separator className="mb-8" />
+
+      {/* 2-column layout: main content + sidebar */}
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Left: Main content */}
+        <div className="flex-1 min-w-0">
+          {/* AI Summary */}
+          {summary && (
+            <section id="summary" className="mb-6 scroll-mt-20">
+              <Card className="border-l-4 border-l-blue-500">
+                <CardHeader className="pb-2 pt-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-blue-500" />
+                    {t("aiSummary")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4">
+                  <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p>
+                </CardContent>
+              </Card>
+            </section>
+          )}
+
+          {/* News Content */}
+          {content && (
+            <section id="content" className="mb-6 scroll-mt-20">
+              <Card className="border-l-4 border-l-emerald-500">
+                <CardHeader className="pb-2 pt-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-emerald-500" />
+                    {locale === "ko" ? "뉴스 본문" : locale === "zh" ? "新闻正文" : "News Content"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4">
+                  <div className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">{content}</div>
+                </CardContent>
+              </Card>
+            </section>
+          )}
+
+          {/* Source link */}
+          {news.source_url && (
+            <div className="mb-8">
+              <a href={news.source_url} target="_blank" rel="noopener noreferrer">
+                <Button>
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  {t("viewOriginal")}
+                </Button>
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Sticky sidebar */}
+        <aside className="lg:w-80 flex-shrink-0">
+          <div className="lg:sticky lg:top-20 space-y-5">
+            {/* TOC */}
+            {tocItems.length > 1 && (
+              <Card>
+                <CardHeader className="pb-2 pt-3">
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    <List className="w-4 h-4" />
+                    {locale === "ko" ? "목차" : locale === "zh" ? "目录" : "Contents"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3">
+                  <nav className="space-y-1">
+                    {tocItems.map((item) => (
+                      <a
+                        key={item.id}
+                        href={`#${item.id}`}
+                        className="block text-sm text-muted-foreground hover:text-primary transition-colors py-1 pl-3 border-l-2 border-transparent hover:border-primary"
+                      >
+                        {item.label}
+                      </a>
+                    ))}
+                  </nav>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* AI Insights */}
+            {aiInsights && (
+              <section id="insights" className="scroll-mt-20">
+                <Card className="border-l-4 border-l-amber-500">
+                  <CardHeader className="pb-2 pt-4">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Lightbulb className="w-4 h-4 text-amber-500" />
+                      {t("aiInsights")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-4">
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      {aiInsights}
+                    </p>
+                  </CardContent>
+                </Card>
+              </section>
+            )}
+
+            {/* Key Terms */}
+            {news.key_terms && news.key_terms.length > 0 && (
+              <section id="keywords" className="scroll-mt-20">
+                <Card className="border-l-4 border-l-violet-500">
+                  <CardHeader className="pb-2 pt-4">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-violet-500" />
+                      {t("keyTerms")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-4">
+                    <div className="space-y-3">
+                      {news.key_terms.map((term, index) => (
+                        <div key={index} className="flex gap-3 items-start">
+                          <Badge variant="secondary" className="text-xs shrink-0 mt-0.5">
+                            {term.term}
+                          </Badge>
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            {term.explanation_kr}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </section>
+            )}
+          </div>
+        </aside>
+      </div>
+
+      {/* Related news */}
       {relatedNews.length > 0 && (
         <>
-          <Separator className="mb-8" />
-          <h2 className="text-2xl font-bold mb-6">{t("relatedNews")}</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {relatedNews.map((item) => (
+          <Separator className="my-8" />
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold">{t("relatedNews")}</h2>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={relatedCount <= 1}
+                onClick={() => setRelatedCount((c) => Math.max(1, c - 1))}
+              >
+                <Minus className="w-4 h-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground w-6 text-center">{relatedCount}</span>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={relatedCount >= Math.min(4, relatedNews.length)}
+                onClick={() => setRelatedCount((c) => Math.min(4, relatedNews.length, c + 1))}
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          <div className={`grid gap-6 ${
+            relatedCount === 1 ? "grid-cols-1" :
+            relatedCount === 2 ? "grid-cols-1 md:grid-cols-2" :
+            relatedCount === 3 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" :
+            "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+          }`}>
+            {relatedNews.slice(0, relatedCount).map((item) => (
               <NewsCard key={item.id} item={item} />
             ))}
           </div>
