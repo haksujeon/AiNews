@@ -31,6 +31,13 @@
     "originalTitle": "원문 제목",
     "relatedNews": "관련 기사"
   },
+  "admin": {
+    "login": "관리자 로그인",
+    "sendHistory": "발신 내역",
+    "subscribers": "구독자 관리",
+    "backToSite": "사이트로 돌아가기",
+    "logout": "로그아웃"
+  },
   "statistics": {
     "title": "통계 대시보드",
     "totalNews": "총 뉴스",

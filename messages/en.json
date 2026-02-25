@@ -31,6 +31,13 @@
     "originalTitle": "Original Title",
     "relatedNews": "Related News"
   },
+  "admin": {
+    "login": "Admin Login",
+    "sendHistory": "Send History",
+    "subscribers": "Subscribers",
+    "backToSite": "Back to Site",
+    "logout": "Logout"
+  },
   "statistics": {
     "title": "Statistics Dashboard",
     "totalNews": "Total News",

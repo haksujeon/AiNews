@@ -31,6 +31,13 @@
     "originalTitle": "原文标题",
     "relatedNews": "相关新闻"
   },
+  "admin": {
+    "login": "管理员登录",
+    "sendHistory": "发送记录",
+    "subscribers": "订阅者管理",
+    "backToSite": "返回网站",
+    "logout": "退出登录"
+  },
   "statistics": {
     "title": "统计仪表板",
     "totalNews": "新闻总数",
