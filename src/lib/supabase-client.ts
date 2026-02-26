@@ -48,6 +48,24 @@ const LIST_SELECT_FIELDS = [
   "country",
 ].join(",");
 
+export async function fetchNewsPageClient(
+  offset: number,
+  limit: number
+): Promise<NewsItem[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/ai_news_ex?select=${LIST_SELECT_FIELDS}&is_duplicate=is.false&order=news_date.desc,id.desc&offset=${offset}&limit=${limit}`,
+    {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    }
+  );
+
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export async function fetchNewsDetailClient(
   id: string
 ): Promise<NewsItem | null> {

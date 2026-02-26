@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Newspaper, CalendarCheck, Tags, Globe } from "lucide-react";
+import { Newspaper, CalendarCheck, Tags, Rss, TrendingUp, BrainCircuit } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import type { KPIData } from "@/lib/statistics-utils";
 
@@ -32,15 +32,27 @@ export function StatCards({ data }: StatCardsProps) {
       color: "text-purple-600",
     },
     {
-      label: t("countries"),
-      value: data.countryCount,
-      icon: Globe,
+      label: t("sources"),
+      value: data.sourceCount,
+      icon: Rss,
       color: "text-amber-600",
+    },
+    {
+      label: t("avgPerDay"),
+      value: data.avgPerDay,
+      icon: TrendingUp,
+      color: "text-cyan-600",
+    },
+    {
+      label: t("aiRatio"),
+      value: `${data.aiRatio}%`,
+      icon: BrainCircuit,
+      color: "text-violet-600",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       {cards.map((card) => (
         <Card key={card.label}>
           <CardContent className="pt-6">

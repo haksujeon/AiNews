@@ -256,6 +256,15 @@ export function getAiInsights(item: NewsItem, locale: string): string {
   return item.ai_insights_kr || item.ai_insights_en || item.ai_insights_cn || "";
 }
 
+export function getTermExplanation(
+  term: { term: string; explanation_kr: string; explanation_en?: string; explanation_zh?: string },
+  locale: string
+): string {
+  if (locale === "en") return term.explanation_en || term.explanation_kr;
+  if (locale === "zh") return term.explanation_zh || term.explanation_kr;
+  return term.explanation_kr;
+}
+
 export function getUniqueCountries(news: NewsItem[]): string[] {
   const countries = new Set<string>();
   news.forEach((item) => {
@@ -272,12 +281,18 @@ export function getUniqueCategories(news: NewsItem[]): string[] {
   return Array.from(categories).sort();
 }
 
+export interface DateRange {
+  from?: string; // "YYYY-MM-DD"
+  to?: string;   // "YYYY-MM-DD"
+}
+
 export function filterNews(
   news: NewsItem[],
   query: string,
   country: string,
-  category: string,
-  locale: string
+  categories: string[],
+  locale: string,
+  dateRange?: DateRange
 ): NewsItem[] {
   let result = [...news];
 
@@ -295,8 +310,15 @@ export function filterNews(
     result = result.filter((item) => item.country === country);
   }
 
-  if (category !== "ALL") {
-    result = result.filter((item) => item.category === category);
+  if (categories.length > 0) {
+    result = result.filter((item) => item.category !== null && categories.includes(item.category));
+  }
+
+  if (dateRange?.from) {
+    result = result.filter((item) => item.news_date !== null && item.news_date >= dateRange.from!);
+  }
+  if (dateRange?.to) {
+    result = result.filter((item) => item.news_date !== null && item.news_date <= dateRange.to!);
   }
 
   return result;

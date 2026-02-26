@@ -33,6 +33,7 @@ import {
   getCategoryLabel,
   getSentimentStyle,
   getSentimentLabel,
+  getTermExplanation,
 } from "@/lib/news-utils";
 import { NewsCard } from "./news-card";
 import { NewsPlaceholder } from "./news-placeholder";
@@ -182,7 +183,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
       </div>
 
       {/* Title */}
-      <h1 className="font-display text-4xl sm:text-5xl font-bold mb-4 leading-tight">{title}</h1>
+      <h1 className="font-display text-2xl sm:text-4xl lg:text-5xl font-bold mb-4 leading-tight">{title}</h1>
 
       {/* Meta: date, source, read time */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-6">
@@ -320,11 +321,16 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
                     <div className="space-y-3">
                       {news.key_terms.map((term, index) => (
                         <div key={index} className="flex gap-3 items-start">
-                          <Badge variant="secondary" className="text-xs shrink-0 mt-0.5">
-                            {term.term}
-                          </Badge>
+                          <div className="shrink-0 mt-0.5">
+                            <Badge variant="secondary" className="text-xs">
+                              {term.term}
+                            </Badge>
+                            {term.pinyin && (
+                              <p className="text-[10px] text-muted-foreground/60 mt-0.5 pl-0.5">{term.pinyin}</p>
+                            )}
+                          </div>
                           <p className="text-xs leading-relaxed text-muted-foreground">
-                            {term.explanation_kr}
+                            {getTermExplanation(term, locale)}
                           </p>
                         </div>
                       ))}

@@ -12,6 +12,8 @@ interface CategoryChartProps {
 export function CategoryChart({ data }: CategoryChartProps) {
   const t = useTranslations("statistics");
 
+  const chartData = data.map((d) => ({ ...d, name: d.label }));
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -21,7 +23,7 @@ export function CategoryChart({ data }: CategoryChartProps) {
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
             <Pie
-              data={data}
+              data={chartData}
               cx="50%"
               cy="50%"
               innerRadius={60}
@@ -30,8 +32,8 @@ export function CategoryChart({ data }: CategoryChartProps) {
               nameKey="name"
               paddingAngle={2}
             >
-              {data.map((entry) => (
-                <Cell key={entry.name} fill={entry.color} />
+              {chartData.map((entry, i) => (
+                <Cell key={i} fill={entry.color} />
               ))}
             </Pie>
             <Tooltip

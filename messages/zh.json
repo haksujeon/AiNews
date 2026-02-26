@@ -16,7 +16,10 @@
     "totalCount": "共 {count} 篇文章",
     "filters": "筛选",
     "applyFilters": "应用筛选",
-    "activeFilters": "已应用筛选"
+    "activeFilters": "已应用筛选",
+    "search": "搜索",
+    "dateRange": "日期范围",
+    "resetDate": "清除日期"
   },
   "detail": {
     "backToList": "返回列表",
@@ -43,11 +46,17 @@
     "totalNews": "新闻总数",
     "todayNews": "今日新闻",
     "categories": "分类数",
-    "countries": "国家数",
+    "sources": "新闻来源",
+    "avgPerDay": "日均量",
+    "aiRatio": "AI比例",
     "categoryDistribution": "分类分布",
     "sentimentAnalysis": "情感分析",
-    "countryBreakdown": "各国分布",
+    "sourceDistribution": "来源分布",
     "dailyVolume": "每日新闻量",
+    "weeklyTrend": "周趋势",
+    "weeklyTotal": "周合计",
+    "dailyAvg": "日均",
+    "topKeywords": "热门关键词 TOP 15",
     "articles": "篇"
   }
 }

@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Search, Filter, X, Grid3X3, List, SlidersHorizontal } from "lucide-react";
+import { Search, Filter, X, Grid3X3, List, SlidersHorizontal, CalendarDays } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -19,16 +20,26 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { getCountryLabel, getCategoryLabel } from "@/lib/news-utils";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { getCountryLabel, getCategoryLabel, getCategoryStyle } from "@/lib/news-utils";
+import type { DateRange } from "@/lib/news-utils";
 import { useDebounce } from "@/hooks/use-debounce";
+import type { DateRange as RdpDateRange } from "react-day-picker";
 
 interface NewsFilterProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   selectedCountry: string;
   onCountryChange: (value: string) => void;
-  selectedCategory: string;
-  onCategoryChange: (value: string) => void;
+  selectedCategories: string[];
+  onCategoriesChange: (value: string[]) => void;
+  dateRange: DateRange;
+  onDateRangeChange: (range: DateRange) => void;
   countries: string[];
   categories: string[];
   viewMode: "grid" | "list";
@@ -37,13 +48,29 @@ interface NewsFilterProps {
   onReset: () => void;
 }
 
+function toDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatShortDate(dateStr: string, locale: string): string {
+  const [, m, d] = dateStr.split("-");
+  if (locale === "ko") return `${parseInt(m)}/${parseInt(d)}`;
+  if (locale === "zh") return `${parseInt(m)}月${parseInt(d)}日`;
+  return `${parseInt(m)}/${parseInt(d)}`;
+}
+
 export function NewsFilter({
   searchQuery,
   onSearchChange,
   selectedCountry,
   onCountryChange,
-  selectedCategory,
-  onCategoryChange,
+  selectedCategories,
+  onCategoriesChange,
+  dateRange,
+  onDateRangeChange,
   countries,
   categories,
   viewMode,
@@ -55,6 +82,7 @@ export function NewsFilter({
   const locale = useLocale();
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const debouncedSearch = useDebounce(localSearch, 300);
 
@@ -64,13 +92,117 @@ export function NewsFilter({
     }
   }, [debouncedSearch]);
 
-  const hasActiveFilter = searchQuery || selectedCountry !== "ALL" || selectedCategory !== "ALL";
+  const hasDateFilter = !!dateRange.from || !!dateRange.to;
+  const hasActiveFilter = searchQuery || selectedCountry !== "ALL" || selectedCategories.length > 0 || hasDateFilter;
 
   const handleReset = () => {
     setLocalSearch("");
     onReset();
     setIsSheetOpen(false);
   };
+
+  const toggleCategory = (cat: string) => {
+    if (selectedCategories.includes(cat)) {
+      onCategoriesChange(selectedCategories.filter((c) => c !== cat));
+    } else {
+      onCategoriesChange([...selectedCategories, cat]);
+    }
+  };
+
+  // Convert between our DateRange and react-day-picker DateRange
+  const rdpRange: RdpDateRange | undefined = (dateRange.from || dateRange.to)
+    ? {
+        from: dateRange.from ? new Date(dateRange.from + "T00:00:00") : undefined,
+        to: dateRange.to ? new Date(dateRange.to + "T00:00:00") : undefined,
+      }
+    : undefined;
+
+  const handleRdpSelect = (range: RdpDateRange | undefined) => {
+    onDateRangeChange({
+      from: range?.from ? toDateStr(range.from) : undefined,
+      to: range?.to ? toDateStr(range.to) : undefined,
+    });
+  };
+
+  const dateLabel = hasDateFilter
+    ? dateRange.from && dateRange.to
+      ? `${formatShortDate(dateRange.from, locale)} ~ ${formatShortDate(dateRange.to, locale)}`
+      : dateRange.from
+        ? `${formatShortDate(dateRange.from, locale)} ~`
+        : `~ ${formatShortDate(dateRange.to!, locale)}`
+    : t("dateRange");
+
+  const CategoryChips = () => (
+    <div className="flex flex-wrap gap-1.5">
+      {categories.map((cat) => {
+        const isSelected = selectedCategories.includes(cat);
+        const style = getCategoryStyle(cat);
+        return (
+          <button
+            key={cat}
+            onClick={() => toggleCategory(cat)}
+            className={`
+              inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
+              transition-all duration-150 border
+              ${isSelected
+                ? `${style.bg} ${style.text} ${style.border}`
+                : "bg-transparent text-muted-foreground border-border/50 hover:border-border hover:bg-accent/50"
+              }
+            `}
+          >
+            {getCategoryLabel(cat, locale)}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const DateRangePicker = ({ isMobile = false }: { isMobile?: boolean }) => (
+    <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+      <PopoverTrigger asChild>
+        {isMobile ? (
+          <Button variant="outline" className="w-full justify-start text-left font-normal">
+            <CalendarDays className="w-4 h-4 mr-2 text-muted-foreground" />
+            <span className={hasDateFilter ? "" : "text-muted-foreground"}>{dateLabel}</span>
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`h-8 text-xs gap-1.5 ${hasDateFilter ? "text-primary" : "text-muted-foreground"}`}
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            {dateLabel}
+          </Button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="range"
+          selected={rdpRange}
+          onSelect={handleRdpSelect}
+          numberOfMonths={1}
+          disabled={{ after: new Date() }}
+        />
+        {hasDateFilter && (
+          <div className="border-t px-3 py-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full h-7 text-xs"
+              onClick={() => {
+                onDateRangeChange({});
+                setCalendarOpen(false);
+              }}
+            >
+              <X className="w-3 h-3 mr-1" />
+              {t("resetDate")}
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 
   const FilterContent = ({ isMobile = false }: { isMobile?: boolean }) => (
     <div className={`space-y-4 ${isMobile ? "mt-4" : ""}`}>
@@ -86,6 +218,10 @@ export function NewsFilter({
             className="pl-10"
           />
         </div>
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">{t("dateRange")}</label>
+        <DateRangePicker isMobile />
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium">{t("country")}</label>
@@ -106,20 +242,7 @@ export function NewsFilter({
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium">{t("category")}</label>
-        <Select value={selectedCategory} onValueChange={(value) => {
-          onCategoryChange(value);
-          if (isMobile) setIsSheetOpen(false);
-        }}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder={t("allCategories")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">{t("allCategories")}</SelectItem>
-            {categories.map((cat) => (
-              <SelectItem key={cat} value={cat}>{getCategoryLabel(cat, locale)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <CategoryChips />
       </div>
       {hasActiveFilter && (
         <Button variant="outline" className="w-full" onClick={handleReset}>
@@ -170,6 +293,8 @@ export function NewsFilter({
           <div className="w-px h-5 bg-border/50" />
           <Filter className="w-3.5 h-3.5 text-muted-foreground/50" />
 
+          <DateRangePicker />
+
           <Select value={selectedCountry} onValueChange={onCountryChange}>
             <SelectTrigger className="w-[130px] h-8 text-xs border-0 bg-transparent shadow-none">
               <SelectValue placeholder={t("country")} />
@@ -178,18 +303,6 @@ export function NewsFilter({
               <SelectItem value="ALL">{t("allCountries")}</SelectItem>
               {countries.map((code) => (
                 <SelectItem key={code} value={code}>{getCountryLabel(code)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={selectedCategory} onValueChange={onCategoryChange}>
-            <SelectTrigger className="w-[130px] h-8 text-xs border-0 bg-transparent shadow-none">
-              <SelectValue placeholder={t("category")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">{t("allCategories")}</SelectItem>
-              {categories.map((cat) => (
-                <SelectItem key={cat} value={cat}>{getCategoryLabel(cat, locale)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -223,6 +336,21 @@ export function NewsFilter({
             <List className="h-3.5 w-3.5" />
           </Button>
         </div>
+      </div>
+
+      {/* Desktop Category Chips */}
+      <div className="hidden md:flex items-center gap-2 px-1">
+        <CategoryChips />
+        {selectedCategories.length > 0 && (
+          <Badge
+            variant="secondary"
+            className="text-[10px] cursor-pointer hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => onCategoriesChange([])}
+          >
+            <X className="w-3 h-3 mr-0.5" />
+            {selectedCategories.length}
+          </Badge>
+        )}
       </div>
 
       {/* Count */}

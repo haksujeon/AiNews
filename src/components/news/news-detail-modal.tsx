@@ -34,6 +34,7 @@ import {
   getCategoryLabel,
   getSentimentStyle,
   getSentimentLabel,
+  getTermExplanation,
 } from "@/lib/news-utils";
 import { NewsPlaceholder } from "./news-placeholder";
 
@@ -83,10 +84,10 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto p-0 gap-0 border-border/50 bg-card/95 backdrop-blur-xl">
+      <DialogContent className="sm:max-w-4xl max-h-[calc(100dvh-2rem)] sm:max-h-[85vh] overflow-y-auto p-0 gap-0 border-border/50 bg-card/95 backdrop-blur-xl">
         {/* Hero image */}
         {imageUrl ? (
-          <div className="relative w-full h-48 bg-muted overflow-hidden rounded-t-lg">
+          <div className="relative w-full h-36 sm:h-48 bg-muted overflow-hidden rounded-t-lg">
             <img
               src={imageUrl}
               alt={title}
@@ -108,10 +109,10 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
             />
           </div>
         ) : (
-          <NewsPlaceholder category={fullItem.category} className="h-48 rounded-t-lg rounded-b-none" />
+          <NewsPlaceholder category={fullItem.category} className="h-36 sm:h-48 rounded-t-lg rounded-b-none" />
         )}
 
-        <div className="p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4">
           {/* Badges */}
           <div className="flex flex-wrap items-center gap-2">
             {fullItem.category && (
@@ -137,7 +138,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
 
           {/* Title + metadata */}
           <DialogHeader className="text-left space-y-2">
-            <DialogTitle className="font-display text-3xl font-bold leading-tight">
+            <DialogTitle className="font-display text-xl sm:text-3xl font-bold leading-tight">
               {title}
             </DialogTitle>
             <DialogDescription asChild>
@@ -229,11 +230,16 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
                     <div className="space-y-3">
                       {fullItem.key_terms.map((term, index) => (
                         <div key={index} className="flex gap-3 items-start">
-                          <Badge variant="secondary" className="text-xs shrink-0 mt-0.5">
-                            {term.term}
-                          </Badge>
+                          <div className="shrink-0 mt-0.5">
+                            <Badge variant="secondary" className="text-xs">
+                              {term.term}
+                            </Badge>
+                            {term.pinyin && (
+                              <p className="text-[10px] text-muted-foreground/60 mt-0.5 pl-0.5">{term.pinyin}</p>
+                            )}
+                          </div>
                           <p className="text-xs leading-relaxed text-muted-foreground">
-                            {term.explanation_kr}
+                            {getTermExplanation(term, locale)}
                           </p>
                         </div>
                       ))}

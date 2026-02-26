@@ -16,7 +16,10 @@
     "totalCount": "{count} articles",
     "filters": "Filters",
     "applyFilters": "Apply Filters",
-    "activeFilters": "Active filters"
+    "activeFilters": "Active filters",
+    "search": "Search",
+    "dateRange": "Date Range",
+    "resetDate": "Clear dates"
   },
   "detail": {
     "backToList": "Back to list",
@@ -43,11 +46,17 @@
     "totalNews": "Total News",
     "todayNews": "Today",
     "categories": "Categories",
-    "countries": "Countries",
+    "sources": "Sources",
+    "avgPerDay": "Avg/Day",
+    "aiRatio": "AI Ratio",
     "categoryDistribution": "Category Distribution",
     "sentimentAnalysis": "Sentiment Analysis",
-    "countryBreakdown": "Country Breakdown",
+    "sourceDistribution": "Source Distribution",
     "dailyVolume": "Daily News Volume",
+    "weeklyTrend": "Weekly Trend",
+    "weeklyTotal": "Weekly Total",
+    "dailyAvg": "Daily Avg",
+    "topKeywords": "Top 15 Keywords",
     "articles": "articles"
   }
 }

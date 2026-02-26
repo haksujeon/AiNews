@@ -23,7 +23,7 @@ export interface NewsItem {
   ai_insights_cn: string | null;
   ai_insights_kr: string | null;
   ai_insights_en: string | null;
-  key_terms: { term: string; explanation_kr: string }[] | null;
+  key_terms: { term: string; pinyin?: string; explanation_kr: string; explanation_en?: string; explanation_zh?: string }[] | null;
   sentiment: string | null;
   category: string | null;
   thumbnail_url: string | null;
@@ -79,10 +79,20 @@ async function supabaseFetch<T>(path: string): Promise<T> {
   return res.json();
 }
 
+export const NEWS_PAGE_SIZE = 30;
+
 export async function fetchNewsList(): Promise<NewsItem[]> {
   // FR-04: 중복 뉴스 필터링 (is_duplicate=false)
   return supabaseFetch<NewsItem[]>(
-    `ai_news_ex?select=${LIST_SELECT_FIELDS}&is_duplicate=is.false&order=news_date.desc&limit=100`
+    `ai_news_ex?select=${LIST_SELECT_FIELDS}&is_duplicate=is.false&order=news_date.desc,id.desc&limit=${NEWS_PAGE_SIZE}`
+  );
+}
+
+const STATS_SELECT_FIELDS = `${LIST_SELECT_FIELDS},key_terms`;
+
+export async function fetchNewsForStats(): Promise<NewsItem[]> {
+  return supabaseFetch<NewsItem[]>(
+    `ai_news_ex?select=${STATS_SELECT_FIELDS}&is_duplicate=is.false&order=news_date.desc&limit=1000`
   );
 }
 

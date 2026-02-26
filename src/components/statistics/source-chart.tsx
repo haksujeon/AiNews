@@ -3,25 +3,30 @@
 import { useTranslations } from "next-intl";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { CountryStat } from "@/lib/statistics-utils";
+import type { SourceStat } from "@/lib/statistics-utils";
 
-interface CountryChartProps {
-  data: CountryStat[];
+interface SourceChartProps {
+  data: SourceStat[];
 }
 
-export function CountryChart({ data }: CountryChartProps) {
+export function SourceChart({ data }: SourceChartProps) {
   const t = useTranslations("statistics");
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{t("countryBreakdown")}</CardTitle>
+        <CardTitle className="text-base">{t("sourceDistribution")}</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data} layout="vertical" margin={{ left: 20 }}>
             <XAxis type="number" allowDecimals={false} />
-            <YAxis type="category" dataKey="label" width={90} tick={{ fontSize: 13 }} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={100}
+              tick={{ fontSize: 11 }}
+            />
             <Tooltip
               formatter={(value) => [`${value} ${t("articles")}`, ""]}
             />

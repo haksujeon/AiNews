@@ -16,7 +16,10 @@
     "totalCount": "총 {count}개의 기사",
     "filters": "필터",
     "applyFilters": "필터 적용",
-    "activeFilters": "필터 적용됨"
+    "activeFilters": "필터 적용됨",
+    "search": "검색",
+    "dateRange": "날짜 범위",
+    "resetDate": "날짜 초기화"
   },
   "detail": {
     "backToList": "목록으로",
@@ -43,11 +46,17 @@
     "totalNews": "총 뉴스",
     "todayNews": "오늘 뉴스",
     "categories": "카테고리",
-    "countries": "국가",
+    "sources": "뉴스 소스",
+    "avgPerDay": "일 평균",
+    "aiRatio": "AI 비율",
     "categoryDistribution": "카테고리 분포",
     "sentimentAnalysis": "감성 분석",
-    "countryBreakdown": "국가별 현황",
+    "sourceDistribution": "소스별 분포",
     "dailyVolume": "일별 뉴스량",
+    "weeklyTrend": "주간 트렌드",
+    "weeklyTotal": "주간 합계",
+    "dailyAvg": "일 평균",
+    "topKeywords": "주요 키워드 TOP 15",
     "articles": "건"
   }
 }

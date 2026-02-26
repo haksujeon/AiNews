@@ -1,10 +1,10 @@
-import { fetchNewsList } from "@/lib/supabase";
+import { fetchNewsForStats } from "@/lib/supabase";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { StatisticsContainer } from "@/components/statistics/statistics-container";
 
 export default async function StatisticsPage() {
-  const news = await fetchNewsList();
+  const news = await fetchNewsForStats();
 
   return (
     <div className="min-h-screen flex flex-col">

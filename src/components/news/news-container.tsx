@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useLocale } from "next-intl";
-import { Search, CalendarDays } from "lucide-react";
+import { Search, CalendarDays, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { NewsItem } from "@/lib/supabase";
+import { NEWS_PAGE_SIZE } from "@/lib/supabase";
+import { fetchNewsPageClient } from "@/lib/supabase-client";
 import {
   filterNews,
   getUniqueCountries,
@@ -12,6 +14,7 @@ import {
   groupNewsByDate,
   formatDateGroup,
 } from "@/lib/news-utils";
+import type { DateRange } from "@/lib/news-utils";
 import { NewsCard } from "./news-card";
 import { NewsListItem } from "./news-list-item";
 import { NewsFilter } from "./news-filter";
@@ -23,56 +26,74 @@ interface NewsContainerProps {
   isLoading?: boolean;
 }
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-    },
-  },
+const springTransition = {
+  type: "spring" as const,
+  stiffness: 100,
+  damping: 15,
 };
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: "spring" as const,
-      stiffness: 100,
-      damping: 15,
-    },
-  },
-};
-
-const listVariants = {
-  hidden: { opacity: 0, x: -20 },
-  visible: {
-    opacity: 1,
-    x: 0,
-    transition: {
-      type: "spring" as const,
-      stiffness: 100,
-      damping: 15,
-    },
-  },
-};
-
-export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
+export function NewsContainer({ news: initialNews, isLoading = false }: NewsContainerProps) {
   const locale = useLocale();
+  const [allNews, setAllNews] = useState<NewsItem[]>(initialNews);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(initialNews.length >= NEWS_PAGE_SIZE);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCountry, setSelectedCountry] = useState("ALL");
-  const [selectedCategory, setSelectedCategory] = useState("ALL");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange>({});
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedItem, setSelectedItem] = useState<NewsItem | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const countries = useMemo(() => getUniqueCountries(news), [news]);
-  const categories = useMemo(() => getUniqueCategories(news), [news]);
+  // Sync if initialNews changes (e.g. revalidation)
+  useEffect(() => {
+    setAllNews(initialNews);
+    setHasMore(initialNews.length >= NEWS_PAGE_SIZE);
+  }, [initialNews]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = await fetchNewsPageClient(allNews.length, NEWS_PAGE_SIZE);
+      if (nextPage.length === 0) {
+        setHasMore(false);
+      } else {
+        if (nextPage.length < NEWS_PAGE_SIZE) setHasMore(false);
+        setAllNews((prev) => {
+          const existingIds = new Set(prev.map((n) => n.id));
+          const newItems = nextPage.filter((n) => !existingIds.has(n.id));
+          return [...prev, ...newItems];
+        });
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [allNews.length, loadingMore, hasMore]);
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore) {
+          loadMore();
+        }
+      },
+      { rootMargin: "400px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadMore, hasMore, loadingMore]);
+
+  const countries = useMemo(() => getUniqueCountries(allNews), [allNews]);
+  const categories = useMemo(() => getUniqueCategories(allNews), [allNews]);
 
   const filteredNews = useMemo(
-    () => filterNews(news, searchQuery, selectedCountry, selectedCategory, locale),
-    [news, searchQuery, selectedCountry, selectedCategory, locale]
+    () => filterNews(allNews, searchQuery, selectedCountry, selectedCategories, locale, dateRange),
+    [allNews, searchQuery, selectedCountry, selectedCategories, locale, dateRange]
   );
 
   const dateGroups = useMemo(
@@ -80,13 +101,15 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
     [filteredNews]
   );
 
+  const filterKey = `${selectedCategories.join(",")}-${selectedCountry}-${searchQuery}-${dateRange.from || ""}-${dateRange.to || ""}`;
+
   const handleReset = () => {
     setSearchQuery("");
     setSelectedCountry("ALL");
-    setSelectedCategory("ALL");
+    setSelectedCategories([]);
+    setDateRange({});
   };
 
-  // Handle view mode change
   const handleViewModeChange = (mode: "grid" | "list") => {
     setViewMode(mode);
   };
@@ -99,8 +122,10 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
           onSearchChange={setSearchQuery}
           selectedCountry={selectedCountry}
           onCountryChange={setSelectedCountry}
-          selectedCategory={selectedCategory}
-          onCategoryChange={setSelectedCategory}
+          selectedCategories={selectedCategories}
+          onCategoriesChange={setSelectedCategories}
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
           countries={countries}
           categories={categories}
           viewMode={viewMode}
@@ -120,8 +145,10 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
         onSearchChange={setSearchQuery}
         selectedCountry={selectedCountry}
         onCountryChange={setSelectedCountry}
-        selectedCategory={selectedCategory}
-        onCategoryChange={setSelectedCategory}
+        selectedCategories={selectedCategories}
+        onCategoriesChange={setSelectedCategories}
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
         countries={countries}
         categories={categories}
         viewMode={viewMode}
@@ -150,7 +177,7 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
             </h3>
             <p className="text-sm text-muted-foreground">
               {locale === "ko"
-                ? "다른 검색어나 필터를 시도핤봐세요."
+                ? "다른 검색어나 필터를 시도해보세요."
                 : locale === "zh"
                   ? "请尝试其他搜索词或筛选条件。"
                   : "Try different search terms or filters."}
@@ -158,17 +185,19 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
           </motion.div>
         ) : (
           <motion.div
-            key="content"
-            initial="hidden"
-            animate="visible"
+            key={`content-${filterKey}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            variants={containerVariants}
             className="space-y-8"
           >
             {dateGroups.map((group) => (
               <motion.section
                 key={group.date}
-                variants={itemVariants}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={springTransition}
                 className="space-y-4"
               >
                 <div className="flex items-center gap-3 mb-4">
@@ -189,21 +218,23 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
                   </div>
                   <div className="flex-1 h-px bg-gradient-to-r from-border/30 to-transparent" />
                 </div>
-                
+
                 <AnimatePresence mode="wait">
                   {viewMode === "grid" ? (
                     <motion.div
                       key="grid"
-                      initial="hidden"
-                      animate="visible"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      variants={containerVariants}
                       className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
                     >
                       {group.items.map((item) => (
                         <motion.div
                           key={item.id}
-                          variants={itemVariants}
+                          initial={{ opacity: 0, y: 20 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true }}
+                          transition={springTransition}
                         >
                           <NewsCard
                             item={item}
@@ -215,14 +246,19 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
                   ) : (
                     <motion.div
                       key="list"
-                      initial="hidden"
-                      animate="visible"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      variants={containerVariants}
                       className="space-y-4"
                     >
                       {group.items.map((item) => (
-                        <motion.div key={item.id} variants={listVariants}>
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          whileInView={{ opacity: 1, x: 0 }}
+                          viewport={{ once: true }}
+                          transition={springTransition}
+                        >
                           <NewsListItem item={item} onClick={() => setSelectedItem(item)} />
                         </motion.div>
                       ))}
@@ -234,6 +270,26 @@ export function NewsContainer({ news, isLoading = false }: NewsContainerProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Infinite scroll sentinel */}
+      <div ref={sentinelRef} className="h-1" />
+      {loadingMore && (
+        <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm">
+            {locale === "ko" ? "불러오는 중..." : locale === "zh" ? "加载中..." : "Loading more..."}
+          </span>
+        </div>
+      )}
+      {!hasMore && allNews.length > NEWS_PAGE_SIZE && (
+        <p className="text-center text-xs text-muted-foreground/50 py-4">
+          {locale === "ko"
+            ? `총 ${allNews.length}건의 기사를 모두 불러왔습니다`
+            : locale === "zh"
+              ? `已加载全部 ${allNews.length} 篇文章`
+              : `All ${allNews.length} articles loaded`}
+        </p>
+      )}
 
       <NewsDetailModal
         news={selectedItem}

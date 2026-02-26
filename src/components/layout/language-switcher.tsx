@@ -32,9 +32,9 @@ export function LanguageSwitcher() {
 
   return (
     <Select value={locale} onValueChange={handleChange}>
-      <SelectTrigger className="w-32 h-8">
-        <Globe className="h-4 w-4 mr-1" />
-        <SelectValue />
+      <SelectTrigger className="h-8 w-9 sm:w-32 px-2 sm:px-3 overflow-hidden">
+        <Globe className="h-4 w-4 shrink-0" />
+        <SelectValue className="hidden sm:block" />
       </SelectTrigger>
       <SelectContent>
         {routing.locales.map((loc) => (
