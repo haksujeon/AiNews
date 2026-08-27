@@ -1,0 +1,2091 @@
+{
+  "updatedAt": "2026-06-17T03:02:44.568Z",
+  "createdAt": "2026-06-17T01:04:29.971Z",
+  "id": "xOkFhLu8pRaN8LRl",
+  "name": "중국 AI 뉴스 수집 - Daily [aibaseclub v2]",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9,14,23 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -32
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger-1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "collect-news",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        352
+      ],
+      "webhookId": "collect-news-webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "td-1",
+              "name": "targetDate",
+              "value": "={{ ($json.body && $json.body.targetDate) || $json.targetDate || $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd') }}",
+              "type": "string"
+            },
+            {
+              "id": "td-2",
+              "name": "isManual",
+              "value": "={{ !!($json.body && $json.body.targetDate) || !!$json.targetDate }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-date-1",
+      "name": "Set Target Date",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://plink.anyfeeder.com/ithome/it",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-ithome",
+      "name": "Fetch ITHome RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        256
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://plink.anyfeeder.com/huxiu",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-huxiu",
+      "name": "Fetch Huxiu RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        448
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "3f055629-5cd4-40aa-a785-b72d9653a0ee",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        672,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// simple djb2-style hash (no require)\nfunction simpleHash(str) {\n  let h = 5381;\n  for (let i = 0; i < str.length; i++) h = ((h << 5) + h) ^ str.charCodeAt(i);\n  return (h >>> 0).toString(16).padStart(8, '0') + str.length.toString(16).padStart(8, '0');\n}\nconst results = [];\nconst targetDate = $('Set Target Date').first().json.targetDate;\nconst inputs = $input.all();\n\nfunction toBeijingDate(dateStr) {\n  if (!dateStr) return null;\n  try {\n    const d = new Date(dateStr);\n    if (isNaN(d.getTime())) return null;\n    const beijing = new Date(d.getTime() + 8 * 60 * 60 * 1000);\n    return beijing.toISOString().split('T')[0];\n  } catch (e) {\n    return null;\n  }\n}\n\nconst todayBeijing = toBeijingDate(new Date().toISOString());\nconst effectiveTarget = toBeijingDate(targetDate) || todayBeijing;\n\n\nfunction extractTag(xml, tag) {\n  const cdataRegex = new RegExp('<' + tag + '[^>]*>\\\\s*<!\\\\[CDATA\\\\[([\\\\s\\\\S]*?)\\\\]\\\\]>\\\\s*</' + tag + '>', 'i');\n  const cdataMatch = xml.match(cdataRegex);\n  if (cdataMatch) return cdataMatch[1].trim();\n  const plainRegex = new RegExp('<' + tag + '[^>]*>\\\\s*([\\\\s\\\\S]*?)\\\\s*</' + tag + '>', 'i');\n  const plainMatch = xml.match(plainRegex);\n  if (plainMatch) return plainMatch[1].trim();\n  return '';\n}\n\nfunction decodeEntities(str) {\n  return str.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\").replace(/&apos;/g, \"'\");\n}\n\nfunction extractFirstImage(html) {\n  const decoded = decodeEntities(html);\n  const imgMatch = decoded.match(/<img[^>]+src=[\"']([^\"']+)[\"']/i);\n  return imgMatch ? imgMatch[1] : '';\n}\n\nfunction getSourceName(xmlString) {\n  const title = extractTag(xmlString, 'title');\n  if (title.includes('量子位') || xmlString.includes('qbitai')) return 'Qbitai';\n  if (title.includes('机器之心') || xmlString.includes('almosthuman') || xmlString.includes('jiqizhixin')) return 'Synced';\n  if (title.includes('Synced') || xmlString.includes('syncedreview')) return 'SyncedReview';\n  if (title.includes('36') || xmlString.includes('36kr')) return '36Kr';\n  if (title.includes('IT之家') || title.includes('IT 之家') || xmlString.includes('ithome')) return 'ITHome';\n  if (title.includes('新智元') || xmlString.includes('AI_era')) return 'XinZhiYuan';\n  if (title.includes('虎嗅') || xmlString.includes('huxiu')) return 'Huxiu';\n  return title || 'Unknown';\n}\n\nfor (const input of inputs) {\n  const data = input.json;\n  if (!data) continue;\n  if (data.error || data.errorMessage) continue;\n  const xmlString = data.data || '';\n  if (!xmlString || typeof xmlString !== 'string' || !xmlString.includes('<item>')) continue;\n  const sourceName = getSourceName(xmlString);\n  const itemRegex = /<item>[\\s\\S]*?<\\/item>/gi;\n  let match;\n  while ((match = itemRegex.exec(xmlString)) !== null) {\n    const itemXml = match[0];\n    const title = extractTag(itemXml, 'title');\n    const link = extractTag(itemXml, 'link');\n    const pubDate = extractTag(itemXml, 'pubDate');\n    let rawContent = extractTag(itemXml, 'content:encoded');\n    if (!rawContent) { rawContent = extractTag(itemXml, 'description'); }\n    const fullContent = decodeEntities(rawContent);\n    let thumbnail = extractTag(itemXml, 'thumbnail');\n    if (!thumbnail) { thumbnail = extractFirstImage(rawContent); }\n    const newsDate = toBeijingDate(pubDate);\n    if (!newsDate) continue;\n    if (newsDate === effectiveTarget) {\n      const hashInput = link + '_' + newsDate;\n      const content_hash = simpleHash(hashInput);\n      results.push({ json: { title_cn: title, content_cn: fullContent, source_url: link, source_name: sourceName, news_date: newsDate, content_hash: content_hash, thumbnail_url: thumbnail, status: 'pending' } });\n    }\n  }\n}\nconst seen = new Set();\nconst unique = results.filter(item => { if (seen.has(item.json.content_hash)) return false; seen.add(item.json.content_hash); return true; });\n\n// Title similarity based cross-source dedup\nfunction normalizeTitle(t) {\n  return t.replace(/[\\s\\u3000!！?？,，.。:：;；\"\"''「」【】《》\\-—|｜]/g, '').toLowerCase();\n}\nfunction titleSimilarity(a, b) {\n  const na = normalizeTitle(a), nb = normalizeTitle(b);\n  if (na === nb) return 1.0;\n  const longer = na.length >= nb.length ? na : nb;\n  const shorter = na.length < nb.length ? na : nb;\n  if (longer.length === 0) return 1.0;\n  if (longer.includes(shorter) || shorter.includes(longer)) return 0.9;\n  let matches = 0;\n  for (let i = 0; i < shorter.length; i++) {\n    if (longer.includes(shorter[i])) matches++;\n  }\n  return matches / longer.length;\n}\n\nconst titleFiltered = [];\nfor (const item of unique) {\n  const dominated = titleFiltered.some(existing => {\n    const sim = titleSimilarity(existing.json.title_cn, item.json.title_cn);\n    return sim >= 0.8;\n  });\n  if (!dominated) titleFiltered.push(item);\n}\n\nif (titleFiltered.length === 0) return [{ json: { noResults: true, message: 'No news found for target date: ' + effectiveTarget } }];\nconsole.log(`Merge and Filter: ${results.length} total RSS items, ${unique.length} unique by hash, ${titleFiltered.length} after title dedup for ${effectiveTarget}`);\nreturn titleFiltered;"
+      },
+      "id": "merge-rss",
+      "name": "Merge and Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-hash",
+              "leftValue": "={{ $json.content_hash }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "filter-has-content",
+      "name": "Only New Items",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:4100/v1/embeddings",
+        "authentication": "none",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'bge-m3', input: $json.texts }) }}",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer [REDACTED]"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "get-embed",
+      "name": "Get Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:4100/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer [REDACTED]"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'aliyun-tp-deepseek-v4-pro', messages: [{ role: 'system', content: 'You are a Chinese AI news translator. Respond ONLY in valid JSON with these exact fields: title_kr (Korean title), title_en (English title), summary_kr (Korean 2-3 sentence summary), summary_en (English 2-3 sentence summary), summary_cn (Chinese 2-3 sentence summary), content_kr (Korean translation of key content max 1500 chars no HTML tags), content_en (English translation max 1500 chars no HTML tags), sentiment (positive|neutral|negative), category (exactly one of: ai-tech|ai-product|ai-biz|politics|economy|society|culture|tech). No markdown no code blocks no explanation.' }, { role: 'user', content: '다음 중국어 뉴스를 번역하세요:\\n\\n제목: ' + $json.title_cn + '\\n본문: ' + ($json.content_cn || '').substring(0, 3000) }], max_tokens: 2000, temperature: 0.2 }) }}",
+        "options": {}
+      },
+      "id": "03cbe70e-5244-4844-99e0-e77032930630",
+      "name": "AI Agent - Translation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3360,
+        48
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-6",
+        "options": {}
+      },
+      "id": "105383ac-e7c0-4cd9-a89b-67ece8f4e1a3",
+      "name": "OpenRouter Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        3376,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "openAiApi": {
+          "id": "CI8M9hJzZjspOsaQ",
+          "name": "LiteLLM Proxy (aibaseclub)"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiItems = $input.all();\nconst origItems = $('Strip HTML').all();\n// SplitInBatches is now before AI Agent; use currentRunIndex to find correct item\nlet batchOffset = 0;\ntry { batchOffset = $('SplitInBatches').context.currentRunIndex || 0; } catch(e) { batchOffset = 0; }\nconst results = [];\n\nfunction extractJson(text) {\n  if (!text || typeof text !== 'string') return null;\n  let cleaned = text.replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, '').trim();\n  try { return JSON.parse(cleaned); } catch (e) {}\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    try { return JSON.parse(jsonMatch[0]); } catch (e) {}\n  }\n  const obj = {};\n  const fieldPatterns = [\n    ['title_kr', /\"title_kr\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['title_en', /\"title_en\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['summary_kr', /\"summary_kr\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['summary_en', /\"summary_en\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['summary_cn', /\"summary_cn\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['content_kr', /\"content_kr\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['content_en', /\"content_en\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['sentiment', /\"sentiment\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['category', /\"category\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n  ];\n  let found = false;\n  for (const [key, pattern] of fieldPatterns) {\n    const m = cleaned.match(pattern);\n    if (m) { obj[key] = m[1]; found = true; }\n  }\n  return found ? obj : null;\n}\n\nconst VALID_CATEGORIES = ['ai-tech','ai-product','ai-biz','politics','economy','society','culture','tech'];\n\nfor (let i = 0; i < aiItems.length; i++) {\n  const aiData = aiItems[i].json;\n  const origData = origItems[i]?.json || {};\n  let aiResponse = null;\n  const rawText = aiData?.choices?.[0]?.message?.content || aiData.output || aiData.text || aiData.response || '';\n  if (typeof rawText === 'string') { aiResponse = extractJson(rawText); }\n  else if (typeof rawText === 'object') { aiResponse = rawText; }\n  if (!aiResponse) { aiResponse = {}; }\n\n  let category = aiResponse.category || 'tech';\n  if (!VALID_CATEGORIES.includes(category)) { category = 'tech'; }\n\n  results.push({\n    json: {\n      source_name: origData.source_name || '',\n      source_url: origData.source_url || '',\n      title_cn: origData.title_cn || '',\n      content_cn: origData.content_cn || '',\n      content_hash: origData.content_hash || '',\n      embedding: origData.embedding || [],\n      news_date: origData.news_date || '',\n      thumbnail_url: origData.thumbnail_url || '',\n      country: 'CN',\n      title_kr: aiResponse.title_kr || origData.title_cn || '',\n      title_en: aiResponse.title_en || origData.title_cn || '',\n      summary_kr: aiResponse.summary_kr || '',\n      summary_cn: aiResponse.summary_cn || '',\n      summary_en: aiResponse.summary_en || '',\n      content_kr: aiResponse.content_kr || '',\n      content_en: aiResponse.content_en || '',\n      sentiment: aiResponse.sentiment || 'neutral',\n      category: category,\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-response-1",
+      "name": "Parse Translation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3712,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3002/ainews/api/news/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "save-db",
+      "name": "Save to DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4912,
+        160
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## RSS Sources\n量子位, 36氪, ITHome, 虎嗅",
+        "height": 240,
+        "width": 1328
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2320,
+        672
+      ],
+      "typeVersion": 1,
+      "id": "bc56fcf6-4e52-4762-a9c6-cdb4014fdeb6",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:3300/qbitai/category/资讯",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "982b95ff-343d-4561-ac68-2583cd27fc4b",
+      "name": "量子位 RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        -128
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:3300/36kr/news",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "4506ec09-7419-427d-bf6f-5f2e9ef41040",
+      "name": "36氪 RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        64
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "split-batches-1",
+      "name": "SplitInBatches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3136,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (items.length === 1 && items[0].json.noResults) {\n  return [{ json: { noResults: true, hashes: [] } }];\n}\nconst hashes = [...new Set(items.map(i => i.json.content_hash).filter(Boolean))];\nconsole.log('Prepare: ' + items.length + ' items, ' + hashes.length + ' unique hashes');\nreturn [{ json: { hashes, itemCount: items.length } }];"
+      },
+      "id": "prepare-hash-check",
+      "name": "Prepare Hash Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3002/ainews/api/news/check-exists",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ input_hashes: $json.hashes }) }}",
+        "options": {},
+        "authentication": "none"
+      },
+      "id": "query-existing",
+      "name": "Query Existing Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const respItem = $input.first();\nconst resp = respItem.json;\nconst existing = Array.isArray(resp.existing) ? resp.existing : [];\nconst existingHashes = new Set();\nconst existingUrls = new Set();\nfor (const item of existing) {\n  if (item && item.content_hash) existingHashes.add(item.content_hash);\n  if (item && item.source_url) existingUrls.add(item.source_url);\n}\nconst origItems = $('Merge and Filter').all();\nconst newItems = origItems.filter(item =>\n  !existingHashes.has(item.json.content_hash) &&\n  !existingUrls.has(item.json.source_url)\n);\nconst filtered = origItems.length - newItems.length;\nconsole.log('Filter: ' + origItems.length + ' total, ' + filtered + ' duplicates removed, ' + newItems.length + ' new');\nif (newItems.length === 0) return [{ json: { noNewItems: true, message: 'All ' + origItems.length + ' items already exist' } }];\nreturn newItems;"
+      },
+      "id": "filter-duplicates",
+      "name": "Filter Duplicates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const embResponse = $input.first().json;\nconst prepBatch = $('Prepare Embedding Batch').first().json;\nconst origItems = prepBatch.items;\nconst embDataSorted = (embResponse.data || []).slice().sort((a, b) => (a.index || 0) - (b.index || 0));\nconst items = [];\nconst embeddings = [];\nfor (let i = 0; i < origItems.length; i++) {\n  const embedding = embDataSorted[i]?.embedding || [];\n  items.push({ ...origItems[i], embedding });\n  embeddings.push(embedding);\n}\nconsole.log('Merge: ' + origItems.length + ' items, ' + embeddings.filter(e => e.length > 0).length + ' valid embeddings');\nreturn [{ json: { items, embeddings } }];"
+      },
+      "id": "merge-embed-data",
+      "name": "Merge Embedding Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        160
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3002/ainews/api/news/check-exists",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query_embeddings: $json.embeddings, match_threshold: 0.85 }) }}",
+        "options": {},
+        "authentication": "none"
+      },
+      "id": "check-similar-rpc",
+      "name": "Check Similar RPC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2688,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput",
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const respItem = $input.first();\nconst resp = respItem.json;\nconst mergedData = $('Merge Embedding Data').first().json;\nconst items = mergedData.items;\nconst simResults = Array.isArray(resp.results) ? resp.results : [];\nconst similarSet = new Set();\nfor (const r of simResults) {\n  if (r && r.is_similar) similarSet.add(r.item_index);\n}\nconst results = [];\nlet similarSkipped = 0;\nfor (let i = 0; i < items.length; i++) {\n  if (similarSet.has(i)) {\n    similarSkipped++;\n    continue;\n  }\n  results.push({ json: items[i] });\n}\nconsole.log('Similarity: ' + items.length + ' checked, ' + similarSkipped + ' similar removed, ' + results.length + ' passed');\nif (results.length === 0) return [{ json: { noNewItems: true, message: 'All filtered by similarity' } }];\nreturn results;"
+      },
+      "id": "filter-non-similar",
+      "name": "Filter Non-Similar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        160
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:4100/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer [REDACTED]"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'aliyun-tp-deepseek-v4-pro', messages: [{ role: 'system', content: 'You are a Chinese AI news analyst. Respond ONLY in valid JSON with these exact fields: ai_insights_en (English strategic insights 2-3 sentences about AI/tech industry implications), ai_insights_kr (Korean strategic insights 2-3 sentences), ai_insights_cn (Chinese strategic insights 2-3 sentences), key_terms (array of 2-3 important Chinese terms, each with: term, pinyin with tone marks, explanation_kr, explanation_en, explanation_zh). No markdown no code blocks no explanation.' }, { role: 'user', content: '다음 뉴스를 분석하세요:\\n\\n제목: ' + $json.title_cn + '\\n요약: ' + ($json.summary_cn || $json.summary_kr || '') + '\\n본문: ' + ($json.content_cn ? $json.content_cn.substring(0, 3000) : '') }], max_tokens: 1000, temperature: 0.3 }) }}",
+        "options": {}
+      },
+      "id": "agent-insights-001",
+      "name": "AI Agent - Insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4336,
+        48
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "model": "aliyun-tp-deepseek-v4-pro",
+        "options": {}
+      },
+      "id": "llm-insights-001",
+      "name": "OpenRouter Chat Model 2",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        3872,
+        256
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "CI8M9hJzZjspOsaQ",
+          "name": "LiteLLM Proxy (aibaseclub)"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiItems = $input.all();\nconst translationItems = $('Parse Polish').all();\nconst results = [];\n\nfunction extractJson(text) {\n  if (!text || typeof text !== 'string') return null;\n  let cleaned = text.replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, '').trim();\n  try { return JSON.parse(cleaned); } catch (e) {}\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    try { return JSON.parse(jsonMatch[0]); } catch (e) {}\n  }\n  const obj = {};\n  const fieldPatterns = [\n    ['ai_insights_en', /\"ai_insights_en\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['ai_insights_kr', /\"ai_insights_kr\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['ai_insights_cn', /\"ai_insights_cn\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n  ];\n  let found = false;\n  for (const [key, pattern] of fieldPatterns) {\n    const m = cleaned.match(pattern);\n    if (m) { obj[key] = m[1]; found = true; }\n  }\n  const ktMatch = cleaned.match(/\"key_terms\"\\s*:\\s*(\\[[\\s\\S]*?\\])/);\n  if (ktMatch) {\n    try { obj.key_terms = JSON.parse(ktMatch[1]); found = true; } catch (e) {}\n  }\n  return found ? obj : null;\n}\n\nfor (let i = 0; i < aiItems.length; i++) {\n  const aiData = aiItems[i].json;\n  const transData = translationItems[i]?.json || {};\n  let aiResponse = null;\n  const rawText = aiData?.choices?.[0]?.message?.content || aiData.output || aiData.text || aiData.response || '';\n  if (typeof rawText === 'string') { aiResponse = extractJson(rawText); }\n  else if (typeof rawText === 'object') { aiResponse = rawText; }\n  if (!aiResponse) { aiResponse = {}; }\n\n  results.push({\n    json: {\n      ...transData,\n      ai_insights_en: aiResponse.ai_insights_en || '',\n      ai_insights_kr: aiResponse.ai_insights_kr || '',\n      ai_insights_cn: aiResponse.ai_insights_cn || '',\n      key_terms: aiResponse.key_terms || [],\n      status: 'completed'\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-insights-001",
+      "name": "Parse & Merge Insights",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4688,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst texts = items.map(item => {\n  const title = item.json.title_cn || '';\n  const content = (item.json.content_cn || '').substring(0, 1000);\n  return title + '\\n' + content;\n});\nconsole.log('Embedding batch: ' + items.length + ' items');\nreturn [{ json: { texts, items: items.map(i => i.json) } }];"
+      },
+      "id": "eaf764af-50f6-40b0-b093-82f564ad7d6c",
+      "name": "Prepare Embedding Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        160
+      ],
+      "disabled": false
+    },
+    {
+      "id": "strip-html-001",
+      "name": "Strip HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3248,
+        48
+      ],
+      "parameters": {
+        "jsCode": "// HTML 태그 제거 + 3000자 이내로 자르기\nconst item = $json;\nconst stripped = (item.content_cn || '')\n  .replace(/<[^>]+>/g, '')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&amp;/g, '&')\n  .replace(/&quot;/g, '\"')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .substring(0, 3000);\n\nreturn [{ json: { ...item, content_cn: stripped } }];"
+      }
+    },
+    {
+      "id": "polish-trans-node-01",
+      "name": "Polish Translation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3824,
+        48
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:4100/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer [REDACTED]"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "body": "={{ JSON.stringify({\n  model: 'claude-sonnet-4-6',\n  messages: [{\n    role: 'user',\n    content: \"너는 한국어 AI 뉴스 에디터다. 번역 초안을 개선하라:\\n1. AI/IT 기술 용어 → 한국 업계 표준(파운드리, 거대언어모델 등)\\n2. 고유명사/브랜드 → 올바른 한국어 표기(오리건, 원신 등)\\n3. 헤드라인: 경어체 금지, 간결 명사형\\n4. 잡음 토큰 제거\\n\\n원문(중국어):\\n제목: \" + $json.title_cn + \"\\n요약: \" + ($json.summary_cn||'') + \"\\n\\n번역 초안:\\n제목: \" + ($json.title_kr||'') + \"\\n요약: \" + ($json.summary_kr||'') + \"\\n\\n출력 형식(두 줄):\\n제목: ...\\n요약: ...\"\n  }],\n  max_tokens: 600,\n  temperature: 0.2\n}) }}",
+        "options": {},
+        "jsonBody": "={{ JSON.stringify({\n  model: 'aliyun-tp-deepseek-v4-pro',\n  messages: [{\n    role: 'user',\n    content: \"너는 한국어 AI 뉴스 에디터다. 번역 초안을 개선하라:\\n1. AI/IT 기술 용어 → 한국 업계 표준(파운드리, 거대언어모델 등)\\n2. 고유명사/브랜드 → 올바른 한국어 표기(오리건, 원신 등)\\n3. 헤드라인: 경어체 금지, 간결 명사형\\n4. 잡음 토큰 제거\\n\\n원문(중국어):\\n제목: \" + $json.title_cn + \"\\n요약: \" + ($json.summary_cn||'') + \"\\n\\n번역 초안:\\n제목: \" + ($json.title_kr||'') + \"\\n요약: \" + ($json.summary_kr||'') + \"\\n\\n출력 형식(두 줄):\\n제목: ...\\n요약: ...\"\n  }],\n  max_tokens: 600,\n  temperature: 0.2\n}) }}"
+      }
+    },
+    {
+      "id": "parse-polish-node-01",
+      "name": "Parse Polish",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4060,
+        48
+      ],
+      "parameters": {
+        "jsCode": "\nconst prev = $input.first().json;\nconst llmContent = prev?.choices?.[0]?.message?.content || '';\nconst lines = llmContent.split('\\n').map(l=>l.trim()).filter(Boolean);\nconst titleLine = lines.find(l=>l.startsWith('제목:'));\nconst summaryLine = lines.find(l=>l.startsWith('요약:'));\n// 원본 아이템은 이전 단계에서 오므로 $('Parse Translation').first()로 가져옴\nconst orig = $('Parse Translation').first().json;\nreturn [{\n  json: {\n    ...orig,\n    title_kr: titleLine ? titleLine.replace(/^제목:\\s*/,'') : orig.title_kr,\n    summary_kr: summaryLine ? summaryLine.replace(/^요약:\\s*/,'') : orig.summary_kr,\n  }\n}];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Target Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Target Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Target Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Target Date": {
+      "main": [
+        [
+          {
+            "node": "Fetch ITHome RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Huxiu RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "量子位 RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "36氪 RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch ITHome RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Fetch Huxiu RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Merge and Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge and Filter": {
+      "main": [
+        [
+          {
+            "node": "Prepare Hash Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Embedding": {
+      "main": [
+        [
+          {
+            "node": "Merge Embedding Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "量子位 RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "36氪 RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Save to DB": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Hash Check": {
+      "main": [
+        [
+          {
+            "node": "Query Existing Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Existing Items": {
+      "main": [
+        [
+          {
+            "node": "Filter Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Only New Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Embedding Data": {
+      "main": [
+        [
+          {
+            "node": "Check Similar RPC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Similar RPC": {
+      "main": [
+        [
+          {
+            "node": "Filter Non-Similar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Translation": {
+      "main": [
+        [
+          {
+            "node": "Parse Translation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Translation",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Translation": {
+      "main": [
+        [
+          {
+            "node": "Polish Translation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model 2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Insights",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Insights": {
+      "main": [
+        [
+          {
+            "node": "Parse & Merge Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Merge Insights": {
+      "main": [
+        [
+          {
+            "node": "Save to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only New Items": {
+      "main": [
+        [
+          {
+            "node": "Prepare Embedding Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Embedding Batch": {
+      "main": [
+        [
+          {
+            "node": "Get Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Non-Similar": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strip HTML": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Translation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SplitInBatches": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Strip HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Polish Translation": {
+      "main": [
+        [
+          {
+            "node": "Parse Polish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Polish": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 3600,
+    "timezone": "Asia/Seoul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "executionOrder": "v1"
+  },
+  "staticData": {
+    "node:Schedule Trigger": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "8641da61-5992-4f4b-8d83-c8e9508e98db",
+  "activeVersionId": "8641da61-5992-4f4b-8d83-c8e9508e98db",
+  "versionCounter": 18,
+  "triggerCount": 2,
+  "shared": [
+    {
+      "updatedAt": "2026-06-17T01:04:29.988Z",
+      "createdAt": "2026-06-17T01:04:29.988Z",
+      "role": "workflow:owner",
+      "workflowId": "xOkFhLu8pRaN8LRl",
+      "projectId": "dE3EFHw2blq4DpiK",
+      "project": {
+        "updatedAt": "2026-06-05T04:50:59.024Z",
+        "createdAt": "2026-06-05T04:42:32.422Z",
+        "id": "dE3EFHw2blq4DpiK",
+        "name": "haksu jeon <haksujeon77@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "dbe8db6c-349f-4f6d-918d-ee9be1f00fc9"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-17T03:02:44.571Z",
+    "createdAt": "2026-06-17T03:02:44.571Z",
+    "versionId": "8641da61-5992-4f4b-8d83-c8e9508e98db",
+    "workflowId": "xOkFhLu8pRaN8LRl",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 9,14,23 * * *"
+              }
+            ]
+          }
+        },
+        "id": "schedule-trigger-1",
+        "name": "Schedule Trigger",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -32
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "manual-trigger-1",
+        "name": "Manual Trigger",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "collect-news",
+          "responseMode": "onReceived",
+          "options": {}
+        },
+        "id": "webhook-trigger",
+        "name": "Webhook Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          352
+        ],
+        "webhookId": "collect-news-webhook"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "td-1",
+                "name": "targetDate",
+                "value": "={{ ($json.body && $json.body.targetDate) || $json.targetDate || $now.setZone('Asia/Shanghai').toFormat('yyyy-MM-dd') }}",
+                "type": "string"
+              },
+              {
+                "id": "td-2",
+                "name": "isManual",
+                "value": "={{ !!($json.body && $json.body.targetDate) || !!$json.targetDate }}",
+                "type": "boolean"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "set-date-1",
+        "name": "Set Target Date",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          224,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "url": "https://plink.anyfeeder.com/ithome/it",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "User-Agent",
+                "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "fetch-ithome",
+        "name": "Fetch ITHome RSS",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          448,
+          256
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "url": "https://plink.anyfeeder.com/huxiu",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "User-Agent",
+                "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "fetch-huxiu",
+        "name": "Fetch Huxiu RSS",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          448,
+          448
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "numberInputs": 4
+        },
+        "id": "3f055629-5cd4-40aa-a785-b72d9653a0ee",
+        "name": "Merge",
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          672,
+          128
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// simple djb2-style hash (no require)\nfunction simpleHash(str) {\n  let h = 5381;\n  for (let i = 0; i < str.length; i++) h = ((h << 5) + h) ^ str.charCodeAt(i);\n  return (h >>> 0).toString(16).padStart(8, '0') + str.length.toString(16).padStart(8, '0');\n}\nconst results = [];\nconst targetDate = $('Set Target Date').first().json.targetDate;\nconst inputs = $input.all();\n\nfunction toBeijingDate(dateStr) {\n  if (!dateStr) return null;\n  try {\n    const d = new Date(dateStr);\n    if (isNaN(d.getTime())) return null;\n    const beijing = new Date(d.getTime() + 8 * 60 * 60 * 1000);\n    return beijing.toISOString().split('T')[0];\n  } catch (e) {\n    return null;\n  }\n}\n\nconst todayBeijing = toBeijingDate(new Date().toISOString());\nconst effectiveTarget = toBeijingDate(targetDate) || todayBeijing;\n\n\nfunction extractTag(xml, tag) {\n  const cdataRegex = new RegExp('<' + tag + '[^>]*>\\\\s*<!\\\\[CDATA\\\\[([\\\\s\\\\S]*?)\\\\]\\\\]>\\\\s*</' + tag + '>', 'i');\n  const cdataMatch = xml.match(cdataRegex);\n  if (cdataMatch) return cdataMatch[1].trim();\n  const plainRegex = new RegExp('<' + tag + '[^>]*>\\\\s*([\\\\s\\\\S]*?)\\\\s*</' + tag + '>', 'i');\n  const plainMatch = xml.match(plainRegex);\n  if (plainMatch) return plainMatch[1].trim();\n  return '';\n}\n\nfunction decodeEntities(str) {\n  return str.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\").replace(/&apos;/g, \"'\");\n}\n\nfunction extractFirstImage(html) {\n  const decoded = decodeEntities(html);\n  const imgMatch = decoded.match(/<img[^>]+src=[\"']([^\"']+)[\"']/i);\n  return imgMatch ? imgMatch[1] : '';\n}\n\nfunction getSourceName(xmlString) {\n  const title = extractTag(xmlString, 'title');\n  if (title.includes('量子位') || xmlString.includes('qbitai')) return 'Qbitai';\n  if (title.includes('机器之心') || xmlString.includes('almosthuman') || xmlString.includes('jiqizhixin')) return 'Synced';\n  if (title.includes('Synced') || xmlString.includes('syncedreview')) return 'SyncedReview';\n  if (title.includes('36') || xmlString.includes('36kr')) return '36Kr';\n  if (title.includes('IT之家') || title.includes('IT 之家') || xmlString.includes('ithome')) return 'ITHome';\n  if (title.includes('新智元') || xmlString.includes('AI_era')) return 'XinZhiYuan';\n  if (title.includes('虎嗅') || xmlString.includes('huxiu')) return 'Huxiu';\n  return title || 'Unknown';\n}\n\nfor (const input of inputs) {\n  const data = input.json;\n  if (!data) continue;\n  if (data.error || data.errorMessage) continue;\n  const xmlString = data.data || '';\n  if (!xmlString || typeof xmlString !== 'string' || !xmlString.includes('<item>')) continue;\n  const sourceName = getSourceName(xmlString);\n  const itemRegex = /<item>[\\s\\S]*?<\\/item>/gi;\n  let match;\n  while ((match = itemRegex.exec(xmlString)) !== null) {\n    const itemXml = match[0];\n    const title = extractTag(itemXml, 'title');\n    const link = extractTag(itemXml, 'link');\n    const pubDate = extractTag(itemXml, 'pubDate');\n    let rawContent = extractTag(itemXml, 'content:encoded');\n    if (!rawContent) { rawContent = extractTag(itemXml, 'description'); }\n    const fullContent = decodeEntities(rawContent);\n    let thumbnail = extractTag(itemXml, 'thumbnail');\n    if (!thumbnail) { thumbnail = extractFirstImage(rawContent); }\n    const newsDate = toBeijingDate(pubDate);\n    if (!newsDate) continue;\n    if (newsDate === effectiveTarget) {\n      const hashInput = link + '_' + newsDate;\n      const content_hash = simpleHash(hashInput);\n      results.push({ json: { title_cn: title, content_cn: fullContent, source_url: link, source_name: sourceName, news_date: newsDate, content_hash: content_hash, thumbnail_url: thumbnail, status: 'pending' } });\n    }\n  }\n}\nconst seen = new Set();\nconst unique = results.filter(item => { if (seen.has(item.json.content_hash)) return false; seen.add(item.json.content_hash); return true; });\n\n// Title similarity based cross-source dedup\nfunction normalizeTitle(t) {\n  return t.replace(/[\\s\\u3000!！?？,，.。:：;；\"\"''「」【】《》\\-—|｜]/g, '').toLowerCase();\n}\nfunction titleSimilarity(a, b) {\n  const na = normalizeTitle(a), nb = normalizeTitle(b);\n  if (na === nb) return 1.0;\n  const longer = na.length >= nb.length ? na : nb;\n  const shorter = na.length < nb.length ? na : nb;\n  if (longer.length === 0) return 1.0;\n  if (longer.includes(shorter) || shorter.includes(longer)) return 0.9;\n  let matches = 0;\n  for (let i = 0; i < shorter.length; i++) {\n    if (longer.includes(shorter[i])) matches++;\n  }\n  return matches / longer.length;\n}\n\nconst titleFiltered = [];\nfor (const item of unique) {\n  const dominated = titleFiltered.some(existing => {\n    const sim = titleSimilarity(existing.json.title_cn, item.json.title_cn);\n    return sim >= 0.8;\n  });\n  if (!dominated) titleFiltered.push(item);\n}\n\nif (titleFiltered.length === 0) return [{ json: { noResults: true, message: 'No news found for target date: ' + effectiveTarget } }];\nconsole.log(`Merge and Filter: ${results.length} total RSS items, ${unique.length} unique by hash, ${titleFiltered.length} after title dedup for ${effectiveTarget}`);\nreturn titleFiltered;"
+        },
+        "id": "merge-rss",
+        "name": "Merge and Filter",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          896,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cond-hash",
+                "leftValue": "={{ $json.content_hash }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "filter-has-content",
+        "name": "Only New Items",
+        "type": "n8n-nodes-base.filter",
+        "typeVersion": 2,
+        "position": [
+          1792,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:4100/v1/embeddings",
+          "authentication": "none",
+          "nodeCredentialType": "openRouterApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: 'bge-m3', input: $json.texts }) }}",
+          "options": {},
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer [REDACTED]"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        "id": "get-embed",
+        "name": "Get Embedding",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2240,
+          160
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 3000,
+        "disabled": false
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:4100/v1/chat/completions",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer [REDACTED]"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: 'aliyun-tp-deepseek-v4-pro', messages: [{ role: 'system', content: 'You are a Chinese AI news translator. Respond ONLY in valid JSON with these exact fields: title_kr (Korean title), title_en (English title), summary_kr (Korean 2-3 sentence summary), summary_en (English 2-3 sentence summary), summary_cn (Chinese 2-3 sentence summary), content_kr (Korean translation of key content max 1500 chars no HTML tags), content_en (English translation max 1500 chars no HTML tags), sentiment (positive|neutral|negative), category (exactly one of: ai-tech|ai-product|ai-biz|politics|economy|society|culture|tech). No markdown no code blocks no explanation.' }, { role: 'user', content: '다음 중국어 뉴스를 번역하세요:\\n\\n제목: ' + $json.title_cn + '\\n본문: ' + ($json.content_cn || '').substring(0, 3000) }], max_tokens: 2000, temperature: 0.2 }) }}",
+          "options": {}
+        },
+        "id": "03cbe70e-5244-4844-99e0-e77032930630",
+        "name": "AI Agent - Translation",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3360,
+          48
+        ],
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000
+      },
+      {
+        "parameters": {
+          "model": "claude-sonnet-4-6",
+          "options": {}
+        },
+        "id": "105383ac-e7c0-4cd9-a89b-67ece8f4e1a3",
+        "name": "OpenRouter Chat Model",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          3376,
+          240
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000,
+        "credentials": {
+          "openAiApi": {
+            "id": "CI8M9hJzZjspOsaQ",
+            "name": "LiteLLM Proxy (aibaseclub)"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const aiItems = $input.all();\nconst origItems = $('Strip HTML').all();\n// SplitInBatches is now before AI Agent; use currentRunIndex to find correct item\nlet batchOffset = 0;\ntry { batchOffset = $('SplitInBatches').context.currentRunIndex || 0; } catch(e) { batchOffset = 0; }\nconst results = [];\n\nfunction extractJson(text) {\n  if (!text || typeof text !== 'string') return null;\n  let cleaned = text.replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, '').trim();\n  try { return JSON.parse(cleaned); } catch (e) {}\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    try { return JSON.parse(jsonMatch[0]); } catch (e) {}\n  }\n  const obj = {};\n  const fieldPatterns = [\n    ['title_kr', /\"title_kr\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['title_en', /\"title_en\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['summary_kr', /\"summary_kr\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['summary_en', /\"summary_en\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['summary_cn', /\"summary_cn\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['content_kr', /\"content_kr\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['content_en', /\"content_en\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['sentiment', /\"sentiment\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['category', /\"category\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n  ];\n  let found = false;\n  for (const [key, pattern] of fieldPatterns) {\n    const m = cleaned.match(pattern);\n    if (m) { obj[key] = m[1]; found = true; }\n  }\n  return found ? obj : null;\n}\n\nconst VALID_CATEGORIES = ['ai-tech','ai-product','ai-biz','politics','economy','society','culture','tech'];\n\nfor (let i = 0; i < aiItems.length; i++) {\n  const aiData = aiItems[i].json;\n  const origData = origItems[i]?.json || {};\n  let aiResponse = null;\n  const rawText = aiData?.choices?.[0]?.message?.content || aiData.output || aiData.text || aiData.response || '';\n  if (typeof rawText === 'string') { aiResponse = extractJson(rawText); }\n  else if (typeof rawText === 'object') { aiResponse = rawText; }\n  if (!aiResponse) { aiResponse = {}; }\n\n  let category = aiResponse.category || 'tech';\n  if (!VALID_CATEGORIES.includes(category)) { category = 'tech'; }\n\n  results.push({\n    json: {\n      source_name: origData.source_name || '',\n      source_url: origData.source_url || '',\n      title_cn: origData.title_cn || '',\n      content_cn: origData.content_cn || '',\n      content_hash: origData.content_hash || '',\n      embedding: origData.embedding || [],\n      news_date: origData.news_date || '',\n      thumbnail_url: origData.thumbnail_url || '',\n      country: 'CN',\n      title_kr: aiResponse.title_kr || origData.title_cn || '',\n      title_en: aiResponse.title_en || origData.title_cn || '',\n      summary_kr: aiResponse.summary_kr || '',\n      summary_cn: aiResponse.summary_cn || '',\n      summary_en: aiResponse.summary_en || '',\n      content_kr: aiResponse.content_kr || '',\n      content_en: aiResponse.content_en || '',\n      sentiment: aiResponse.sentiment || 'neutral',\n      category: category,\n    }\n  });\n}\n\nreturn results;"
+        },
+        "id": "parse-response-1",
+        "name": "Parse Translation",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3712,
+          48
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:3002/ainews/api/news/upsert",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json) }}",
+          "options": {}
+        },
+        "id": "save-db",
+        "name": "Save to DB",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          4912,
+          160
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "## RSS Sources\n量子位, 36氪, ITHome, 虎嗅",
+          "height": 240,
+          "width": 1328
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          2320,
+          672
+        ],
+        "typeVersion": 1,
+        "id": "bc56fcf6-4e52-4762-a9c6-cdb4014fdeb6",
+        "name": "Sticky Note"
+      },
+      {
+        "parameters": {
+          "url": "http://host.docker.internal:3300/qbitai/category/资讯",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "User-Agent",
+                "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "982b95ff-343d-4561-ac68-2583cd27fc4b",
+        "name": "量子位 RSS",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          448,
+          -128
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "url": "http://host.docker.internal:3300/36kr/news",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "text"
+              }
+            }
+          }
+        },
+        "id": "4506ec09-7419-427d-bf6f-5f2e9ef41040",
+        "name": "36氪 RSS",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          448,
+          64
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "id": "split-batches-1",
+        "name": "SplitInBatches",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          3136,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nif (items.length === 1 && items[0].json.noResults) {\n  return [{ json: { noResults: true, hashes: [] } }];\n}\nconst hashes = [...new Set(items.map(i => i.json.content_hash).filter(Boolean))];\nconsole.log('Prepare: ' + items.length + ' items, ' + hashes.length + ' unique hashes');\nreturn [{ json: { hashes, itemCount: items.length } }];"
+        },
+        "id": "prepare-hash-check",
+        "name": "Prepare Hash Check",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:3002/ainews/api/news/check-exists",
+          "sendHeaders": false,
+          "headerParameters": {
+            "parameters": []
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ input_hashes: $json.hashes }) }}",
+          "options": {},
+          "authentication": "none"
+        },
+        "id": "query-existing",
+        "name": "Query Existing Items",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1344,
+          160
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const respItem = $input.first();\nconst resp = respItem.json;\nconst existing = Array.isArray(resp.existing) ? resp.existing : [];\nconst existingHashes = new Set();\nconst existingUrls = new Set();\nfor (const item of existing) {\n  if (item && item.content_hash) existingHashes.add(item.content_hash);\n  if (item && item.source_url) existingUrls.add(item.source_url);\n}\nconst origItems = $('Merge and Filter').all();\nconst newItems = origItems.filter(item =>\n  !existingHashes.has(item.json.content_hash) &&\n  !existingUrls.has(item.json.source_url)\n);\nconst filtered = origItems.length - newItems.length;\nconsole.log('Filter: ' + origItems.length + ' total, ' + filtered + ' duplicates removed, ' + newItems.length + ' new');\nif (newItems.length === 0) return [{ json: { noNewItems: true, message: 'All ' + origItems.length + ' items already exist' } }];\nreturn newItems;"
+        },
+        "id": "filter-duplicates",
+        "name": "Filter Duplicates",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1568,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const embResponse = $input.first().json;\nconst prepBatch = $('Prepare Embedding Batch').first().json;\nconst origItems = prepBatch.items;\nconst embDataSorted = (embResponse.data || []).slice().sort((a, b) => (a.index || 0) - (b.index || 0));\nconst items = [];\nconst embeddings = [];\nfor (let i = 0; i < origItems.length; i++) {\n  const embedding = embDataSorted[i]?.embedding || [];\n  items.push({ ...origItems[i], embedding });\n  embeddings.push(embedding);\n}\nconsole.log('Merge: ' + origItems.length + ' items, ' + embeddings.filter(e => e.length > 0).length + ' valid embeddings');\nreturn [{ json: { items, embeddings } }];"
+        },
+        "id": "merge-embed-data",
+        "name": "Merge Embedding Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2464,
+          160
+        ],
+        "disabled": false
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:3002/ainews/api/news/check-exists",
+          "sendHeaders": false,
+          "headerParameters": {
+            "parameters": []
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ query_embeddings: $json.embeddings, match_threshold: 0.85 }) }}",
+          "options": {},
+          "authentication": "none"
+        },
+        "id": "check-similar-rpc",
+        "name": "Check Similar RPC",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2688,
+          160
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000,
+        "onError": "continueRegularOutput",
+        "disabled": false
+      },
+      {
+        "parameters": {
+          "jsCode": "const respItem = $input.first();\nconst resp = respItem.json;\nconst mergedData = $('Merge Embedding Data').first().json;\nconst items = mergedData.items;\nconst simResults = Array.isArray(resp.results) ? resp.results : [];\nconst similarSet = new Set();\nfor (const r of simResults) {\n  if (r && r.is_similar) similarSet.add(r.item_index);\n}\nconst results = [];\nlet similarSkipped = 0;\nfor (let i = 0; i < items.length; i++) {\n  if (similarSet.has(i)) {\n    similarSkipped++;\n    continue;\n  }\n  results.push({ json: items[i] });\n}\nconsole.log('Similarity: ' + items.length + ' checked, ' + similarSkipped + ' similar removed, ' + results.length + ' passed');\nif (results.length === 0) return [{ json: { noNewItems: true, message: 'All filtered by similarity' } }];\nreturn results;"
+        },
+        "id": "filter-non-similar",
+        "name": "Filter Non-Similar",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2912,
+          160
+        ],
+        "disabled": false
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:4100/v1/chat/completions",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer [REDACTED]"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: 'aliyun-tp-deepseek-v4-pro', messages: [{ role: 'system', content: 'You are a Chinese AI news analyst. Respond ONLY in valid JSON with these exact fields: ai_insights_en (English strategic insights 2-3 sentences about AI/tech industry implications), ai_insights_kr (Korean strategic insights 2-3 sentences), ai_insights_cn (Chinese strategic insights 2-3 sentences), key_terms (array of 2-3 important Chinese terms, each with: term, pinyin with tone marks, explanation_kr, explanation_en, explanation_zh). No markdown no code blocks no explanation.' }, { role: 'user', content: '다음 뉴스를 분석하세요:\\n\\n제목: ' + $json.title_cn + '\\n요약: ' + ($json.summary_cn || $json.summary_kr || '') + '\\n본문: ' + ($json.content_cn ? $json.content_cn.substring(0, 3000) : '') }], max_tokens: 1000, temperature: 0.3 }) }}",
+          "options": {}
+        },
+        "id": "agent-insights-001",
+        "name": "AI Agent - Insights",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          4336,
+          48
+        ],
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000
+      },
+      {
+        "parameters": {
+          "model": "aliyun-tp-deepseek-v4-pro",
+          "options": {}
+        },
+        "id": "llm-insights-001",
+        "name": "OpenRouter Chat Model 2",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          3872,
+          256
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "CI8M9hJzZjspOsaQ",
+            "name": "LiteLLM Proxy (aibaseclub)"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const aiItems = $input.all();\nconst translationItems = $('Parse Polish').all();\nconst results = [];\n\nfunction extractJson(text) {\n  if (!text || typeof text !== 'string') return null;\n  let cleaned = text.replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, '').trim();\n  try { return JSON.parse(cleaned); } catch (e) {}\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    try { return JSON.parse(jsonMatch[0]); } catch (e) {}\n  }\n  const obj = {};\n  const fieldPatterns = [\n    ['ai_insights_en', /\"ai_insights_en\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['ai_insights_kr', /\"ai_insights_kr\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n    ['ai_insights_cn', /\"ai_insights_cn\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/],\n  ];\n  let found = false;\n  for (const [key, pattern] of fieldPatterns) {\n    const m = cleaned.match(pattern);\n    if (m) { obj[key] = m[1]; found = true; }\n  }\n  const ktMatch = cleaned.match(/\"key_terms\"\\s*:\\s*(\\[[\\s\\S]*?\\])/);\n  if (ktMatch) {\n    try { obj.key_terms = JSON.parse(ktMatch[1]); found = true; } catch (e) {}\n  }\n  return found ? obj : null;\n}\n\nfor (let i = 0; i < aiItems.length; i++) {\n  const aiData = aiItems[i].json;\n  const transData = translationItems[i]?.json || {};\n  let aiResponse = null;\n  const rawText = aiData?.choices?.[0]?.message?.content || aiData.output || aiData.text || aiData.response || '';\n  if (typeof rawText === 'string') { aiResponse = extractJson(rawText); }\n  else if (typeof rawText === 'object') { aiResponse = rawText; }\n  if (!aiResponse) { aiResponse = {}; }\n\n  results.push({\n    json: {\n      ...transData,\n      ai_insights_en: aiResponse.ai_insights_en || '',\n      ai_insights_kr: aiResponse.ai_insights_kr || '',\n      ai_insights_cn: aiResponse.ai_insights_cn || '',\n      key_terms: aiResponse.key_terms || [],\n      status: 'completed'\n    }\n  });\n}\n\nreturn results;"
+        },
+        "id": "parse-insights-001",
+        "name": "Parse & Merge Insights",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          4688,
+          48
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nconst texts = items.map(item => {\n  const title = item.json.title_cn || '';\n  const content = (item.json.content_cn || '').substring(0, 1000);\n  return title + '\\n' + content;\n});\nconsole.log('Embedding batch: ' + items.length + ' items');\nreturn [{ json: { texts, items: items.map(i => i.json) } }];"
+        },
+        "id": "eaf764af-50f6-40b0-b093-82f564ad7d6c",
+        "name": "Prepare Embedding Batch",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2016,
+          160
+        ],
+        "disabled": false
+      },
+      {
+        "id": "strip-html-001",
+        "name": "Strip HTML",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3248,
+          48
+        ],
+        "parameters": {
+          "jsCode": "// HTML 태그 제거 + 3000자 이내로 자르기\nconst item = $json;\nconst stripped = (item.content_cn || '')\n  .replace(/<[^>]+>/g, '')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&amp;/g, '&')\n  .replace(/&quot;/g, '\"')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .substring(0, 3000);\n\nreturn [{ json: { ...item, content_cn: stripped } }];"
+        }
+      },
+      {
+        "id": "polish-trans-node-01",
+        "name": "Polish Translation",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3824,
+          48
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:4100/v1/chat/completions",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer [REDACTED]"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "body": "={{ JSON.stringify({\n  model: 'claude-sonnet-4-6',\n  messages: [{\n    role: 'user',\n    content: \"너는 한국어 AI 뉴스 에디터다. 번역 초안을 개선하라:\\n1. AI/IT 기술 용어 → 한국 업계 표준(파운드리, 거대언어모델 등)\\n2. 고유명사/브랜드 → 올바른 한국어 표기(오리건, 원신 등)\\n3. 헤드라인: 경어체 금지, 간결 명사형\\n4. 잡음 토큰 제거\\n\\n원문(중국어):\\n제목: \" + $json.title_cn + \"\\n요약: \" + ($json.summary_cn||'') + \"\\n\\n번역 초안:\\n제목: \" + ($json.title_kr||'') + \"\\n요약: \" + ($json.summary_kr||'') + \"\\n\\n출력 형식(두 줄):\\n제목: ...\\n요약: ...\"\n  }],\n  max_tokens: 600,\n  temperature: 0.2\n}) }}",
+          "options": {},
+          "jsonBody": "={{ JSON.stringify({\n  model: 'aliyun-tp-deepseek-v4-pro',\n  messages: [{\n    role: 'user',\n    content: \"너는 한국어 AI 뉴스 에디터다. 번역 초안을 개선하라:\\n1. AI/IT 기술 용어 → 한국 업계 표준(파운드리, 거대언어모델 등)\\n2. 고유명사/브랜드 → 올바른 한국어 표기(오리건, 원신 등)\\n3. 헤드라인: 경어체 금지, 간결 명사형\\n4. 잡음 토큰 제거\\n\\n원문(중국어):\\n제목: \" + $json.title_cn + \"\\n요약: \" + ($json.summary_cn||'') + \"\\n\\n번역 초안:\\n제목: \" + ($json.title_kr||'') + \"\\n요약: \" + ($json.summary_kr||'') + \"\\n\\n출력 형식(두 줄):\\n제목: ...\\n요약: ...\"\n  }],\n  max_tokens: 600,\n  temperature: 0.2\n}) }}"
+        }
+      },
+      {
+        "id": "parse-polish-node-01",
+        "name": "Parse Polish",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          4060,
+          48
+        ],
+        "parameters": {
+          "jsCode": "\nconst prev = $input.first().json;\nconst llmContent = prev?.choices?.[0]?.message?.content || '';\nconst lines = llmContent.split('\\n').map(l=>l.trim()).filter(Boolean);\nconst titleLine = lines.find(l=>l.startsWith('제목:'));\nconst summaryLine = lines.find(l=>l.startsWith('요약:'));\n// 원본 아이템은 이전 단계에서 오므로 $('Parse Translation').first()로 가져옴\nconst orig = $('Parse Translation').first().json;\nreturn [{\n  json: {\n    ...orig,\n    title_kr: titleLine ? titleLine.replace(/^제목:\\s*/,'') : orig.title_kr,\n    summary_kr: summaryLine ? summaryLine.replace(/^요약:\\s*/,'') : orig.summary_kr,\n  }\n}];\n"
+        }
+      }
+    ],
+    "connections": {
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Set Target Date",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Manual Trigger": {
+        "main": [
+          [
+            {
+              "node": "Set Target Date",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Set Target Date",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set Target Date": {
+        "main": [
+          [
+            {
+              "node": "Fetch ITHome RSS",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Fetch Huxiu RSS",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "量子位 RSS",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "36氪 RSS",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch ITHome RSS": {
+        "main": [
+          [
+            {
+              "node": "Merge",
+              "type": "main",
+              "index": 2
+            }
+          ]
+        ]
+      },
+      "Fetch Huxiu RSS": {
+        "main": [
+          [
+            {
+              "node": "Merge",
+              "type": "main",
+              "index": 3
+            }
+          ]
+        ]
+      },
+      "Merge": {
+        "main": [
+          [
+            {
+              "node": "Merge and Filter",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge and Filter": {
+        "main": [
+          [
+            {
+              "node": "Prepare Hash Check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Embedding": {
+        "main": [
+          [
+            {
+              "node": "Merge Embedding Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "量子位 RSS": {
+        "main": [
+          [
+            {
+              "node": "Merge",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "36氪 RSS": {
+        "main": [
+          [
+            {
+              "node": "Merge",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Save to DB": {
+        "main": [
+          [
+            {
+              "node": "SplitInBatches",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Hash Check": {
+        "main": [
+          [
+            {
+              "node": "Query Existing Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Query Existing Items": {
+        "main": [
+          [
+            {
+              "node": "Filter Duplicates",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter Duplicates": {
+        "main": [
+          [
+            {
+              "node": "Only New Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge Embedding Data": {
+        "main": [
+          [
+            {
+              "node": "Check Similar RPC",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Similar RPC": {
+        "main": [
+          [
+            {
+              "node": "Filter Non-Similar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent - Translation": {
+        "main": [
+          [
+            {
+              "node": "Parse Translation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenRouter Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent - Translation",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Translation": {
+        "main": [
+          [
+            {
+              "node": "Polish Translation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenRouter Chat Model 2": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent - Insights",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent - Insights": {
+        "main": [
+          [
+            {
+              "node": "Parse & Merge Insights",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse & Merge Insights": {
+        "main": [
+          [
+            {
+              "node": "Save to DB",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Only New Items": {
+        "main": [
+          [
+            {
+              "node": "Prepare Embedding Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Embedding Batch": {
+        "main": [
+          [
+            {
+              "node": "Get Embedding",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter Non-Similar": {
+        "main": [
+          [
+            {
+              "node": "SplitInBatches",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Strip HTML": {
+        "main": [
+          [
+            {
+              "node": "AI Agent - Translation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SplitInBatches": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Strip HTML",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Polish Translation": {
+        "main": [
+          [
+            {
+              "node": "Parse Polish",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Polish": {
+        "main": [
+          [
+            {
+              "node": "AI Agent - Insights",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "haksu jeon",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-17T03:02:44.711Z",
+        "id": 59,
+        "workflowId": "xOkFhLu8pRaN8LRl",
+        "versionId": "8641da61-5992-4f4b-8d83-c8e9508e98db",
+        "event": "activated",
+        "userId": "dbe8db6c-349f-4f6d-918d-ee9be1f00fc9"
+      },
+      {
+        "createdAt": "2026-06-17T03:02:44.668Z",
+        "id": 58,
+        "workflowId": "xOkFhLu8pRaN8LRl",
+        "versionId": "8641da61-5992-4f4b-8d83-c8e9508e98db",
+        "event": "deactivated",
+        "userId": "dbe8db6c-349f-4f6d-918d-ee9be1f00fc9"
+      }
+    ]
+  }
+}

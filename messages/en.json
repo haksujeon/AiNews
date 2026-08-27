@@ -1,0 +1,62 @@
+{
+  "common": {
+    "appName": "AI NEWS PORTAL",
+    "loading": "Loading...",
+    "search": "Search",
+    "statistics": "Statistics",
+    "footerText": "AI news data is collected and translated through an automated system."
+  },
+  "filter": {
+    "searchPlaceholder": "Search by title or content...",
+    "country": "Country",
+    "category": "Category",
+    "allCountries": "All Countries",
+    "allCategories": "All Categories",
+    "reset": "Reset",
+    "totalCount": "{count} articles",
+    "filters": "Filters",
+    "applyFilters": "Apply Filters",
+    "activeFilters": "Active filters",
+    "search": "Search",
+    "dateRange": "Date Range",
+    "resetDate": "Clear dates"
+  },
+  "detail": {
+    "backToList": "Back to list",
+    "aiSummary": "AI Summary",
+    "aiInsights": "AI Insights",
+    "keyTerms": "Key Terms",
+    "viewOriginal": "View Original",
+    "viewFullDetail": "View Full Detail",
+    "viewFullArticle": "View Full Article",
+    "close": "Close",
+    "aiTranslation": "AI Translation",
+    "originalTitle": "Original Title",
+    "relatedNews": "Related News"
+  },
+  "admin": {
+    "login": "Admin Login",
+    "sendHistory": "Send History",
+    "subscribers": "Subscribers",
+    "backToSite": "Back to Site",
+    "logout": "Logout"
+  },
+  "statistics": {
+    "title": "Statistics Dashboard",
+    "totalNews": "Total News",
+    "todayNews": "Today",
+    "categories": "Categories",
+    "sources": "Sources",
+    "avgPerDay": "Avg/Day",
+    "aiRatio": "AI Ratio",
+    "categoryDistribution": "Category Distribution",
+    "sentimentAnalysis": "Sentiment Analysis",
+    "sourceDistribution": "Source Distribution",
+    "dailyVolume": "Daily News Volume",
+    "weeklyTrend": "Weekly Trend",
+    "weeklyTotal": "Weekly Total",
+    "dailyAvg": "Daily Avg",
+    "topKeywords": "Top 15 Keywords",
+    "articles": "articles"
+  }
+}

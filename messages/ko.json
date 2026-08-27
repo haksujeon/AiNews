@@ -1,0 +1,62 @@
+{
+  "common": {
+    "appName": "AI NEWS PORTAL",
+    "loading": "로딩 중...",
+    "search": "검색",
+    "statistics": "통계",
+    "footerText": "AI 뉴스 데이터는 자동화 시스템을 통해 수집 및 번역됩니다."
+  },
+  "filter": {
+    "searchPlaceholder": "기사 제목, 내용으로 검색...",
+    "country": "국가",
+    "category": "카테고리",
+    "allCountries": "전체 국가",
+    "allCategories": "전체 카테고리",
+    "reset": "초기화",
+    "totalCount": "총 {count}개의 기사",
+    "filters": "필터",
+    "applyFilters": "필터 적용",
+    "activeFilters": "필터 적용됨",
+    "search": "검색",
+    "dateRange": "날짜 범위",
+    "resetDate": "날짜 초기화"
+  },
+  "detail": {
+    "backToList": "목록으로",
+    "aiSummary": "AI 요약",
+    "aiInsights": "AI 인사이트",
+    "keyTerms": "핵심 용어",
+    "viewOriginal": "원문 보기",
+    "viewFullDetail": "상세 보기",
+    "viewFullArticle": "전체 기사 보기",
+    "close": "닫기",
+    "aiTranslation": "AI 번역",
+    "originalTitle": "원문 제목",
+    "relatedNews": "관련 기사"
+  },
+  "admin": {
+    "login": "관리자 로그인",
+    "sendHistory": "발신 내역",
+    "subscribers": "구독자 관리",
+    "backToSite": "사이트로 돌아가기",
+    "logout": "로그아웃"
+  },
+  "statistics": {
+    "title": "통계 대시보드",
+    "totalNews": "총 뉴스",
+    "todayNews": "오늘 뉴스",
+    "categories": "카테고리",
+    "sources": "뉴스 소스",
+    "avgPerDay": "일 평균",
+    "aiRatio": "AI 비율",
+    "categoryDistribution": "카테고리 분포",
+    "sentimentAnalysis": "감성 분석",
+    "sourceDistribution": "소스별 분포",
+    "dailyVolume": "일별 뉴스량",
+    "weeklyTrend": "주간 트렌드",
+    "weeklyTotal": "주간 합계",
+    "dailyAvg": "일 평균",
+    "topKeywords": "주요 키워드 TOP 15",
+    "articles": "건"
+  }
+}

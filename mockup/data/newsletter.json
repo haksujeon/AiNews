@@ -1,0 +1,78 @@
+{
+  "stats": {
+    "totalSends": 24,
+    "totalRecipients": 234,
+    "totalArticles": 184
+  },
+  "events": [
+    {
+      "id": "evt-001",
+      "sent_at": "2026-02-25",
+      "news_count": 8,
+      "recipient_count": 234,
+      "status": "sent",
+      "articles": [
+        { "id": "a01", "title_kr": "OpenAI, GPT-5 공개 임박… 추론 능력 대폭 강화", "category": "ai-tech", "news_date": "2026-02-25", "source_name": "TechCrunch" },
+        { "id": "a02", "title_kr": "구글 딥마인드, 단백질 구조 예측 신기록 달성", "category": "ai-tech", "news_date": "2026-02-25", "source_name": "Nature" },
+        { "id": "a03", "title_kr": "메타, 오픈소스 LLaMA 4 모델 출시 예고", "category": "ai-product", "news_date": "2026-02-25", "source_name": "The Verge" },
+        { "id": "a04", "title_kr": "삼성전자, AI 반도체 사업부 독립 법인화 검토", "category": "ai-biz", "news_date": "2026-02-25", "source_name": "한국경제" },
+        { "id": "a05", "title_kr": "EU AI법, 2026년 본격 시행… 국내 기업 대응 현황", "category": "politics", "news_date": "2026-02-25", "source_name": "조선비즈" },
+        { "id": "a06", "title_kr": "AI 스타트업 투자 2025년 역대 최고치 경신", "category": "economy", "news_date": "2026-02-25", "source_name": "Bloomberg" },
+        { "id": "a07", "title_kr": "딥시크 R3, 벤치마크 1위 등극… 미국 AI 패권 흔들", "category": "ai-tech", "news_date": "2026-02-25", "source_name": "Reuters" },
+        { "id": "a08", "title_kr": "AI 기반 신약 개발, 임상 성공률 3배 향상", "category": "tech", "news_date": "2026-02-25", "source_name": "Science Daily" }
+      ]
+    },
+    {
+      "id": "evt-002",
+      "sent_at": "2026-02-24",
+      "news_count": 7,
+      "recipient_count": 234,
+      "status": "sent",
+      "articles": [
+        { "id": "b01", "title_kr": "마이크로소프트 코파일럿, 기업용 요금제 인상 발표", "category": "ai-biz", "news_date": "2026-02-24", "source_name": "CNBC" },
+        { "id": "b02", "title_kr": "앤스로픽 클로드 4, 코딩 벤치마크 SOTA 달성", "category": "ai-product", "news_date": "2026-02-24", "source_name": "Anthropic Blog" },
+        { "id": "b03", "title_kr": "중국 AI 기업, 미국 수출 규제 우회 경로 차단 강화", "category": "politics", "news_date": "2026-02-24", "source_name": "WSJ" },
+        { "id": "b04", "title_kr": "AI 생성 이미지 워터마크 기술 표준화 논의 본격화", "category": "society", "news_date": "2026-02-24", "source_name": "IEEE" },
+        { "id": "b05", "title_kr": "네이버 하이퍼클로바 X, 금융권 계약 50개 돌파", "category": "ai-biz", "news_date": "2026-02-24", "source_name": "뉴스1" },
+        { "id": "b06", "title_kr": "AI 자동화로 인한 일자리 변화, OECD 보고서 발표", "category": "economy", "news_date": "2026-02-24", "source_name": "OECD" },
+        { "id": "b07", "title_kr": "자율주행 트럭, 첫 상업 운행 성공… 물류 혁신 신호탄", "category": "tech", "news_date": "2026-02-24", "source_name": "Wired" }
+      ]
+    },
+    {
+      "id": "evt-003",
+      "sent_at": "2026-02-23",
+      "news_count": 5,
+      "recipient_count": 233,
+      "status": "sent",
+      "articles": [
+        { "id": "c01", "title_kr": "스탠퍼드 AI 인덱스 2026, AI 연구 논문 급증 보고", "category": "ai-tech", "news_date": "2026-02-23", "source_name": "Stanford HAI" },
+        { "id": "c02", "title_kr": "AI 헬스케어 시장, 2030년 5000억 달러 전망", "category": "economy", "news_date": "2026-02-23", "source_name": "McKinsey" },
+        { "id": "c03", "title_kr": "애플 시리, GPT-5 통합 협의 중 - 소식통", "category": "ai-product", "news_date": "2026-02-23", "source_name": "Bloomberg" },
+        { "id": "c04", "title_kr": "한국 AI 정책 로드맵 2030 발표, R&D 10조 투자 계획", "category": "politics", "news_date": "2026-02-23", "source_name": "연합뉴스" },
+        { "id": "c05", "title_kr": "오픈소스 AI 모델, 기업 채택률 65% 돌파", "category": "ai-biz", "news_date": "2026-02-23", "source_name": "InfoQ" }
+      ]
+    },
+    {
+      "id": "evt-004",
+      "sent_at": "2026-02-22",
+      "news_count": 9,
+      "recipient_count": 233,
+      "status": "partial",
+      "articles": []
+    },
+    {
+      "id": "evt-005",
+      "sent_at": "2026-02-21",
+      "news_count": 6,
+      "recipient_count": 232,
+      "status": "sent",
+      "articles": []
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 24,
+    "totalPages": 3
+  }
+}
