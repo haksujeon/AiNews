@@ -105,3 +105,58 @@ LLM 호출이 400을 받아도 워크플로는 '성공'으로 표시되고 **중
   실제로는 `pg` 직접 연결인데 이름이 남아 있다 (10개 파일에서 참조). 오해 소지.
 - `/api/news/related` 에 `exclude` 가 빈 문자열이면 uuid 캐스팅 실패로 500.
   현재 이렇게 호출하는 코드는 없음 (조사 중 잘못된 파라미터명으로 재현한 것).
+
+---
+
+# 조치 결과 — P0-1 / P0-2 / P0-5 (2026-08-27)
+
+## ⚠️ 위 문서의 오류 정정
+P0-1 항목에 "n8n은 Save to DB 노드로 Postgres에 직접 쓰므로 이 API를 막아도 영향 없음(확인 필요)"이라고
+적었는데 **틀렸다.** 백업 워크플로 JSON을 확인한 결과 3개 노드가 이 HTTP API를 호출한다:
+
+| 노드 | 타입 | 호출 대상 |
+|---|---|---|
+| Save to DB | httpRequest | `/ainews/api/news/upsert` |
+| Query Existing Items | httpRequest | `/ainews/api/news/check-exists` |
+| Check Similar RPC | httpRequest | `/ainews/api/news/check-exists` |
+
+## 🔴 조사 중 발견된 두 번째 수집 차단 원인
+세 노드 모두 **`host.docker.internal:3002`** 를 호출하고 있었다. 3002는 mindmap 앱 포트다.
+즉 오전에 고친 LiteLLM 모델명 문제를 해결했더라도 **저장 단계에서 다시 실패했을 것**이다.
+게다가 세 노드 전부 `onError=continueRegularOutput` 이라 실패가 '성공'으로 표시된다.
+→ 3002 → **3012** 로 함께 교체함. (14:00 UTC 실행 결과로 최종 검증 예정)
+
+## P0-2 버전관리 — 완료
+- `git init` + 베이스라인 커밋 `b361689` (152 파일)
+- `.gitignore` 에 `*.log`, `*.tsbuildinfo`, `/.playwright-mcp/` 추가
+- `.env.local` 이 제외됨을 커밋 전 확인
+
+## P0-1 / P0-5 쓰기 API 인증 — 완료
+- `src/lib/ingest-auth.ts` 신규: `Authorization: Bearer <INGEST_TOKEN>` 검증
+  - SHA-256 해시 후 `timingSafeEqual` 상수시간 비교 (길이 노출 회피)
+  - **fail-closed**: `INGEST_TOKEN` 미설정/32자 미만이면 503 거부.
+    환경변수 누락이 "인증 없음"으로 퇴화하지 않게 함
+- `/api/news/upsert`, `/api/news/check-exists` 에 적용
+- DB 원문 에러를 응답에 싣던 부분 제거 → `console.error` 로만 기록 (스키마 노출 차단)
+- `INGEST_TOKEN` 43자 생성해 `.env.local` 에 추가, `.env.example` 갱신
+  (`.env.example` 은 Supabase 시절 내용이 남아 있어 현행화)
+
+### 검증 (운영 도메인 실측)
+```
+401  upsert 무인증          {"error":{"message":"Unauthorized"}}
+401  upsert 잘못된 토큰      {"error":{"message":"Unauthorized"}}
+401  check-exists 무인증     {"error":{"message":"Unauthorized"}}
+200  upsert 인증됨          {"ok":true,"upserted":0}
+200  check-exists 인증됨     {"existing":[...]}
+200  GET /api/news          (읽기는 공개 유지)
+```
+n8n 컨테이너 내부에서도 확인: 무인증 401 / 토큰 200.
+
+## n8n 워크플로 변경
+- 3개 노드: 포트 3002 → 3012, `Authorization: Bearer <INGEST_TOKEN>` 헤더 추가
+- 변경 전 스냅샷: 세션 scratchpad `wf-before-auth.json`
+- 워크플로 active 유지 확인
+
+## 남은 P0
+- **P0-3** PM2 부팅 자동복구 (`pm2 startup`, sudo 필요) — 미조치
+- **P0-4** 관리자 로그인 rate limiting + LiteLLM 키 로테이션 — 미조치

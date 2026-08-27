@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireIngestToken } from '@/lib/ingest-auth';
 
 // POST /api/news/upsert
 // n8n 워크플로우에서 호출: 뉴스 아이템 upsert
+// 인증: Authorization: Bearer <INGEST_TOKEN>
+// id 를 받아 ON CONFLICT DO UPDATE 하므로 무인증이면 기존 기사 덮어쓰기가 가능하다.
 export async function POST(request: NextRequest) {
+  const denied = requireIngestToken(request);
+  if (denied) return denied;
+
   try {
     const body = await request.json();
     const items: Record<string, unknown>[] = Array.isArray(body) ? body : [body];
@@ -40,7 +46,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, upserted });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    // DB 원문 에러를 응답에 실으면 스키마가 노출된다. 서버 로그에만 남긴다.
+    console.error('[api/news/upsert]', e);
+    return NextResponse.json(
+      { ok: false, error: 'Upsert failed' },
+      { status: 500 }
+    );
   }
 }

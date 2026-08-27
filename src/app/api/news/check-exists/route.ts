@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireIngestToken } from '@/lib/ingest-auth';
 
 // POST /api/news/check-exists
 // Body: { urls: string[] }  OR  { ids: string[] }
 // Returns: { existing: string[] }  — already-stored source_urls or ids
+// 인증: Authorization: Bearer <INGEST_TOKEN> (저장된 source_url 열거를 막기 위함)
 export async function POST(request: NextRequest) {
+  const denied = requireIngestToken(request);
+  if (denied) return denied;
+
   try {
     const body = await request.json();
 
@@ -26,7 +31,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ existing: [] });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    console.error('[api/news/check-exists]', e);
+    return NextResponse.json(
+      { ok: false, error: 'Lookup failed' },
+      { status: 500 }
+    );
   }
 }
