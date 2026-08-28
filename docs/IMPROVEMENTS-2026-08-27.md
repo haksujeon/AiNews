@@ -160,3 +160,79 @@ n8n 컨테이너 내부에서도 확인: 무인증 401 / 토큰 200.
 ## 남은 P0
 - **P0-3** PM2 부팅 자동복구 (`pm2 startup`, sudo 필요) — 미조치
 - **P0-4** 관리자 로그인 rate limiting + LiteLLM 키 로테이션 — 미조치
+
+---
+
+# 2차 조치 (2026-08-28)
+
+## ✅ 수집 파이프라인 저장 재개 확인 — 3.5개월 만
+- 2026-08-27 14:00 UTC 실행에서 **58건 저장** (마지막 insert 14:46:47)
+- `max(news_date)` 2026-05-09 → **2026-08-27**, 총 5,093 → 5,151건
+- 08-27 오전 조치 두 가지(LiteLLM 모델명, 호출 포트 3002→3012)가 함께 맞물려 풀린 것
+
+## ⚠️ 단, 번역은 절반만 성공 — P2-1 이 실제로 발생
+58건 중 **37건이 중국어 원문 그대로** 저장됨 (`title_kr = title_cn`), 요약 없음 43건.
+`AI Agent - Translation` 이 `onError=continueRegularOutput` 이라 LLM 호출 실패에도
+'success' 로 표시되며 원문을 통과시킨 결과다. 실행 25435 미리보기에서
+해당 노드 출력이 `json.error` 객체인 것을 확인.
+
+## 🔴 근본 원인: LiteLLM 업스트림(apiyi) 쿼터 소진 — 코드 문제 아님
+```
+403 apiyi-deepseek-v4-flash
+    user [24898] quota [9896] preConsumedQuota [10008] is not enough
+```
+08-27 07:30 테스트 때는 200이었으나 이후 소진됨. `apiyi-*` 전 모델과
+`gpt-4o`, `anthropic-claude` 도 같은 쿼터를 공유해 429/403.
+`glm-*` 는 별개로 "余额不足"(잔액 부족).
+
+### 가용 모델 실측 (2026-08-28 03:30 기준)
+| 모델 | 응답 | 소요 | 비고 |
+|---|---|---|---|
+| gemini-2.5-flash | ✅ 200 | 826ms | 번역 품질 최상 |
+| gemini-2.5-flash-lite | ✅ 200 | 971ms | |
+| claude-haiku | ✅ 200 | 1,693ms | |
+| glm-4.5-flash | ✅ 200 | 8,335ms | 빈 응답 |
+| apiyi-* / gpt-4o / anthropic-claude | ❌ 403·429 | | 쿼터 소진 |
+| claude-haiku-4-5 / claude-sonnet-5 / gpt-5.4-mini | ❌ 500 | | 업스트림 연결 오류 |
+
+→ 4개 노드를 **`gemini-2.5-flash`** 로 교체 (기존 모델 대비 7배 빠름).
+백업: `docs/n8n-backup-xOkFhLu8pRaN8LRl-20260828.json` (시크릿 마스킹됨)
+
+## P0-4 관리자 로그인 방어 — 완료
+- `src/lib/rate-limit.ts` 신규: 인메모리 고정 윈도. IP당 15분 5회 초과 시 429 + Retry-After
+  - 한계: 프로세스 메모리 기반. PM2 클러스터로 늘리면 Redis 등 공유 저장소 필요
+- 비밀번호 비교를 SHA-256 + `timingSafeEqual` 상수시간으로 교체
+- `ADMIN_PASSWORD` 미설정 시 503 (fail-closed)
+- LiteLLM 키 로테이션은 영향 범위(타 워크플로 공유 가능) 때문에 미조치 — 사용자 판단 필요
+
+## P1-1 검색·필터 서버 이관 — 완료
+- `src/lib/news-query.ts` 신규: 필터 파싱 + 파라미터화 WHERE 빌더 (단일 진실 공급원)
+- `/api/news` 가 `q/country/categories/from/to` 지원, 응답이 `{items, total}` 로 변경
+  - `total` = 필터 조건에 맞는 **전체** 건수 → UI가 정확한 건수 표시 가능
+- `/api/news/facets` 신규: 필터 선택지를 테이블 전체에서 추출
+  (기존에는 로드된 30건에서 뽑아 고를 수 없는 항목이 있었음)
+- `news-container.tsx`: 필터 변경 시 서버 재조회(검색어 350ms 디바운스),
+  무한스크롤이 현재 필터를 유지
+- `news-utils.ts` 의 `filterNews`/`getUniqueCountries`/`getUniqueCategories` 제거
+
+### 검증 (운영 도메인 실측)
+```
+필터 없음        total=5151   (DB 전체와 일치)
+검색 "OpenAI"    total=145
+검색 "딥시크"     total=5
+검색 "반도체"     total=50
+ai-biz           total=1737
+ai-biz,ai-tech   total=2370
+2026-05-01~05-09 total=594
+복합(ai-biz+5월)  total=279
+SQL 인젝션 시도   total=0      (파라미터 바인딩으로 무력화)
+페이지네이션      offset 0/5 중복 없음, 검색어 유지 ✅
+```
+검색이 이제 로드된 30건이 아니라 **5,151건 전체**를 대상으로 동작한다.
+
+## 남은 항목
+- **P0-3** `pm2 startup` (sudo) — 미조치
+- **P0-4** LiteLLM 키 로테이션 — 미조치 (영향 범위 확인 필요)
+- **P1-2** 통계 SQL 집계, **P1-3** SEO 메타데이터 — 미착수
+- **P2-1** `onError=continueRegularOutput` 정책 + 기저장 37건 재번역 — 판단 필요
+- `36氪 RSS` 노드가 에러 객체 반환 (4개 소스 중 1개 수집 실패)

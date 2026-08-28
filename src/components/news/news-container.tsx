@@ -7,14 +7,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { NewsItem } from "@/lib/news-types";
 import { NEWS_PAGE_SIZE } from "@/lib/news-types";
 import { fetchNewsPageClient } from "@/lib/supabase-client";
-import {
-  filterNews,
-  getUniqueCountries,
-  getUniqueCategories,
-  groupNewsByDate,
-  formatDateGroup,
-} from "@/lib/news-utils";
+import { groupNewsByDate, formatDateGroup } from "@/lib/news-utils";
 import type { DateRange } from "@/lib/news-utils";
+import type { NewsFilters } from "@/lib/news-query";
+import { useDebounce } from "@/hooks/use-debounce";
 import { NewsCard } from "./news-card";
 import { NewsListItem } from "./news-list-item";
 import { NewsFilter } from "./news-filter";
@@ -23,6 +19,10 @@ import { NewsDetailModal } from "./news-detail-modal";
 
 interface NewsContainerProps {
   news: NewsItem[];
+  /** 필터 조건에 맞는 전체 건수 (로드된 개수가 아님) */
+  initialTotal?: number;
+  /** 테이블 전체 기준 필터 선택지 */
+  facets?: { countries: string[]; categories: string[] };
   isLoading?: boolean;
 }
 
@@ -32,10 +32,17 @@ const springTransition = {
   damping: 15,
 };
 
-export function NewsContainer({ news: initialNews, isLoading = false }: NewsContainerProps) {
+export function NewsContainer({
+  news: initialNews,
+  initialTotal,
+  facets,
+  isLoading = false,
+}: NewsContainerProps) {
   const locale = useLocale();
   const [allNews, setAllNews] = useState<NewsItem[]>(initialNews);
+  const [total, setTotal] = useState(initialTotal ?? initialNews.length);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [filtering, setFiltering] = useState(false);
   const [hasMore, setHasMore] = useState(initialNews.length >= NEWS_PAGE_SIZE);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCountry, setSelectedCountry] = useState("ALL");
@@ -45,31 +52,82 @@ export function NewsContainer({ news: initialNews, isLoading = false }: NewsCont
   const [selectedItem, setSelectedItem] = useState<NewsItem | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
+  // 검색어는 타이핑마다 요청하지 않도록 디바운스한다.
+  const debouncedQuery = useDebounce(searchQuery, 350);
+
+  const filters: NewsFilters = useMemo(
+    () => ({
+      q: debouncedQuery,
+      country: selectedCountry,
+      categories: selectedCategories,
+      from: dateRange.from ?? "",
+      to: dateRange.to ?? "",
+    }),
+    [debouncedQuery, selectedCountry, selectedCategories, dateRange.from, dateRange.to]
+  );
+
+  // 필터가 바뀌면 서버에서 첫 페이지를 다시 받아온다.
+  // 초기 렌더(필터 없음)는 서버 컴포넌트가 이미 준 데이터를 쓰므로 건너뛴다.
+  const isInitialFilters =
+    !filters.q &&
+    filters.country === "ALL" &&
+    filters.categories.length === 0 &&
+    !filters.from &&
+    !filters.to;
+  const skipFirstFetch = useRef(true);
+
+  useEffect(() => {
+    if (skipFirstFetch.current && isInitialFilters) {
+      skipFirstFetch.current = false;
+      return;
+    }
+    skipFirstFetch.current = false;
+
+    let cancelled = false;
+    setFiltering(true);
+    fetchNewsPageClient(0, NEWS_PAGE_SIZE, filters)
+      .then((page) => {
+        if (cancelled) return;
+        setAllNews(page.items);
+        setTotal(page.total);
+        setHasMore(page.items.length < page.total);
+      })
+      .finally(() => {
+        if (!cancelled) setFiltering(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters, isInitialFilters]);
+
   // Sync if initialNews changes (e.g. revalidation)
   useEffect(() => {
     setAllNews(initialNews);
+    setTotal(initialTotal ?? initialNews.length);
     setHasMore(initialNews.length >= NEWS_PAGE_SIZE);
-  }, [initialNews]);
+  }, [initialNews, initialTotal]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
+    if (loadingMore || filtering || !hasMore) return;
     setLoadingMore(true);
     try {
-      const nextPage = await fetchNewsPageClient(allNews.length, NEWS_PAGE_SIZE);
-      if (nextPage.length === 0) {
+      // 현재 필터를 유지한 채 다음 페이지를 받는다.
+      const page = await fetchNewsPageClient(allNews.length, NEWS_PAGE_SIZE, filters);
+      if (page.items.length === 0) {
         setHasMore(false);
       } else {
-        if (nextPage.length < NEWS_PAGE_SIZE) setHasMore(false);
+        setTotal(page.total);
         setAllNews((prev) => {
           const existingIds = new Set(prev.map((n) => n.id));
-          const newItems = nextPage.filter((n) => !existingIds.has(n.id));
-          return [...prev, ...newItems];
+          const merged = [...prev, ...page.items.filter((n) => !existingIds.has(n.id))];
+          setHasMore(merged.length < page.total);
+          return merged;
         });
       }
     } finally {
       setLoadingMore(false);
     }
-  }, [allNews.length, loadingMore, hasMore]);
+  }, [allNews.length, loadingMore, filtering, hasMore, filters]);
 
   // IntersectionObserver for infinite scroll
   useEffect(() => {
@@ -88,20 +146,14 @@ export function NewsContainer({ news: initialNews, isLoading = false }: NewsCont
     return () => observer.disconnect();
   }, [loadMore, hasMore, loadingMore]);
 
-  const countries = useMemo(() => getUniqueCountries(allNews), [allNews]);
-  const categories = useMemo(() => getUniqueCategories(allNews), [allNews]);
+  // 필터 선택지는 서버가 테이블 전체에서 뽑아 넘겨준 값을 쓴다.
+  const countries = facets?.countries ?? [];
+  const categories = facets?.categories ?? [];
 
-  const filteredNews = useMemo(
-    () => filterNews(allNews, searchQuery, selectedCountry, selectedCategories, locale, dateRange),
-    [allNews, searchQuery, selectedCountry, selectedCategories, locale, dateRange]
-  );
+  // 필터링은 서버(SQL)에서 끝났으므로 allNews 가 곧 결과다.
+  const dateGroups = useMemo(() => groupNewsByDate(allNews), [allNews]);
 
-  const dateGroups = useMemo(
-    () => groupNewsByDate(filteredNews),
-    [filteredNews]
-  );
-
-  const filterKey = `${selectedCategories.join(",")}-${selectedCountry}-${searchQuery}-${dateRange.from || ""}-${dateRange.to || ""}`;
+  const filterKey = `${selectedCategories.join(",")}-${selectedCountry}-${debouncedQuery}-${dateRange.from || ""}-${dateRange.to || ""}`;
 
   const handleReset = () => {
     setSearchQuery("");
@@ -153,12 +205,14 @@ export function NewsContainer({ news: initialNews, isLoading = false }: NewsCont
         categories={categories}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
-        totalCount={filteredNews.length}
+        totalCount={total}
         onReset={handleReset}
       />
 
       <AnimatePresence mode="wait">
-        {filteredNews.length === 0 ? (
+        {filtering ? (
+          <NewsContainerSkeleton viewMode={viewMode} />
+        ) : allNews.length === 0 ? (
           <motion.div
             key="empty"
             initial={{ opacity: 0, y: 20 }}
@@ -284,10 +338,10 @@ export function NewsContainer({ news: initialNews, isLoading = false }: NewsCont
       {!hasMore && allNews.length > NEWS_PAGE_SIZE && (
         <p className="text-center text-xs text-muted-foreground/50 py-4">
           {locale === "ko"
-            ? `총 ${allNews.length}건의 기사를 모두 불러왔습니다`
+            ? `총 ${total}건의 기사를 모두 불러왔습니다`
             : locale === "zh"
-              ? `已加载全部 ${allNews.length} 篇文章`
-              : `All ${allNews.length} articles loaded`}
+              ? `已加载全部 ${total} 篇文章`
+              : `All ${total} articles loaded`}
         </p>
       )}
 

@@ -1,28 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import { fetchNewsPage } from '@/lib/supabase';
+import { parseFilters } from '@/lib/news-query';
 
-const LIST_FIELDS = `id,
-  to_char(created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
-  source_name, source_url,
-  to_char(news_date::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS news_date,
-  title_cn, title_kr, title_en, summary_cn, summary_kr, summary_en,
-  sentiment, category, thumbnail_url, og_image_url, country`;
-
+// GET /api/news?offset=&limit=&q=&country=&categories=&from=&to=
+// 응답: { items: NewsItem[], total: number }
+//   total 은 "현재 필터 조건에 맞는 전체 건수"로, 로드된 개수와 다르다.
+//   필터링은 전부 SQL에서 수행한다 (이전에는 브라우저에 로드된 것만 걸러 결과가 불완전했음).
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const offset = parseInt(searchParams.get('offset') || '0');
-  const limit = Math.min(parseInt(searchParams.get('limit') || '30'), 100);
+  const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0);
+  const limit = Math.min(
+    Math.max(parseInt(searchParams.get('limit') || '30', 10) || 30, 1),
+    100
+  );
 
   try {
-    const { rows } = await pool.query(
-      `SELECT ${LIST_FIELDS} FROM ai_news_ex
-       WHERE is_duplicate = FALSE
-       ORDER BY news_date DESC, id DESC
-       OFFSET $1 LIMIT $2`,
-      [offset, limit]
-    );
-    return NextResponse.json(rows);
-  } catch {
-    return NextResponse.json([], { status: 500 });
+    const page = await fetchNewsPage(parseFilters(searchParams), offset, limit);
+    return NextResponse.json(page);
+  } catch (e) {
+    console.error('[api/news]', e);
+    return NextResponse.json({ items: [], total: 0 }, { status: 500 });
   }
 }

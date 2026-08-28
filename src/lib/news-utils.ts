@@ -265,64 +265,13 @@ export function getTermExplanation(
   return term.explanation_kr;
 }
 
-export function getUniqueCountries(news: NewsItem[]): string[] {
-  const countries = new Set<string>();
-  news.forEach((item) => {
-    if (item.country) countries.add(item.country);
-  });
-  return Array.from(countries).sort();
-}
 
-export function getUniqueCategories(news: NewsItem[]): string[] {
-  const categories = new Set<string>();
-  news.forEach((item) => {
-    if (item.category) categories.add(item.category);
-  });
-  return Array.from(categories).sort();
-}
 
 export interface DateRange {
   from?: string; // "YYYY-MM-DD"
   to?: string;   // "YYYY-MM-DD"
 }
 
-export function filterNews(
-  news: NewsItem[],
-  query: string,
-  country: string,
-  categories: string[],
-  locale: string,
-  dateRange?: DateRange
-): NewsItem[] {
-  let result = [...news];
-
-  if (query) {
-    const q = query.toLowerCase();
-    result = result.filter((item) => {
-      const title = getTitle(item, locale).toLowerCase();
-      const summary = getSummary(item, locale).toLowerCase();
-      const source = (item.source_name || "").toLowerCase();
-      return title.includes(q) || summary.includes(q) || source.includes(q);
-    });
-  }
-
-  if (country !== "ALL") {
-    result = result.filter((item) => item.country === country);
-  }
-
-  if (categories.length > 0) {
-    result = result.filter((item) => item.category !== null && categories.includes(item.category));
-  }
-
-  if (dateRange?.from) {
-    result = result.filter((item) => item.news_date !== null && item.news_date >= dateRange.from!);
-  }
-  if (dateRange?.to) {
-    result = result.filter((item) => item.news_date !== null && item.news_date <= dateRange.to!);
-  }
-
-  return result;
-}
 
 // ─── FR-05: Group news by date ────────────────────────────
 export function groupNewsByDate(
@@ -340,3 +289,6 @@ export function groupNewsByDate(
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([date, items]) => ({ date, items }));
 }
+
+// 참고: 목록 필터링(검색/국가/카테고리/날짜)은 2026-08-27부터 서버 SQL로 이관되었다.
+// src/lib/news-query.ts 의 buildNewsWhere() 를 참조할 것.
