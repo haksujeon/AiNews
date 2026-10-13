@@ -55,4 +55,8 @@ CREATE INDEX IF NOT EXISTS daily_briefings_list
 CREATE INDEX IF NOT EXISTS daily_briefings_article_ids
   ON daily_briefings USING gin (article_ids);
 
+-- 앱 접속 역할(ainews). 마이그레이션은 postgres 로 돌려 소유자가 postgres 이므로 권한을 따로 준다.
+-- 삭제는 앱에서 하지 않는다 (발행본 불변, 이력은 version 행으로 남김).
+GRANT SELECT, INSERT, UPDATE ON daily_briefings TO ainews;
+
 COMMIT;

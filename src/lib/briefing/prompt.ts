@@ -14,7 +14,7 @@
 import type { BriefingContent, CandidateGroup, EditionMode, ValidationIssue } from "./types";
 
 export const PROMPT_VERSION = "ko-v2-2026-10-13";
-export const TRANSLATE_PROMPT_VERSION = "tr-v1-2026-10-13";
+export const TRANSLATE_PROMPT_VERSION = "tr-v4-2026-10-13";
 
 const SCHEMA = `{
  "headline": "오늘 판 제목, 32자 이내",
@@ -129,9 +129,10 @@ Rules (violations are rejected automatically):
 4. ${
     zh
       ? "Write Simplified Chinese only; no Korean (Hangul) characters may remain. For company and person names use the Chinese name given in NAME_HINTS (taken from the original Chinese headlines) when available."
-      : "Write English only; no Korean (Hangul) or Chinese characters may remain. Write Chinese company and person names in their common English name or Hanyu Pinyin (e.g. 바이트댄스 → ByteDance, 량원펑 → Liang Wenfeng)."
+      : "Write English only; no Korean (Hangul) or Chinese characters may remain — not even inside quotes or 《》 titles. Write Chinese company, product and person names in their common English name or Hanyu Pinyin (e.g. 바이트댄스 → ByteDance, 량원펑 → Liang Wenfeng, 千问Go → Qwen Go, 《不问凡尘》 → \"Bu Wen Fan Chen\", 無問芯穹 → Infinigence)."
   }
 5. Plain, neutral news style. No additions, no omissions, no hype.
+6. NAME_HINTS are ONLY for spelling names. Never copy facts, years, ranks or numbers from NAME_HINTS into the translation — if the Korean text has no year or rank, the translation must not have one either.
 Output only the JSON, no code fences.`;
 }
 
@@ -145,5 +146,6 @@ export function buildTranslateUserPrompt(
 }
 
 export function buildTranslateRepairPrompt(problems: string[]): string {
-  return `Automatic checks rejected your translation:\n${problems.map((p) => `- ${p}`).join("\n")}\nFix only those fields and output the full JSON again (same structure), no code fences.`;
+  return `Automatic checks rejected your translation:\n${problems.map((p) => `- ${p}`).join("\n")}\nFix only those fields and output the full JSON again (same structure), no code fences.
+For "number set differs": the translated field must contain exactly the numbers of the Korean field — delete any number, year or rank that is not in the Korean text, and restore any that is missing.`;
 }

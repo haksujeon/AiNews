@@ -14,6 +14,8 @@
  * | han_in_ko: 한국어 본문에 한자            | 경고 |
  * | length: 15% 초과                        | 경고 |
  * | china_centric: 상위 5건 중 중국 주체 ≥ 3 | 경고 (수리 호출 대상, 항목 삭제·실패 사유 아님) |
+ * | cluster_topic: 묶음 기사 전부에 공통 주체 | 경고 (주제 묶음은 clusters 에서 뺌) |
+ * | term_pinyin_spacing: 병음 띄어쓰기만 다름 | 경고 (DB 표기로 교정) |
  *
  * refs 관련성 정리를 숫자 검사보다 먼저 한다 — 저장되는 refs 가 곧 검증한 refs 가 되도록.
  */
@@ -108,12 +110,14 @@ interface Unit {
   item: string; // 항목 위치 (삭제 단위)
   text: string;
   refs: string[];
+  /** headline 은 자체 refs 가 없어 본문 전체 refs 로 숫자만 검사한다 (ref 위반은 해당 항목에서 잡힘) */
+  numbersOnly?: boolean;
 }
 
 function collectUnits(c: BriefingContent): Unit[] {
   const allRefs = [...new Set(citedRefs(c))];
   const units: Unit[] = [
-    { path: "headline", item: "headline", text: c.headline, refs: allRefs },
+    { path: "headline", item: "headline", text: c.headline, refs: allRefs, numbersOnly: true },
     { path: "lede", item: "lede", text: c.lede, refs: c.lede_refs },
   ];
   c.top_stories.forEach((s, i) => {
@@ -247,8 +251,8 @@ export function validateKo(
   let numbersChecked = 0;
 
   for (const u of units) {
-    if (!u.refs.length) fatal.push({ level: "fatal", rule: "missing_refs", path: u.path, detail: "근거 기사 없음" });
-    for (const r of u.refs) {
+    if (!u.refs.length && !u.numbersOnly) fatal.push({ level: "fatal", rule: "missing_refs", path: u.path, detail: "근거 기사 없음" });
+    for (const r of u.numbersOnly ? [] : u.refs) {
       if (!ctx.sourceText.has(r)) fatal.push({ level: "fatal", rule: "unknown_ref", path: u.path, detail: `존재하지 않는 id ${r}` });
       else if (ctx.hidden.has(r) || excludedIds.has(r))
         fatal.push({ level: "fatal", rule: "excluded_or_hidden_ref", path: u.path, detail: `${r} 는 ${ctx.hidden.has(r) ? "숨긴" : "제외한"} 기사` });
@@ -276,11 +280,28 @@ export function validateKo(
     if (!terms) fatal.push({ level: "fatal", rule: "term", path: "term_of_the_day", detail: `ref ${t.ref} 없음` });
     else {
       const hit = terms.find((k) => k.term === t.term);
+      const flat = (s: string) => s.normalize("NFC").replace(/\s+/g, "").toLowerCase();
       if (!hit) fatal.push({ level: "fatal", rule: "term", path: "term_of_the_day", detail: `${t.term} 가 ${t.ref} key_terms 에 없음` });
-      else if ((hit.pinyin ?? "") !== t.pinyin)
-        fatal.push({ level: "fatal", rule: "term", path: "term_of_the_day", detail: `병음 불일치 (${t.pinyin} ≠ ${hit.pinyin})` });
+      else if ((hit.pinyin ?? "") !== t.pinyin) {
+        if (hit.pinyin && flat(hit.pinyin) === flat(t.pinyin)) {
+          // 띄어쓰기만 다르면 DB 표기로 맞춘다 (jù shēn zhì néng → jùshēn zhìnéng)
+          warn.push({ level: "warn", rule: "term_pinyin_spacing", path: "term_of_the_day", detail: `${t.pinyin} → ${hit.pinyin}` });
+          t.pinyin = hit.pinyin;
+        } else fatal.push({ level: "fatal", rule: "term", path: "term_of_the_day", detail: `병음 불일치 (${t.pinyin} ≠ ${hit.pinyin})` });
+      }
     }
   }
+
+  // clusters 엄격 정의: 사건 이름의 고유명사 하나가 묶인 기사 모두에 나와야 한다 (주제 묶음 제거)
+  content.clusters = content.clusters.filter((cl, i) => {
+    const ids = [...new Set(cl.ids)].filter((r) => ctx.sourceText.has(r));
+    const nouns = properNouns(cl.story);
+    const ok = ids.length >= 2 && nouns.some((n) => ids.every((r) => n.matches(ctx.sourceText.get(r)!)));
+    if (!ok)
+      warn.push({ level: "warn", rule: "cluster_topic", path: `clusters[${i}]`, detail: `"${cl.story}" — 묶인 기사 전부에 공통 주체가 없어 묶음에서 뺌` });
+    else cl.ids = ids;
+    return ok;
+  });
 
   const china = chinaCentricCount(content);
   const need = chinaCentricRequired(ctx.mode, content.top_stories.length);

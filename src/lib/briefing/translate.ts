@@ -21,14 +21,17 @@ type Target = "en" | "zh";
 // ───────────────────────── 숫자 집합
 
 const MULT: Record<string, number> = {
-  조: 1e12, 兆: 1e12, trillion: 1e12,
+  조: 1e12, 兆: 1e12, 万亿: 1e12, trillion: 1e12,
+  천억: 1e11, 千亿: 1e11, 백억: 1e10, 百亿: 1e10, 십억: 1e9, 十亿: 1e9,
   억: 1e8, 亿: 1e8,
   만: 1e4, 万: 1e4,
-  천: 1e3, 千: 1e3, thousand: 1e3,
+  천: 1e3, 千: 1e3, thousand: 1e3, k: 1e3,
   billion: 1e9, bn: 1e9, b: 1e9,
   million: 1e6, m: 1e6,
 };
-const NUM_TOKEN = /(\d[\d,]*(?:\.\d+)?)\s*(조|兆|억|亿|만|万|천|千|trillion|billion|million|thousand|bn|B(?![A-Za-z])|M(?![A-Za-z]))?\s*(%|퍼센트|percent)?/g;
+// 긴 단위부터 (万亿 를 万 + 亿 로 쪼개 읽지 않게)
+const NUM_TOKEN =
+  /(\d[\d,]*(?:\.\d+)?)\s*(万亿|千亿|百亿|十亿|천억|백억|십억|조|兆|억|亿|만|万|천|千|[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|bn|[kK](?![A-Za-z])|B(?![A-Za-z])|M(?![A-Za-z]))?\s*(%|퍼센트|percent)?/g;
 
 /**
  * 텍스트 속 "의미 있는" 수치의 정규화 값 집합.
@@ -132,12 +135,15 @@ export function checkTranslation(ko: BriefingContent, tr: BriefingContent, targe
     }
     if (HANGUL_RE.test(out)) problems.push(`${f.path}: Hangul remains ("${out.slice(0, 60)}")`);
     if (target === "en" && new RegExp(HAN_RE.source).test(out)) problems.push(`${f.path}: Chinese characters in English text`);
+    if (/\d{7,}/.test(out.replace(/,/g, "")) && !/\d{7,}/.test(src.replace(/,/g, "")))
+      problems.push(`${f.path}: raw long number ("${out.match(/\d[\d,]{6,}/)?.[0]}") — write it as million/billion (en) or 万/亿 (zh)`);
     const a = numericValues(src);
     const b = numericValues(out);
     const missing = [...a].filter((x) => !b.has(x));
     const extra = [...b].filter((x) => !a.has(x));
+    // 정규화 값(2300000000 등)을 보여 주면 모델이 그 숫자를 그대로 베껴 쓰므로 원문 문장을 보여 준다
     if (missing.length || extra.length)
-      problems.push(`${f.path}: number set differs (source ${[...a].join(",") || "-"}; translation ${[...b].join(",") || "-"})`);
+      problems.push(`${f.path}: number set differs — Korean: "${src}" / yours: "${out}" (write amounts naturally, e.g. 2.3 billion)`);
   }
   return problems;
 }
@@ -162,6 +168,8 @@ function payloadOf(ko: BriefingContent) {
 
 export interface TranslateResult {
   content: BriefingContent | null;
+  /** 재검증에 실패했어도 마지막 번역본 (failed 행에 남겨 관리자가 볼 수 있게) */
+  candidate: BriefingContent | null;
   problems: string[];
   repaired: boolean;
   usages: LlmUsage[];
@@ -205,8 +213,8 @@ export async function translateBriefing(
       content = mergeTranslation(ko, parseJsonContent(second.content));
       problems = checkTranslation(ko, content, target);
     }
-    return { content: problems.length ? null : content, problems, repaired, usages };
+    return { content: problems.length ? null : content, candidate: content, problems, repaired, usages };
   } catch (e) {
-    return { content: null, problems: [], repaired: false, usages, error: (e as Error).message };
+    return { content: null, candidate: null, problems: [], repaired: false, usages, error: (e as Error).message };
   }
 }

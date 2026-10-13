@@ -126,7 +126,13 @@ async function generateKo(date: string, mode: EditionMode, groups: CandidateGrou
   if (cur.report.fatal.length || chinaMiss(cur.report)) {
     try {
       cost.check();
-      const extra = chinaMiss(cur.report) ? [cur.report.warn.find((w) => w.rule === "china_centric")!.detail + " — 중국 중심 규칙 미달"] : [];
+      // 어차피 수리 호출을 하는 김에 한자 잔존 경고도 함께 고치게 한다 (en 번역에 한자가 넘어가는 것을 막음)
+      const extra = [
+        ...(chinaMiss(cur.report) ? [cur.report.warn.find((w) => w.rule === "china_centric")!.detail + " — 중국 중심 규칙 미달"] : []),
+        ...cur.report.warn
+          .filter((w) => w.rule === "han_in_ko")
+          .map((w) => `[han_in_ko] ${w.path}: 한자 "${w.detail}" 를 한국어 표기로 바꾸십시오 (예: 《不问凡尘》 → 《불문범진》, 千问 → 치엔원)`),
+      ];
       const second = await chat(
         {
           system,
@@ -268,12 +274,14 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
         try {
           tr = await translateBriefing(ko.content, target, sel.groups, cost.check);
         } catch (e) {
-          tr = { content: null, problems: [], repaired: false, usages: [], error: (e as Error).message };
+          tr = { content: null, candidate: null, problems: [], repaired: false, usages: [], error: (e as Error).message };
         }
         tr.usages.forEach(cost.add);
         const u = sumUsage(tr.usages);
         const ok = Boolean(tr.content);
-        const st = tr.content ? toStored(tr.content, sel.groups, target, { ...metaBase, china_centric_count: china }) : null;
+        // failed 여도 마지막 번역본은 남긴다 (발행 불가 상태라 공개되지 않음)
+        const shown = tr.content ?? tr.candidate;
+        const st = shown ? toStored(shown, sel.groups, target, { ...metaBase, china_centric_count: china }) : null;
         const error = ok ? null : tr.error ?? `번역 재검증 실패 (${tr.problems.length}건)`;
         const row = await insertBriefing({
           date, locale: target, status: ok ? "draft" : "failed", mode,
