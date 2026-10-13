@@ -31,18 +31,48 @@ export function getSourceName(sourceName: string | null | undefined): string {
 }
 
 // ─── Thumbnail 정책 ───────────────────────────────────────
-// 虎嗅 AI 생성 커버(ai-general-cover)와 量子位 기본 로고(imagesnew/head.jpg)는 "이미지 없음"으로 본다.
-const PLACEHOLDER_IMAGE_PATTERNS = ["ai-general-cover", "imagesnew/head.jpg"];
+// 이미지 없음으로 보는 것:
+//  - 虎嗅 AI 생성 커버(ai-general-cover)
+//  - 量子位 기본 로고(/wp-content/themes/liangziwei/imagesnew/head.jpg)
+//  - 量子位 기자 아바타(WordPress 썸네일 -100x100.jpg/png) — 기사 이미지가 없을 때 수집기가 집어 온다
+const PLACEHOLDER_IMAGE_PATTERNS: RegExp[] = [
+  /ai-general-cover/,
+  /\/wp-content\/themes\/liangziwei\/imagesnew\/head\.jpg/,
+  /-100x100\.(?:jpe?g|png)(?:[?#]|$)/i,
+];
+
+// http:// 이미지는 https 페이지에서 혼합 콘텐츠다. https 를 지원하는 것을 확인한 호스트만 https 로 올리고
+// 나머지는 버린다. (2026-10-13 DB 기준 http 이미지는 전부 www.qbitai.com — https 200 확인)
+const HTTPS_UPGRADABLE_HOSTS = new Set(["www.qbitai.com", "qbitai.com"]);
+
+/**
+ * 화면에 써도 되는 이미지 URL 로 정규화. 플레이스홀더·아바타·업그레이드할 수 없는 http 는 null.
+ * 썸네일·OG 이미지 등 이미지를 쓰는 모든 곳이 이 함수(또는 getImageUrl)를 거친다.
+ */
+export function normalizeImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  let u = url.trim();
+  if (!u || PLACEHOLDER_IMAGE_PATTERNS.some((p) => p.test(u))) return null;
+  if (u.startsWith("//")) u = `https:${u}`;
+  if (/^http:\/\//i.test(u)) {
+    const host = u.slice(7).split(/[/?#]/)[0].toLowerCase();
+    if (!HTTPS_UPGRADABLE_HOSTS.has(host)) return null;
+    u = `https://${u.slice(7)}`;
+  }
+  return /^https:\/\//i.test(u) ? u : null;
+}
 
 export function isRealImage(url: string | null | undefined): url is string {
-  if (!url) return false;
-  return !PLACEHOLDER_IMAGE_PATTERNS.some((p) => url.includes(p));
+  return normalizeImageUrl(url) === url && !!url;
 }
 
 /** 화면에 쓸 대표 이미지 URL. 없거나 플레이스홀더성 이미지면 null. */
 export function getImageUrl(item: Pick<NewsItem, "thumbnail_url" | "og_image_url">): string | null {
-  const candidates = [item.thumbnail_url, item.og_image_url];
-  return candidates.find((u) => isRealImage(u)) ?? null;
+  for (const u of [item.thumbnail_url, item.og_image_url]) {
+    const n = normalizeImageUrl(u);
+    if (n) return n;
+  }
+  return null;
 }
 
 // ─── Category ─────────────────────────────────────────────

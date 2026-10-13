@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { fetchNewsById, fetchRelatedNews } from "@/lib/supabase";
-import { getTitle, getSummary } from "@/lib/news-utils";
+import { getTitle, getSummary, normalizeImageUrl } from "@/lib/news-utils";
 import { absoluteUrl, languageAlternates } from "@/lib/site";
 import { LOCALE_HTML_LANG, isLocale } from "@/i18n/routing";
 import { Header } from "@/components/layout/header";
@@ -28,7 +28,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = getTitle(news, locale);
   const description = truncate(getSummary(news, locale), 160);
-  const image = news.og_image_url || news.thumbnail_url;
+  // 공유 이미지는 OG 이미지 우선. 플레이스홀더·아바타·http 이미지 판별은 화면과 같은 normalizeImageUrl 을 쓴다.
+  const image = normalizeImageUrl(news.og_image_url) ?? normalizeImageUrl(news.thumbnail_url);
   const path = `/news/${news.id}`;
 
   return {

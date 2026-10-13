@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3012",
     "lint": "eslint",
-    "test:unit": "tsx --test tests/briefing/*.test.ts",
+    "test:unit": "tsx --test tests/*/*.test.ts",
     "briefing:generate": "tsx scripts/briefing-generate.ts"
   },
   "dependencies": {
