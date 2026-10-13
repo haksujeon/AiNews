@@ -1,37 +1,24 @@
-import localFont from "next/font/local";
 import { Geist_Mono, Noto_Sans_SC } from "next/font/google";
+import { BASE_PATH } from "@/lib/api-path";
 
 /**
- * 본문·UI 서체: Pretendard Variable (SIL OFL 1.1, src/fonts/pretendard/OFL.txt).
- * - 직접 호스팅(next/font/local). 가변 폰트 하나로 굵기 45~920 을 쓴다.
- * - next/font/local 은 파일별 unicode-range 를 지원하지 않아 92조각 dynamic-subset 대신
- *   전체 가변 woff2(약 2.0MB)를 쓴다. 한 번 받으면 브라우저 캐시로 재사용된다.
- * - adjustFontFallback(기본 Arial)이 size-adjust/ascent-override 를 맞춘 대체 서체를
- *   만들어 폰트 교체 시 레이아웃 이동(CLS)을 줄인다.
+ * 본문·UI 서체: Pretendard Variable (SIL OFL 1.1, public/fonts/pretendard/OFL.txt).
+ * - next/font/local 은 파일별 unicode-range 를 못 쓰므로 next/font 를 쓰지 않고,
+ *   공식 dynamic-subset CSS(92조각, unicode-range 분할)를 public/ 에 두고 <link> 로 건다.
+ *   브라우저는 화면에 실제로 쓰인 글자의 조각만 받는다(미리 받기 없음, font-display: swap).
+ * - 교체 시 밀림은 globals.css 의 "Pretendard Fallback"(size-adjust 등)으로 줄인다.
+ * - zh 페이지는 이 CSS 를 걸지 않는다(본문은 Noto Sans SC).
  */
-const pretendard = localFont({
-  src: "../fonts/pretendard/PretendardVariable.woff2",
-  variable: "--font-pretendard",
-  weight: "45 920",
-  display: "swap",
-  fallback: [
-    "-apple-system",
-    "BlinkMacSystemFont",
-    "Apple SD Gothic Neo",
-    "Malgun Gothic",
-    "Noto Sans KR",
-    "system-ui",
-    "sans-serif",
-  ],
-});
+export const PRETENDARD_CSS_HREF = `${BASE_PATH}/fonts/pretendard/pretendard-dynamic-subset.css`;
 
 /**
  * zh 로케일 본문: Noto Sans SC. Google 이 유니코드 범위로 쪼개 주므로 필요한 조각만 받는다.
- * 모든 페이지에서 미리 받지 않도록 preload:false. 적용은 globals.css 의 :lang(zh).
+ * 가변 폰트(굵기 축) 한 벌만 받아 400~700 을 모두 쓴다 — 고정 굵기 여러 벌보다 조각 수가 적다.
+ * 미리 받지 않음(preload:false). 적용은 globals.css 의 :lang(zh).
  */
 const notoSansSC = Noto_Sans_SC({
   variable: "--font-noto-sc",
-  weight: ["400", "500", "600", "700"],
+  weight: "variable",
   display: "swap",
   preload: false,
 });
@@ -39,7 +26,8 @@ const notoSansSC = Noto_Sans_SC({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  preload: false,
 });
 
-/** <html> 에 붙이는 폰트 CSS 변수 클래스 (Tailwind preflight 가 html 에서 font-family 를 계산하므로 html 에 둔다) */
-export const fontVariables = `${pretendard.variable} ${notoSansSC.variable} ${geistMono.variable}`;
+/** <html> 에 붙이는 폰트 CSS 변수 클래스 */
+export const fontVariables = `${notoSansSC.variable} ${geistMono.variable}`;

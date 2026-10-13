@@ -7,6 +7,8 @@ import "./globals.css";
 // ThemeProvider 밖이므로 OS 설정만 따른다(globals.css 토큰의 라이트 기본값).
 export default function GlobalNotFound() {
   return (
+    // Pretendard CSS 는 걸지 않는다: 여기 <link> 를 두면 React 가 모든 페이지(zh 포함)에 preload 힌트를 넣는다.
+    // 드문 화면이라 시스템 서체로 충분하다.
     <html lang="ko" className={fontVariables}>
       <body className="antialiased">
         <main className="min-h-screen max-w-2xl mx-auto flex flex-col justify-center gap-4 px-4 py-16">

@@ -58,14 +58,27 @@
 }
 
 /* ─── 서체 스택 ─── */
-:root {
-  --app-sans: var(--font-pretendard), -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-    "Malgun Gothic", system-ui, sans-serif;
+/*
+ * "Pretendard Variable" 은 public/fonts/pretendard/pretendard-dynamic-subset.css(ko/en 레이아웃의 <link>)가 정의한다.
+ * 조각이 도착하기 전에는 아래 대체 서체로 그린다. 값은 next/font 가 Pretendard 메트릭으로 계산한
+ * Arial 기준 보정치(ascent/descent/size-adjust)라 교체 시 줄 높이·글자 폭이 거의 같다.
+ */
+@font-face {
+  font-family: "Pretendard Fallback";
+  src: local("Arial"), local("Helvetica"), local("Liberation Sans");
+  ascent-override: 93.76%;
+  descent-override: 23.75%;
+  line-gap-override: 0%;
+  size-adjust: 101.55%;
 }
-/* zh: 간체 글리프는 Noto Sans SC, 그 밖(한글 등)은 Pretendard */
+:root {
+  --app-sans: "Pretendard Variable", "Pretendard Fallback", -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+}
+/* zh: Noto Sans SC(next/font, 가변 한 벌). Pretendard 는 받지 않는다 — 한글이 나오면 시스템 서체 */
 :root:lang(zh) {
-  --app-sans: var(--font-noto-sc), var(--font-pretendard), "PingFang SC", "Microsoft YaHei",
-    system-ui, sans-serif;
+  --app-sans: var(--font-noto-sc), "PingFang SC", "Microsoft YaHei", "Apple SD Gothic Neo",
+    "Malgun Gothic", system-ui, sans-serif;
 }
 
 /* ─── Light: 중성 종이 + 잉크 + 청자(jade) 포인트 1색 ─── */

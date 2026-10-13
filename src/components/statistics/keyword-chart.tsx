@@ -33,10 +33,11 @@ export function KeywordChart({ data }: KeywordChartProps) {
                 <div className="flex-1 flex items-center gap-2">
                   <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
                     <div
-                      className="h-full bg-violet-500/70 rounded-full flex items-center justify-end pr-2"
+                      className="h-full bg-jade rounded-full flex items-center justify-end pr-2"
                       style={{ width: `${widthPct}%` }}
                     >
-                      <span className="text-[10px] font-medium text-white">{item.count}</span>
+                      {/* 포인트 색(jade) 위 종이색 글자: 라이트·다크 모두 AA. 최소 12px */}
+                      <span className="text-xs font-medium text-background">{item.count}</span>
                     </div>
                   </div>
                 </div>
