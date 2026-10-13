@@ -34,6 +34,8 @@ export function NewsListItem({ item }: NewsListItemProps) {
     <Link
       href={`/news/${item.id}`}
       prefetch={false}
+      // 모달(가로채기 라우트)로 열 때 배경 목록의 스크롤 위치를 유지한다.
+      scroll={false}
       className="block cursor-pointer group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       <article className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden transition-all duration-300 hover:border-primary/30 hover:bg-card/80">

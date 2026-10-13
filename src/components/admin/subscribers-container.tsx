@@ -12,7 +12,8 @@ import {
   RotateCw,
   X,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { getCategoryLabel } from "@/lib/news-utils";
 import { useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { extractErrorMessage } from "@/lib/api-error";
@@ -67,17 +68,10 @@ const ALL_CATEGORIES = [
   "tech",
 ];
 
-const CATEGORY_LABELS: Record<string, string> = {
-  all: "All Categories",
-  "ai-tech": "AI Tech",
-  "ai-product": "AI Products",
-  "ai-biz": "AI Business",
-  politics: "Politics",
-  economy: "Economy",
-  society: "Society",
-  culture: "Culture",
-  tech: "IT/Science",
-};
+/** 구독 카테고리 표시명 ("all" 은 관리자 메시지, 나머지는 사이트 공통 라벨) */
+function categoryLabel(cat: string, locale: string, allLabel: string): string {
+  return cat === "all" ? allLabel : getCategoryLabel(cat, locale);
+}
 
 export function SubscribersContainer() {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
@@ -95,6 +89,7 @@ export function SubscribersContainer() {
   const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const t = useTranslations("admin");
   const tc = useTranslations("common");
+  const locale = useLocale();
   const router = useRouter();
 
   const debouncedSearch = useDebounce(search, 300);
@@ -236,10 +231,10 @@ export function SubscribersContainer() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Subscribers</h1>
+        <h1 className="text-2xl font-bold">{t("subscribers")}</h1>
         <Button size="sm" onClick={openAdd}>
           <Plus className="w-4 h-4 mr-1.5" />
-          Add
+          {t("add")}
         </Button>
       </div>
 
@@ -248,7 +243,8 @@ export function SubscribersContainer() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search name, email, org..."
+            placeholder={t("searchSubscribers")}
+            aria-label={t("searchSubscribers")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -259,9 +255,9 @@ export function SubscribersContainer() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="true">Active</SelectItem>
-            <SelectItem value="false">Inactive</SelectItem>
+            <SelectItem value="all">{t("filterAll")}</SelectItem>
+            <SelectItem value="true">{t("active")}</SelectItem>
+            <SelectItem value="false">{t("inactive")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -315,7 +311,7 @@ export function SubscribersContainer() {
       ) : subscribers.length === 0 ? (
         <Card className="border-border/50">
           <CardContent className="p-8 text-center text-muted-foreground">
-            No subscribers found.
+            {t("noSubscribers")}
           </CardContent>
         </Card>
       ) : (
@@ -324,12 +320,12 @@ export function SubscribersContainer() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/50 bg-muted/30">
-                  <th className="text-left px-4 py-3 font-medium">Name / Org</th>
-                  <th className="text-left px-4 py-3 font-medium">Email</th>
-                  <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Categories</th>
-                  <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Lang</th>
-                  <th className="text-left px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 w-10"></th>
+                  <th className="text-left px-4 py-3 font-medium">{t("colNameOrg")}</th>
+                  <th className="text-left px-4 py-3 font-medium">{t("colEmail")}</th>
+                  <th className="text-left px-4 py-3 font-medium hidden md:table-cell">{t("colCategories")}</th>
+                  <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">{t("colLang")}</th>
+                  <th className="text-left px-4 py-3 font-medium">{t("colStatus")}</th>
+                  <th className="px-4 py-3 w-10"><span className="sr-only">{t("actions")}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -346,7 +342,7 @@ export function SubscribersContainer() {
                       <div className="flex flex-wrap gap-1">
                         {(sub.categories || []).slice(0, 3).map((cat) => (
                           <Badge key={cat} variant="secondary" className="text-[10px]">
-                            {CATEGORY_LABELS[cat] || cat}
+                            {categoryLabel(cat, locale, t("allCategories"))}
                           </Badge>
                         ))}
                         {(sub.categories || []).length > 3 && (
@@ -364,31 +360,31 @@ export function SubscribersContainer() {
                     <td className="px-4 py-3">
                       <span className={`flex items-center gap-1.5 text-xs ${sub.is_active ? "text-green-500" : "text-muted-foreground"}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${sub.is_active ? "bg-green-500" : "bg-muted-foreground"}`} />
-                        {sub.is_active ? "Active" : "Inactive"}
+                        {sub.is_active ? t("active") : t("inactive")}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7">
-                            <MoreHorizontal className="w-4 h-4" />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={t("actions")}>
+                            <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => openEdit(sub)}>
                             <Pencil className="w-3.5 h-3.5 mr-2" />
-                            Edit
+                            {t("edit")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleToggleActive(sub)}>
                             <Power className="w-3.5 h-3.5 mr-2" />
-                            {sub.is_active ? "Deactivate" : "Reactivate"}
+                            {sub.is_active ? t("deactivate") : t("reactivate")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => setDeleteTarget(sub)}
                           >
                             <Trash2 className="w-3.5 h-3.5 mr-2" />
-                            Delete
+                            {t("delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -418,18 +414,20 @@ export function SubscribersContainer() {
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete Subscriber</DialogTitle>
+            <DialogTitle>{t("deleteTitle")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Are you sure you want to permanently delete{" "}
-            <strong>{deleteTarget?.email}</strong>? This cannot be undone.
+            {t.rich("deleteConfirm", {
+              email: deleteTarget?.email ?? "",
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
           </p>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
-              Delete
+              {t("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -454,6 +452,8 @@ function SubscriberFormDialog({
   error: string;
 }) {
   const isEdit = !!subscriber;
+  const t = useTranslations("admin");
+  const locale = useLocale();
   const [selectedCategories, setSelectedCategories] = useState<string[]>(["all"]);
 
   useEffect(() => {
@@ -482,7 +482,7 @@ function SubscriberFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit" : "Add"} Subscriber</DialogTitle>
+          <DialogTitle>{isEdit ? t("editTitle") : t("addTitle")}</DialogTitle>
         </DialogHeader>
         <form
           onSubmit={(e) => {
@@ -494,7 +494,7 @@ function SubscriberFormDialog({
           className="space-y-4"
         >
           <div className="space-y-2">
-            <Label htmlFor="name">Name *</Label>
+            <Label htmlFor="name">{t("fieldName")} *</Label>
             <Input
               id="name"
               name="name"
@@ -503,7 +503,7 @@ function SubscriberFormDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="organization">Organization</Label>
+            <Label htmlFor="organization">{t("fieldOrganization")}</Label>
             <Input
               id="organization"
               name="organization"
@@ -511,7 +511,7 @@ function SubscriberFormDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email *</Label>
+            <Label htmlFor="email">{t("colEmail")} *</Label>
             <Input
               id="email"
               name="email"
@@ -521,7 +521,7 @@ function SubscriberFormDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>Categories *</Label>
+            <Label>{t("colCategories")} *</Label>
             <div className="flex flex-wrap gap-1.5">
               {ALL_CATEGORIES.map((cat) => {
                 const isSelected = selectedCategories.includes(cat);
@@ -536,22 +536,22 @@ function SubscriberFormDialog({
                         : "bg-background border-border text-muted-foreground hover:border-primary/50"
                     }`}
                   >
-                    {CATEGORY_LABELS[cat] || cat}
+                    {categoryLabel(cat, locale, t("allCategories"))}
                   </button>
                 );
               })}
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="language">Language</Label>
+            <Label htmlFor="language">{t("fieldLanguage")}</Label>
             <Select name="language" defaultValue={subscriber?.language || "ko"}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ko">Korean</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="zh">Chinese</SelectItem>
+                <SelectItem value="ko">{t("langKo")}</SelectItem>
+                <SelectItem value="en">{t("langEn")}</SelectItem>
+                <SelectItem value="zh">{t("langZh")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -562,11 +562,11 @@ function SubscriberFormDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button type="submit" disabled={saving}>
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-1.5" />}
-              {isEdit ? "Save" : "Add"}
+              {isEdit ? t("save") : t("add")}
             </Button>
           </DialogFooter>
         </form>

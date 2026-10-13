@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiUrl } from "@/lib/api-path";
 import { extractErrorMessage } from "@/lib/api-error";
+import { getCategoryLabel } from "@/lib/news-utils";
 import { useRouter } from "@/i18n/navigation";
 
 interface Article {
@@ -96,7 +97,7 @@ export function SendHistoryContainer() {
   if (loadError) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Send History</h1>
+        <h1 className="text-2xl font-bold">{t("sendHistory")}</h1>
         <Card className="border-destructive/40">
           <CardContent role="alert" className="p-8 text-center space-y-4">
             <p className="text-sm text-destructive">{loadError}</p>
@@ -119,14 +120,14 @@ export function SendHistoryContainer() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Send History</h1>
+      <h1 className="text-2xl font-bold">{t("sendHistory")}</h1>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { icon: Mail, label: "Total Sends", value: totalSends },
-          { icon: FileText, label: "Articles Sent", value: totalArticles },
-          { icon: Users, label: "Total Recipients", value: totalRecipients },
+          { icon: Mail, label: t("totalSends"), value: totalSends },
+          { icon: FileText, label: t("articlesSent"), value: totalArticles },
+          { icon: Users, label: t("totalRecipients"), value: totalRecipients },
         ].map((stat) => (
           <Card key={stat.label} className="border-border/50 bg-card/50">
             <CardContent className="flex items-center gap-3 p-4">
@@ -146,7 +147,7 @@ export function SendHistoryContainer() {
       {events.length === 0 ? (
         <Card className="border-border/50">
           <CardContent className="p-8 text-center text-muted-foreground">
-            No newsletter sends found.
+            {t("noSends")}
           </CardContent>
         </Card>
       ) : (
@@ -211,7 +212,7 @@ export function SendHistoryContainer() {
                             variant="secondary"
                             className="text-[10px] shrink-0"
                           >
-                            {article.category}
+                            {getCategoryLabel(article.category, locale)}
                           </Badge>
                         )}
                         {article.source_name && (

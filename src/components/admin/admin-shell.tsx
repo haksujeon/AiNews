@@ -2,6 +2,7 @@
 
 import { usePathname, useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import {
   Zap,
   Mail,
@@ -19,15 +20,16 @@ import {
 } from "@/components/ui/sheet";
 
 const navItems = [
-  { key: "send-history", icon: Mail, label: "Send History" },
-  { key: "subscribers", icon: Users, label: "Subscribers" },
-];
+  { key: "send-history", icon: Mail, labelKey: "sendHistory" },
+  { key: "subscribers", icon: Users, labelKey: "subscribers" },
+] as const;
 
 function NavContent({ locale, pathname, onLogout }: {
   locale: string;
   pathname: string;
   onLogout: () => void;
 }) {
+  const t = useTranslations("admin");
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-border/50">
@@ -53,7 +55,7 @@ function NavContent({ locale, pathname, onLogout }: {
               }`}
             >
               <item.icon className="w-4 h-4" />
-              {item.label}
+              {t(item.labelKey)}
             </Link>
           );
         })}
@@ -64,14 +66,14 @@ function NavContent({ locale, pathname, onLogout }: {
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Site
+          {t("backToSite")}
         </Link>
         <button
           onClick={onLogout}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors w-full"
         >
           <LogOut className="w-4 h-4" />
-          Logout
+          {t("logout")}
         </button>
       </div>
     </div>
@@ -83,6 +85,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const router = useRouter();
   const locale = params.locale as string;
+  const t = useTranslations("admin");
 
   const handleLogout = async () => {
     await fetch(apiUrl("/api/admin/logout"), { method: "POST" });
@@ -102,8 +105,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <header className="lg:hidden flex items-center gap-3 p-3 border-b border-border/50 bg-card/30">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Menu className="w-4 h-4" />
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t("menu")}>
+                <Menu className="w-4 h-4" aria-hidden="true" />
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-56 p-0">

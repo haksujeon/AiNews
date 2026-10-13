@@ -9,7 +9,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { routing, type Locale } from "@/i18n/routing";
-import { useRouter, usePathname } from "@/i18n/navigation";
+import { usePathname, getPathname } from "@/i18n/navigation";
+import { BASE_PATH } from "@/lib/api-path";
 import { Globe } from "lucide-react";
 
 const localeLabels: Record<Locale, string> = {
@@ -21,12 +22,14 @@ const localeLabels: Record<Locale, string> = {
 export function LanguageSwitcher() {
   const locale = useLocale();
   const t = useTranslations("common");
-  const router = useRouter();
   // next-intl usePathname 은 로케일 접두사가 빠진 경로("/news/123")를 돌려준다.
   const pathname = usePathname();
 
   const handleChange = (newLocale: string) => {
-    router.push(pathname, { locale: newLocale as Locale });
+    // 전체 페이지 이동으로 전환한다. 소프트 이동이면 기사 페이지에서 /zh/news/[id] 가
+    // @modal 가로채기 라우트에 걸려 "영문 페이지 위에 중문 모달"이 뜨고 <html lang> 도 갱신되지 않는다.
+    const target = getPathname({ href: pathname, locale: newLocale as Locale });
+    window.location.assign(`${BASE_PATH}${target}${window.location.search}`);
   };
 
   return (
