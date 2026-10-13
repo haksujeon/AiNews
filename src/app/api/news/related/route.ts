@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { PUBLIC_NEWS_WHERE } from '@/lib/news-query';
 
 const LIST_FIELDS = `id,
   to_char(created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   try {
     const values: unknown[] = [excludeId, limit];
     let sql = `SELECT ${LIST_FIELDS} FROM ai_news_ex
-               WHERE id != $1 AND is_duplicate = FALSE`;
+               WHERE id != $1 AND ${PUBLIC_NEWS_WHERE}`;
     if (category) {
       values.push(category);
       sql += ` AND category = $${values.length}`;

@@ -1,5 +1,3 @@
-import type { NewsItem } from "@/lib/supabase";
-
 export interface CategoryStat {
   name: string;
   label: string;
@@ -71,151 +69,71 @@ const SENTIMENT_COLORS: Record<string, string> = {
   neutral: "#9ca3af",
 };
 
-export function calculateCategoryStats(news: NewsItem[], locale: string = "ko"): CategoryStat[] {
-  const counts: Record<string, number> = {};
-  for (const item of news) {
-    const cat = item.category || "other";
-    counts[cat] = (counts[cat] || 0) + 1;
-  }
-  return Object.entries(counts)
-    .map(([name, value]) => ({
-      name,
-      label: CATEGORY_LABELS[name]?.[locale] ?? name,
-      value,
-      color: CATEGORY_COLORS[name] || "#6b7280",
-    }))
-    .sort((a, b) => b.value - a.value);
-}
-
-export function calculateSentimentStats(news: NewsItem[]): SentimentStat[] {
-  const counts: Record<string, number> = {};
-  for (const item of news) {
-    const sent = item.sentiment || "neutral";
-    counts[sent] = (counts[sent] || 0) + 1;
-  }
-  return Object.entries(counts)
-    .map(([name, value]) => ({
-      name,
-      value,
-      color: SENTIMENT_COLORS[name] || "#9ca3af",
-    }))
-    .sort((a, b) => b.value - a.value);
+/** SQL GROUP BY 결과 한 줄 (fetchNewsStatistics) */
+export interface CountRow {
+  name: string;
+  value: number;
 }
 
 /**
- * DB 레이어(supabase.ts / api/news)는 news_date를 to_char로 "2026-05-09T00:00:00Z"
- * 형태의 ISO 문자열로 반환한다. 통계 계산은 전부 "YYYY-MM-DD" 날짜 키를 전제로 하므로
- * 이 경계 함수에서 한 번만 정규화한다.
+ * 통계 페이지 데이터. 전부 서버(SQL)에서 집계한 값이다 — src/lib/supabase.ts fetchNewsStatistics.
+ * 카테고리 라벨·색상만 로케일에 따라 클라이언트에서 입힌다.
  */
-export function toDateKey(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const key = value.slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : null;
+export interface StatisticsData {
+  kpis: KPIData;
+  categories: CountRow[];
+  sentiments: CountRow[];
+  sources: SourceStat[];
+  keywords: KeywordStat[];
+  /** 기사 없는 날은 0 으로 채운 연속 일자 (YYYY-MM-DD 오름차순) */
+  daily: DailyVolume[];
+  weekly: WeeklyTrend[];
 }
 
-export function calculateDailyVolume(news: NewsItem[]): DailyVolume[] {
-  const counts: Record<string, number> = {};
-  for (const item of news) {
-    const date = toDateKey(item.news_date);
-    if (date) {
-      counts[date] = (counts[date] || 0) + 1;
-    }
-  }
-  return Object.entries(counts)
-    .map(([date, count]) => ({ date, count }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+export function toCategoryStats(rows: CountRow[], locale: string = "ko"): CategoryStat[] {
+  return rows.map(({ name, value }) => ({
+    name,
+    label: CATEGORY_LABELS[name]?.[locale] ?? name,
+    value,
+    color: CATEGORY_COLORS[name] || "#6b7280",
+  }));
 }
 
-export function calculateSourceStats(news: NewsItem[]): SourceStat[] {
-  const counts: Record<string, number> = {};
-  for (const item of news) {
-    const source = item.source_name || "Unknown";
-    counts[source] = (counts[source] || 0) + 1;
-  }
-  return Object.entries(counts)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10);
+export function toSentimentStats(rows: CountRow[]): SentimentStat[] {
+  return rows.map(({ name, value }) => ({
+    name,
+    value,
+    color: SENTIMENT_COLORS[name] || "#9ca3af",
+  }));
 }
 
-export function calculateKeywordStats(news: NewsItem[]): KeywordStat[] {
-  const counts: Record<string, number> = {};
-  for (const item of news) {
-    if (item.key_terms) {
-      for (const kt of item.key_terms) {
-        if (kt.term) {
-          counts[kt.term] = (counts[kt.term] || 0) + 1;
-        }
-      }
-    }
-  }
-  return Object.entries(counts)
-    .map(([term, count]) => ({ term, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 15);
+/** "YYYY-MM-DD" → 그 주 월요일 "YYYY-MM-DD". UTC 로 계산해 서버 시간대와 무관하다. */
+function mondayOf(dateKey: string): string | null {
+  const d = new Date(`${dateKey}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
 }
 
-export function calculateWeeklyTrend(news: NewsItem[]): WeeklyTrend[] {
-  const daily = calculateDailyVolume(news);
-  if (daily.length === 0) return [];
-
-  const weeks: Record<string, number[]> = {};
+/**
+ * 0 으로 채워진 일별 건수를 월요일 기준 주 단위로 묶는다.
+ * avg 는 그 주에서 구간에 포함된 날 수로 나눈 일평균(기사 없는 날 포함).
+ */
+export function buildWeeklyTrend(daily: DailyVolume[]): WeeklyTrend[] {
+  const weeks = new Map<string, { sum: number; days: number }>();
   for (const d of daily) {
-    const date = new Date(d.date + "T00:00:00");
-    if (Number.isNaN(date.getTime())) continue;
-    const dayOfWeek = date.getDay();
-    const monday = new Date(date);
-    monday.setDate(date.getDate() - ((dayOfWeek + 6) % 7));
-    // 로컬 자정으로 파싱했으므로 toISOString()을 쓰면 KST(+9)에서 하루 밀린다.
-    // 로컬 기준으로 직접 포맷한다.
-    const weekKey = [
-      monday.getFullYear(),
-      String(monday.getMonth() + 1).padStart(2, "0"),
-      String(monday.getDate()).padStart(2, "0"),
-    ].join("-");
-    if (!weeks[weekKey]) weeks[weekKey] = [];
-    weeks[weekKey].push(d.count);
+    const week = mondayOf(d.date);
+    if (!week) continue;
+    const w = weeks.get(week) ?? { sum: 0, days: 0 };
+    w.sum += d.count;
+    w.days += 1;
+    weeks.set(week, w);
   }
-
-  return Object.entries(weeks)
-    .map(([week, counts]) => ({
+  return Array.from(weeks.entries())
+    .map(([week, { sum, days }]) => ({
       week,
-      count: counts.reduce((a, b) => a + b, 0),
-      avg: Math.round((counts.reduce((a, b) => a + b, 0) / counts.length) * 10) / 10,
+      count: sum,
+      avg: Math.round((sum / days) * 10) / 10,
     }))
     .sort((a, b) => a.week.localeCompare(b.week));
-}
-
-export function calculateKPIs(news: NewsItem[], today?: string): KPIData {
-  const todayStr = today ?? new Date().toISOString().split("T")[0];
-  const categories = new Set<string>();
-  const sources = new Set<string>();
-  let todayCount = 0;
-  let aiCount = 0;
-
-  const dates = new Set<string>();
-  for (const item of news) {
-    if (item.category) {
-      categories.add(item.category);
-      if (item.category.startsWith("ai-")) aiCount++;
-    }
-    if (item.source_name) sources.add(item.source_name);
-    const dateKey = toDateKey(item.news_date);
-    if (dateKey) {
-      dates.add(dateKey);
-      if (dateKey === todayStr) todayCount++;
-    }
-  }
-
-  const avgPerDay = dates.size > 0 ? Math.round((news.length / dates.size) * 10) / 10 : 0;
-  const aiRatio = news.length > 0 ? Math.round((aiCount / news.length) * 100) : 0;
-
-  return {
-    totalNews: news.length,
-    todayNews: todayCount,
-    categoryCount: categories.size,
-    sourceCount: sources.size,
-    avgPerDay,
-    aiRatio,
-  };
 }

@@ -2,15 +2,10 @@
 
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import type { NewsItem } from "@/lib/supabase";
 import {
-  calculateCategoryStats,
-  calculateSentimentStats,
-  calculateDailyVolume,
-  calculateSourceStats,
-  calculateKeywordStats,
-  calculateWeeklyTrend,
-  calculateKPIs,
+  toCategoryStats,
+  toSentimentStats,
+  type StatisticsData,
 } from "@/lib/statistics-utils";
 import { StatCards } from "./stat-cards";
 import { CategoryChart } from "./category-chart";
@@ -21,21 +16,21 @@ import { KeywordChart } from "./keyword-chart";
 import { WeeklyTrendChart } from "./weekly-trend-chart";
 
 interface StatisticsContainerProps {
-  news: NewsItem[];
-  today: string;
+  /** 서버(SQL)에서 집계된 통계 — fetchNewsStatistics() */
+  stats: StatisticsData;
 }
 
-export function StatisticsContainer({ news, today }: StatisticsContainerProps) {
+export function StatisticsContainer({ stats }: StatisticsContainerProps) {
   const t = useTranslations("statistics");
   const locale = useLocale();
 
-  const kpis = useMemo(() => calculateKPIs(news, today), [news, today]);
-  const categoryStats = useMemo(() => calculateCategoryStats(news, locale), [news, locale]);
-  const sentimentStats = useMemo(() => calculateSentimentStats(news), [news]);
-  const dailyVolume = useMemo(() => calculateDailyVolume(news), [news]);
-  const sourceStats = useMemo(() => calculateSourceStats(news), [news]);
-  const keywordStats = useMemo(() => calculateKeywordStats(news), [news]);
-  const weeklyTrend = useMemo(() => calculateWeeklyTrend(news), [news]);
+  const kpis = stats.kpis;
+  const categoryStats = useMemo(() => toCategoryStats(stats.categories, locale), [stats.categories, locale]);
+  const sentimentStats = useMemo(() => toSentimentStats(stats.sentiments), [stats.sentiments]);
+  const dailyVolume = stats.daily;
+  const sourceStats = stats.sources;
+  const keywordStats = stats.keywords;
+  const weeklyTrend = stats.weekly;
 
   return (
     <div className="space-y-6">

@@ -34,6 +34,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
+    // 숨긴 기사(AI 무관 등): 예전 뉴스레터 링크로는 열리게 두되 검색 색인에서는 뺀다.
+    ...(news.is_hidden ? { robots: { index: false, follow: true } } : {}),
     alternates: {
       canonical: absoluteUrl(locale, path),
       languages: languageAlternates(path),

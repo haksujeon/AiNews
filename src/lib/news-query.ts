@@ -22,6 +22,15 @@ export const EMPTY_FILTERS: NewsFilters = {
   to: "",
 };
 
+/**
+ * 공개 화면(목록·필터 선택지·관련 기사·통계)에 노출되는 행의 기본 조건.
+ *  - is_duplicate: 같은 기사의 중복 행
+ *  - is_hidden: AI 와 무관한 기사 등 운영자가 숨긴 행 (2026-10-13 추가)
+ * 숨긴 기사도 상세(/news/[id])는 예전 뉴스레터 링크 때문에 열리되 noindex 로 둔다.
+ * 공개 집계 쿼리는 반드시 이 상수를 써서 조건이 어긋나지 않게 한다.
+ */
+export const PUBLIC_NEWS_WHERE = "is_duplicate = FALSE AND is_hidden = FALSE";
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** URLSearchParams → NewsFilters (API 라우트와 클라이언트가 공유) */
@@ -67,7 +76,7 @@ export function buildNewsWhere(
   filters: NewsFilters,
   startIndex = 0
 ): { where: string; values: unknown[] } {
-  const clauses = ["is_duplicate = FALSE"];
+  const clauses = [PUBLIC_NEWS_WHERE];
   const values: unknown[] = [];
   let i = startIndex;
 
