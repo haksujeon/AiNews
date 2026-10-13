@@ -1,15 +1,15 @@
 {
   "common": {
-    "appName": "AI NEWS",
+    "appName": "AI News",
     "loading": "Loading...",
     "search": "Search",
     "statistics": "Statistics",
-    "footerText": "AI news data is collected and translated through an automated system.",
-    "admin": "Admin",
-    "live": "Live",
+    "footerText": "Articles from Chinese media are collected, translated and summarized automatically. Summaries and insights are written by AI and always link to the original.",
     "toggleTheme": "Toggle dark/light theme",
     "changeLanguage": "Change language",
-    "retry": "Retry"
+    "retry": "Retry",
+    "brandTagline": "China AI Briefing",
+    "sourcesLabel": "Sources"
   },
   "filter": {
     "searchPlaceholder": "Search by title or content...",
@@ -53,7 +53,12 @@
     "readTime": "{minutes} min read",
     "fewerRelated": "Show fewer related articles",
     "moreRelated": "Show more related articles",
-    "imageFallback": "AI NEWS"
+    "imageFallback": "AI NEWS",
+    "aiInsightDisclosure": "Analysis written by AI from the original article. Check it against the source.",
+    "translatedBody": "Translated text",
+    "categoryLabel": "Section",
+    "toneLabel": "Tone",
+    "sourceLabel": "Source"
   },
   "admin": {
     "login": "Admin Login",
@@ -148,6 +153,7 @@
     "allLoaded": "All {total} articles loaded",
     "loadError": "Couldn't load the news.",
     "loadErrorHint": "Check your connection and try again.",
-    "loadMoreError": "Couldn't load more articles."
+    "loadMoreError": "Couldn't load more articles.",
+    "groupCount": "{count} articles"
   }
 }

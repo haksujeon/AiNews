@@ -18,7 +18,8 @@ test.describe('AiNews UI/UX Tests', () => {
     
     // 헤더 확인 (로고 링크) + <html lang>
     await expect(page.locator('header')).toBeVisible();
-    await expect(page.locator('header a[aria-label="AI NEWS"]')).toBeVisible();
+    // 로고는 아이콘 타일 + aria-label 대신 보이는 워드마크("AI 뉴스") 링크
+    await expect(page.locator('header').getByRole('link', { name: /AI 뉴스/ })).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
 
     // 뉴스 카드는 기사 상세로 가는 실제 링크
