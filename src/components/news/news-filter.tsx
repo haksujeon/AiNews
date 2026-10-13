@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Search, Filter, X, Grid3X3, List, SlidersHorizontal, CalendarDays } from "lucide-react";
+import { Search, X, Grid3X3, List, SlidersHorizontal, CalendarDays } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -26,7 +25,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { getCountryLabel, getCategoryLabel, getCategoryStyle } from "@/lib/news-utils";
+import { getCountryLabel, getCategoryLabel } from "@/lib/news-utils";
 import type { DateRange } from "@/lib/news-utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import type { DateRange as RdpDateRange } from "react-day-picker";
@@ -136,17 +135,20 @@ export function NewsFilter({
     <div className="flex flex-wrap gap-1.5">
       {categories.map((cat) => {
         const isSelected = selectedCategories.includes(cat);
-        const style = getCategoryStyle(cat);
+        // 색 구분 없이 잉크 하나로: 선택 = 잉크 바탕, 미선택 = 괘선 테두리
         return (
           <button
             key={cat}
+            type="button"
+            aria-pressed={isSelected}
             onClick={() => toggleCategory(cat)}
             className={`
-              inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
-              transition-all duration-150 border
+              inline-flex items-center px-2.5 py-1 rounded-sm text-[13px] font-medium
+              transition-colors duration-150 border
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
               ${isSelected
-                ? `${style.bg} ${style.text} ${style.border}`
-                : "bg-transparent text-muted-foreground border-border/50 hover:border-border hover:bg-accent/50"
+                ? "bg-ink text-background border-ink"
+                : "bg-transparent text-ink-2 border-rule hover:border-ink-3 hover:text-ink"
               }
             `}
           >
@@ -169,7 +171,7 @@ export function NewsFilter({
           <Button
             variant="ghost"
             size="sm"
-            className={`h-8 text-xs gap-1.5 ${hasDateFilter ? "text-primary" : "text-muted-foreground"}`}
+            className={`h-8 text-xs gap-1.5 ${hasDateFilter ? "text-ink font-semibold" : "text-ink-2"}`}
           >
             <CalendarDays className="w-3.5 h-3.5" />
             {dateLabel}
@@ -236,7 +238,7 @@ export function NewsFilter({
           <SelectContent>
             <SelectItem value="ALL">{t("allCountries")}</SelectItem>
             {countries.map((code) => (
-              <SelectItem key={code} value={code}>{getCountryLabel(code)}</SelectItem>
+              <SelectItem key={code} value={code}>{getCountryLabel(code, locale)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -257,28 +259,28 @@ export function NewsFilter({
   return (
     <div className="space-y-3">
       {/* Filter bar */}
-      <div className="flex items-center gap-2 p-2 rounded-xl border border-border/50 bg-card/30 backdrop-blur-sm">
+      <div className="flex items-center gap-2 border-y border-rule py-1.5">
         {/* Desktop Search */}
         <div className="hidden md:block relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 w-4 h-4" aria-hidden="true" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 w-4 h-4" aria-hidden="true" />
           <Input
             type="text"
             aria-label={t("searchLabel")}
             placeholder={t("searchPlaceholder")}
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
-            className="pl-10 border-0 bg-transparent shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/40"
+            className="pl-10 border-0 bg-transparent shadow-none focus-visible:ring-2 focus-visible:ring-ring/40 placeholder:text-ink-3"
           />
         </div>
 
         {/* Mobile Filter */}
         <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
           <SheetTrigger asChild className="md:hidden">
-            <Button variant="ghost" className="flex-1 text-muted-foreground">
+            <Button variant="ghost" className="flex-1 text-ink-2">
               <SlidersHorizontal className="w-4 h-4 mr-2" />
               {t("filters") || "Filters"}
               {hasActiveFilter && (
-                <span className="ml-2 w-1.5 h-1.5 bg-primary rounded-full" />
+                <span className="ml-2 w-1.5 h-1.5 bg-jade rounded-full" aria-hidden="true" />
               )}
             </Button>
           </SheetTrigger>
@@ -292,8 +294,7 @@ export function NewsFilter({
 
         {/* Desktop Filters */}
         <div className="hidden md:flex items-center gap-2">
-          <div className="w-px h-5 bg-border/50" />
-          <Filter className="w-3.5 h-3.5 text-muted-foreground/50" />
+          <div className="w-px h-5 bg-rule" />
 
           <DateRangePicker />
 
@@ -304,20 +305,20 @@ export function NewsFilter({
             <SelectContent>
               <SelectItem value="ALL">{t("allCountries")}</SelectItem>
               {countries.map((code) => (
-                <SelectItem key={code} value={code}>{getCountryLabel(code)}</SelectItem>
+                <SelectItem key={code} value={code}>{getCountryLabel(code, locale)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
 
           {hasActiveFilter && (
-            <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={handleReset}>
+            <Button variant="ghost" size="sm" className="h-7 text-xs text-ink-2" onClick={handleReset}>
               <X className="w-3 h-3 mr-1" />
               {t("reset")}
             </Button>
           )}
         </div>
 
-        <div className="w-px h-5 bg-border/50" />
+        <div className="w-px h-5 bg-rule" />
 
         {/* View Toggle */}
         <div className="flex items-center rounded-lg p-0.5" role="group">
@@ -350,20 +351,23 @@ export function NewsFilter({
       <div className="hidden md:flex items-center gap-2 px-1">
         <CategoryChips />
         {selectedCategories.length > 0 && (
-          <Badge
-            variant="secondary"
-            className="text-[10px] cursor-pointer hover:bg-destructive/10 hover:text-destructive"
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-ink-2"
             onClick={() => onCategoriesChange([])}
+            aria-label={`${t("reset")} (${selectedCategories.length})`}
           >
-            <X className="w-3 h-3 mr-0.5" />
+            <X className="w-3 h-3 mr-0.5" aria-hidden="true" />
             {selectedCategories.length}
-          </Badge>
+          </Button>
         )}
       </div>
 
       {/* Count */}
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs text-muted-foreground/60">
+        <span className="text-xs text-ink-3">
           {t("totalCount", { count: totalCount })}
         </span>
       </div>
