@@ -49,8 +49,10 @@ export default async function LocaleLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={LOCALE_HTML_LANG[locale]} className="dark" suppressHydrationWarning>
-      <body className={`${fontVariables} antialiased`}>
+    // 테마 클래스(dark)는 next-themes 가 OS 설정/저장값으로 정한다. 강제 dark 없음.
+    // 폰트 변수는 Tailwind preflight 가 html 에서 font-family 를 계산하므로 html 에 둔다.
+    <html lang={LOCALE_HTML_LANG[locale]} className={fontVariables} suppressHydrationWarning>
+      <body className="antialiased">
         <ThemeProvider>
           <NextIntlClientProvider messages={messages}>
             {children}
