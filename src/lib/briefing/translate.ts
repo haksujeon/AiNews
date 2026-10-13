@@ -4,7 +4,8 @@
  *  - 구조(키·배열 길이·순서·refs)는 ko 를 그대로 쓰고, 번역문에서는 텍스트 값만 가져온다.
  *    → 세 언어판의 기사·순서·refs 가 항상 같다.
  *  - 재검증: 필드마다 숫자 집합이 ko 와 같음(억/만 ↔ billion/million/亿/万 크기 환산 후 비교),
- *    en/zh 에 한글 없음, en 에 한자 없음.
+ *    en/zh 에 한글 없음, en 에 한자 없음. zh 는 자릿수 문자열까지 그대로(억→亿, 만→万). 원문에 없는 "k" 축약 금지.
+ *  - 이름 힌트(중국어 원제)는 숫자를 지워서 준다 (연도·순위가 번역문에 새어 들어가는 것을 막음).
  *  - 실패하면 위반 목록을 주고 1회 수리. 그래도 남으면 그 언어판은 failed (ko 는 영향 없음).
  */
 import type { BriefingContent, CandidateGroup, LlmUsage } from "./types";
@@ -137,15 +138,55 @@ export function checkTranslation(ko: BriefingContent, tr: BriefingContent, targe
     if (target === "en" && new RegExp(HAN_RE.source).test(out)) problems.push(`${f.path}: Chinese characters in English text`);
     if (/\d{7,}/.test(out.replace(/,/g, "")) && !/\d{7,}/.test(src.replace(/,/g, "")))
       problems.push(`${f.path}: raw long number ("${out.match(/\d[\d,]{6,}/)?.[0]}") — write it as million/billion (en) or 万/亿 (zh)`);
+    // 万→10k 식 축약 금지 (원문에 k 가 없을 때)
+    if (K_SUFFIX_RE.test(out) && !K_SUFFIX_RE.test(src))
+      problems.push(`${f.path}: do not abbreviate numbers with "k" — Korean: "${src}" / yours: "${out}"`);
     const a = numericValues(src);
     const b = numericValues(out);
     const missing = [...a].filter((x) => !b.has(x));
     const extra = [...b].filter((x) => !a.has(x));
     // 정규화 값(2300000000 등)을 보여 주면 모델이 그 숫자를 그대로 베껴 쓰므로 원문 문장을 보여 준다
-    if (missing.length || extra.length)
-      problems.push(`${f.path}: number set differs — Korean: "${src}" / yours: "${out}" (write amounts naturally, e.g. 2.3 billion)`);
+    if (missing.length || extra.length) {
+      // 덧붙인 숫자(연도 등)는 원문 표기 그대로 짚어 준다 — "2026" 을 지우라고 말해야 수리가 된다
+      const da = digitStrings(src);
+      const added = [...digitStrings(out)].filter((x) => /^(19|20)\d{2}$/.test(x) && !da.has(x));
+      problems.push(
+        `${f.path}: number set differs — Korean: "${src}" / yours: "${out}"${
+          added.length ? ` — DELETE ${added.map((x) => `"${x}"`).join(", ")} (not in the Korean field)` : ""
+        } (${
+          target === "zh" ? "copy the digits verbatim: 억→亿, 만→万, 조→万亿" : "same magnitude, e.g. 23억 → 2.3 billion; never add years or ranks"
+        })`
+      );
+    } else if (target === "zh") {
+      // zh 는 억=亿·만=万 으로 단위가 1:1 이므로 자릿수 문자열까지 그대로여야 한다 (5억 3,700만 → 5亿3700万, 53700万 은 위반)
+      const da = digitStrings(src);
+      const db = digitStrings(out);
+      if ([...da].some((x) => !db.has(x)) || [...db].some((x) => !da.has(x)))
+        problems.push(`${f.path}: digits not verbatim — Korean: "${src}" / yours: "${out}" (keep the same digits; 억→亿, 만→万, 조→万亿)`);
+    }
   }
   return problems;
+}
+
+const K_SUFFIX_RE = /\d\s?[kK](?![A-Za-z])/;
+
+/** 쉼표를 뺀 숫자 문자열 집합 (12 이하 정수 제외 — numericValues 와 같은 기준) */
+function digitStrings(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
+    const s = m[0].replace(/,/g, "").replace(/\.$/, "");
+    const v = Number(s);
+    if (Number.isFinite(v) && (v > 12 || !Number.isInteger(v))) out.add(s);
+  }
+  return out;
+}
+
+/**
+ * 이름 힌트의 숫자를 지운다. 힌트는 이름 표기용인데, 모델이 중국어 원제의 연도·순위("2026年", "120强")를
+ * 번역문에 옮겨 적어 숫자 집합 검증에 걸렸다 (2026-10-13 실패 8건 중 3건). 필요한 숫자는 모두 ko 본문에 있다.
+ */
+export function maskDigits(s: string): string {
+  return s.replace(/\d+(?:[.,]\d+)*/g, "#");
 }
 
 /** 번역 응답 → ko 구조에 텍스트 값만 얹은 BriefingContent */
@@ -186,7 +227,7 @@ export async function translateBriefing(
   const byId = new Map(groups.map((g) => [g.shortId, g.primary]));
   const hints = [...new Set(citedRefs(ko))]
     .filter((r) => byId.has(r))
-    .map((r) => ({ ref: r, title_kr: byId.get(r)!.title_kr, title_cn: byId.get(r)!.title_cn }));
+    .map((r) => ({ ref: r, title_kr: maskDigits(byId.get(r)!.title_kr), title_cn: maskDigits(byId.get(r)!.title_cn) }));
   const system = buildTranslateSystemPrompt(target);
   const user = buildTranslateUserPrompt(payloadOf(ko), hints);
   try {

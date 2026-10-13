@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BriefingContent, CandidateArticle, CandidateGroup } from "../../src/lib/briefing/types";
 import { contextFromGroups, dropFatalItems, normalizeContent, validateKo } from "../../src/lib/briefing/validate";
-import { checkTranslation, numericValues } from "../../src/lib/briefing/translate";
+import { checkTranslation, maskDigits, numericValues } from "../../src/lib/briefing/translate";
 
 const FIX = join(__dirname, "fixtures");
 type FixtureArticle = CandidateArticle & { short_id: string };
@@ -164,4 +164,84 @@ test("번역 재검증: 숫자 집합·문자 체계·구조", () => {
   const shape = structuredClone(en);
   shape.top_stories = shape.top_stories.slice(1);
   assert.ok(checkTranslation(ko, shape, "en").some((p) => /structure/.test(p)));
+});
+
+// ───────────────────────── 2026-10-13 후속 (UI·검토 단계) 규칙
+
+test("헤드라인 32자 초과는 headline_length 경고 (36자 샘플) — 자르지 않고 수리 대상", () => {
+  const { report, content } = run(load());
+  const w = report.warn.find((x) => x.rule === "headline_length");
+  assert.ok(w, JSON.stringify(report.warn));
+  assert.equal(w!.detail, "36/32자");
+  assert.equal(content.headline.length, 36); // 자동 자르기 없음
+  assert.ok(!report.fatal.some((f) => f.path === "headline"));
+  const short = load();
+  short.headline = "무문신궁 23억 위안 조달, 메타 신모델";
+  assert.ok(!run(short).report.warn.some((x) => x.rule === "headline_length"));
+});
+
+test("리드: v8 실제 오류 '중국 내에서는 … Anthropic의 일본 데이터센터' 는 china_attribution 치명", () => {
+  const c = load();
+  c.lede =
+    "메타가 Muse Wonder를 공개하며 프런티어 모델 경쟁에 복귀했다. 같은 시기 중국 6대 AI 기업의 합산 AI 매출은 OpenAI와 Anthropic 합계의 약 10% 수준으로 나타나, 수익화 격차가 뚜렷하다. 중국 내에서는 DeepSeek의 Winverse AI 투자와 Anthropic의 일본 데이터센터 추진 등 인프라·투자 경쟁이 이어지고 있다.";
+  c.lede_refs = ["A40", "A46", "A52", "A15", "A07"];
+  const { report } = run(c);
+  const hit = report.fatal.filter((f) => f.rule === "china_attribution" && f.path === "lede");
+  assert.ok(hit.length >= 1, JSON.stringify(report.fatal));
+  // 지명 없이 써도 Anthropic 근거 기사(A07, 오사카 데이터센터)가 중국을 다루지 않으므로 잡는다
+  c.lede = "중국 내에서는 Anthropic의 데이터센터 추진이 이어지고 있다.";
+  c.lede_refs = ["A07", "A46"];
+  assert.ok(run(c).report.fatal.some((f) => f.rule === "china_attribution" && /anthropic/.test(f.detail)), "entity rule");
+});
+
+test("리드: '중국 내 엔비디아 점유율 34%' 처럼 근거 기사가 중국 시장을 다루면 통과", () => {
+  const c = load();
+  c.lede = "중국 내 엔비디아 AI 칩 점유율이 34%로 떨어졌다.";
+  c.lede_refs = ["A36"];
+  const { report } = run(c);
+  assert.ok(!report.fatal.some((f) => f.path === "lede"), JSON.stringify(report.fatal.filter((f) => f.path === "lede")));
+});
+
+test("리드·헤드라인: 근거 기사에 없는 고유명사는 unsupported_entity 치명", () => {
+  const c = load();
+  c.lede = "무문신궁이 23억 위안을 조달했고 OpenAI 도 투자했다.";
+  c.lede_refs = ["A05"];
+  const { report } = run(c);
+  assert.ok(report.fatal.some((f) => f.rule === "unsupported_entity" && f.path === "lede" && /openai/.test(f.detail)), JSON.stringify(report.fatal));
+  const h = load();
+  h.headline = "샤오미, 새 모델 공개";
+  assert.ok(run(h).report.fatal.some((f) => f.rule === "unsupported_entity" && f.path === "headline"));
+  // 샘플 리드(A01·A41·A05)는 통과
+  assert.ok(!run(load()).report.fatal.some((f) => f.path === "lede"));
+});
+
+test("번역: zh 는 숫자를 그대로(억→亿, 만→万), 자릿수 환산은 위반", () => {
+  const ko = load();
+  ko.lede = "무문신궁이 23억 위안을 조달했고 사용자는 5억 3,700만 명이다.";
+  const zh = structuredClone(ko);
+  zh.lede = "无问芯穹融资23亿元，用户达5亿3700万人。";
+  assert.deepEqual(checkTranslation(ko, zh, "zh").filter((p) => p.includes("lede")), []);
+  zh.lede = "无问芯穹融资23亿元，用户达53700万人。"; // 크기는 같아도 자릿수를 바꿈
+  assert.ok(checkTranslation(ko, zh, "zh").some((p) => p.includes("lede") && /verbatim/.test(p)));
+  const en = structuredClone(ko);
+  en.lede = "Infinigence raised 2.3 billion yuan; users reached 537 million.";
+  assert.deepEqual(checkTranslation(ko, en, "en").filter((p) => p.includes("lede")), []);
+});
+
+test("번역: 万→10k 처럼 k 접미사를 새로 쓰면 위반, 쉼표 표기 차이(1,600 ↔ 1600)는 같은 수", () => {
+  const ko = load();
+  ko.lede = "직원 1,600명을 채용했고 57.2만 개를 팔았다.";
+  const k = structuredClone(ko);
+  k.lede = "It hired 1600 employees and sold 572k units.";
+  assert.ok(checkTranslation(ko, k, "en").some((p) => p.includes("lede") && /"k"/.test(p)), checkTranslation(ko, k, "en").join("\n"));
+  const en = structuredClone(ko);
+  en.lede = "It hired 1600 employees and sold 572,000 units.";
+  assert.deepEqual(checkTranslation(ko, en, "en").filter((p) => p.includes("lede")), []);
+  const zh = structuredClone(ko);
+  zh.lede = "招聘了1600名员工，售出57.2万个。";
+  assert.deepEqual(checkTranslation(ko, zh, "zh").filter((p) => p.includes("lede")), []);
+});
+
+test("번역 이름 힌트에서 숫자를 지운다 (연도 2026 이 번역문에 새어 들어간 원인)", () => {
+  assert.equal(maskDigits("优必选入选《财富》2026年全球未来成长120强"), "优必选入选《财富》#年全球未来成长#强");
 });

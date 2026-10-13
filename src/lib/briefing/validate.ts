@@ -16,6 +16,9 @@
  * | china_centric: 상위 5건 중 중국 주체 ≥ 3 | 경고 (수리 호출 대상, 항목 삭제·실패 사유 아님) |
  * | cluster_topic: 묶음 기사 전부에 공통 주체 | 경고 (주제 묶음은 clusters 에서 뺌) |
  * | term_pinyin_spacing: 병음 띄어쓰기만 다름 | 경고 (DB 표기로 교정) |
+ * | headline_length: 헤드라인 32자 초과 (여유 없음) | 경고 (수리 호출 대상, 자동 자르기 없음) |
+ * | unsupported_entity: headline/lede 의 고유명사가 근거 기사에 없음 | 치명 |
+ * | china_attribution: "중국 내" 문장에 해외 실체·지명의 사실 | 치명 |
  *
  * refs 관련성 정리를 숫자 검사보다 먼저 한다 — 저장되는 refs 가 곧 검증한 refs 가 되도록.
  */
@@ -28,11 +31,13 @@ import type {
   ValidationIssue,
   ValidationReport,
 } from "./types";
-import { findEntities, isChineseSubject, properNouns } from "./entities";
+import { entityMentioned, findEntities, isChineseSubject, properNouns } from "./entities";
 
 export interface ValidationContext {
   /** 짧은 id → 근거 텍스트 (title_kr + summary_kr + insight_kr + title_cn, 전재 형제 포함) */
   sourceText: Map<string, string>;
+  /** 짧은 id → 제목만 (title_kr + title_cn). 기사의 "주인공" 판정용 (china_attribution). 없으면 sourceText 로 대신한다 */
+  titleText?: Map<string, string>;
   keyTerms: Map<string, KeyTerm[]>;
   hidden: Set<string>;
   mode: EditionMode;
@@ -42,14 +47,36 @@ export function articleText(a: CandidateArticle): string {
   return [a.title_kr, a.summary_kr, a.ai_insights_kr, a.title_cn].filter(Boolean).join(" ");
 }
 
+function articleTitle(a: CandidateArticle): string {
+  return [a.title_kr, a.title_cn].filter(Boolean).join(" ");
+}
+
 export function contextFromGroups(groups: CandidateGroup[], mode: EditionMode, hidden: Set<string> = new Set()): ValidationContext {
   const sourceText = new Map<string, string>();
+  const titleText = new Map<string, string>();
   const keyTerms = new Map<string, KeyTerm[]>();
   for (const g of groups) {
     sourceText.set(g.shortId, [g.primary, ...g.siblings].map(articleText).join(" "));
+    titleText.set(g.shortId, [g.primary, ...g.siblings].map(articleTitle).join(" "));
     keyTerms.set(g.shortId, [g.primary, ...g.siblings].flatMap((a) => a.key_terms ?? []));
   }
-  return { sourceText, keyTerms, hidden, mode };
+  return { sourceText, titleText, keyTerms, hidden, mode };
+}
+
+/**
+ * 저장된 판(refs = uuid)을 다시 검증할 때 쓰는 문맥 (관리자 인라인 수정).
+ * 기사 한 건 = id 하나 (전재 형제는 저장 단계에서 이미 refs 에 함께 들어가 있다).
+ */
+export function contextFromArticles(articles: CandidateArticle[], mode: EditionMode, hidden: Set<string> = new Set()): ValidationContext {
+  const sourceText = new Map<string, string>();
+  const titleText = new Map<string, string>();
+  const keyTerms = new Map<string, KeyTerm[]>();
+  for (const a of articles) {
+    sourceText.set(a.id, articleText(a));
+    titleText.set(a.id, articleTitle(a));
+    keyTerms.set(a.id, a.key_terms ?? []);
+  }
+  return { sourceText, titleText, keyTerms, hidden, mode };
 }
 
 // ───────────────────────── 정규화 (LLM 출력 → BriefingContent)
@@ -161,8 +188,10 @@ const norm = (s: string) => s.replace(/[\s,]/g, "");
 
 // ───────────────────────── 길이
 
+/** 헤드라인 글자 수 상한 (공백 포함). 15% 여유 없이 엄격하게 본다 — 넘으면 수리 호출 대상 (자동 자르기 없음) */
+export const HEADLINE_MAX = 32;
+
 const LIMITS: [RegExp, number][] = [
-  [/^headline$/, 32],
   [/^lede$/, 200],
   [/^top_stories\[\d+\]\.title$/, 40],
   [/^top_stories\[\d+\]\.what$/, 160],
@@ -223,6 +252,64 @@ export function pruneIrrelevantRefs(
   return { content: c, warn, dropped };
 }
 
+// ───────────────────────── 근거 없는 실체 (headline·lede)
+
+/**
+ * 문장의 고유명사 중 refs 근거 기사 어디에도 나오지 않는 것.
+ * (pruneIrrelevantRefs 는 "ref 마다 고유명사 하나라도" 를 보므로, 리드처럼 여러 이야기를 섞는 문장에서
+ *  근거 없는 실체가 끼어드는 것은 못 잡는다 → 고유명사 단위로 따로 본다)
+ */
+export function unsupportedEntities(text: string, refs: string[], ctx: ValidationContext): string[] {
+  const srcs = refs.map((r) => ctx.sourceText.get(r)).filter((s): s is string => s !== undefined);
+  if (!srcs.length) return [];
+  return properNouns(text)
+    .filter((n) => !srcs.some((s) => n.matches(s)))
+    .map((n) => n.label);
+}
+
+// ───────────────────────── "중국 내" 귀속
+
+const CHINA_SCOPE_RE = /중국\s?내|중국\s?안에서|중국에서는|중국\s?국내|国内|中国境内/;
+/** 중국 밖 지명: "중국 내에서는 … 일본 데이터센터" 같은 문장은 그 자체로 모순이다 */
+const FOREIGN_PLACE_RE = /일본|오사카|도쿄|미국|실리콘밸리|유럽|영국|프랑스|독일|인도|한국|중동|사우디|싱가포르|日本|大阪|东京|美国|欧洲|韩国|印度/;
+const CHINA_MENTION_RE = /중국|中国|国内|国产|베이징|상하이|선전|항저우|北京|上海|深圳|杭州/;
+
+function sentences(text: string): string[] {
+  return text.split(/(?<=[.!?。！？])\s*/).filter((s) => s.trim());
+}
+
+/**
+ * 해외 실체의 사실을 "중국 내" 로 묶는 문장 (설계 검토 후속 5c — "중국 내에서는 … Anthropic의 일본 데이터센터").
+ * 위반 조건 (문장 단위, "중국 내" 류 표현이 있을 때만):
+ *  1) 같은 문장에 중국 밖 지명이 있다, 또는
+ *  2) 해외 실체(엔비디아·Anthropic 등)가 있고, 그 실체가 제목에 나오는 근거 기사 중 하나라도 중국을 전혀 언급하지 않는다.
+ *     (제목에 나오는 기사가 없으면 본문에 나오는 기사로 본다)
+ * "중국 내 엔비디아 점유율 34%" 처럼 근거 기사가 중국 시장을 다루면 통과한다.
+ */
+export function chinaAttributionIssues(text: string, refs: string[], ctx: ValidationContext): string[] {
+  const out: string[] = [];
+  for (const s of sentences(text)) {
+    if (!CHINA_SCOPE_RE.test(s)) continue;
+    const place = s.match(FOREIGN_PLACE_RE);
+    if (place) {
+      out.push(`"중국 내" 문장에 중국 밖 지명 "${place[0]}"`);
+      continue;
+    }
+    for (const e of findEntities(s).filter((x) => !x.chinese)) {
+      const mention = (m: Map<string, string> | undefined) =>
+        refs.filter((r) => {
+          const t = m?.get(r);
+          return t !== undefined && entityMentioned(e, t);
+        });
+      let about = mention(ctx.titleText);
+      if (!about.length) about = mention(ctx.sourceText);
+      const offshore = about.filter((r) => !CHINA_MENTION_RE.test(ctx.sourceText.get(r) ?? ""));
+      if (offshore.length) out.push(`"중국 내" 문장의 ${e.key} 근거 기사(${offshore.join(",")})는 중국을 다루지 않음`);
+    }
+  }
+  return out;
+}
+
 // ───────────────────────── 중국 중심
 
 export function chinaCentricCount(c: BriefingContent): number {
@@ -272,7 +359,20 @@ export function validateKo(
     const lim = LIMITS.find(([re]) => re.test(u.path))?.[1];
     if (lim && u.text.length > Math.round(lim * 1.15))
       warn.push({ level: "warn", rule: "length", path: u.path, detail: `${u.text.length}/${lim}자` });
+    // "중국 내" 귀속 오류는 모든 문장에서 치명 (헤드라인은 본문 전체 refs 기준)
+    for (const d of chinaAttributionIssues(u.text, u.refs, ctx))
+      fatal.push({ level: "fatal", rule: "china_attribution", path: u.path, detail: d });
   }
+
+  // 헤드라인: 엄격한 글자 수 (경고지만 수리 호출 대상) + 고유명사가 인용 기사에 있어야 함
+  if (content.headline.length > HEADLINE_MAX)
+    warn.push({ level: "warn", rule: "headline_length", path: "headline", detail: `${content.headline.length}/${HEADLINE_MAX}자` });
+  const allRefs = [...new Set(citedRefs(content))];
+  for (const n of unsupportedEntities(content.headline, allRefs, ctx))
+    fatal.push({ level: "fatal", rule: "unsupported_entity", path: "headline", detail: `"${n}" 가 인용 기사 어디에도 없음` });
+  // 리드: 고유명사마다 lede_refs 중 하나에는 나와야 함 (여러 이야기를 섞는 문장이라 ref 단위 관련성 검사로는 부족)
+  for (const n of unsupportedEntities(content.lede, content.lede_refs, ctx))
+    fatal.push({ level: "fatal", rule: "unsupported_entity", path: "lede", detail: `"${n}" 가 lede_refs 근거 기사에 없음` });
 
   const t = content.term_of_the_day;
   if (t) {

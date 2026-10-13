@@ -22,7 +22,7 @@ import type {
 import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "./llm";
 import { PROMPT_VERSION, TRANSLATE_PROMPT_VERSION, buildRepairPrompt, buildSystemPrompt, buildUserPrompt } from "./prompt";
 import { computeInputHash, editionModeFor, selectCandidates } from "./select";
-import { citedRefs, contextFromGroups, dropFatalItems, normalizeContent, validateKo } from "./validate";
+import { HEADLINE_MAX, citedRefs, contextFromGroups, dropFatalItems, normalizeContent, validateKo } from "./validate";
 import { translateBriefing } from "./translate";
 import { finishGenerating, insertBriefing, latestBriefing, loadCandidateArticles, withDateLock } from "./repository";
 
@@ -123,12 +123,16 @@ async function generateKo(date: string, mode: EditionMode, groups: CandidateGrou
   validation.initial = cur.report;
 
   const chinaMiss = (r: ValidationReport) => r.warn.some((w) => w.rule === "china_centric");
-  if (cur.report.fatal.length || chinaMiss(cur.report)) {
+  // 헤드라인 길이 초과는 경고지만 수리 호출 대상이다 (자동으로 자르지 않는다). 수리 뒤에도 길면 경고로 남겨 관리자가 고친다.
+  const headlineLong = (r: ValidationReport) => r.warn.find((w) => w.rule === "headline_length");
+  if (cur.report.fatal.length || chinaMiss(cur.report) || headlineLong(cur.report)) {
     try {
       cost.check();
       // 어차피 수리 호출을 하는 김에 한자 잔존 경고도 함께 고치게 한다 (en 번역에 한자가 넘어가는 것을 막음)
+      const long = headlineLong(cur.report);
       const extra = [
         ...(chinaMiss(cur.report) ? [cur.report.warn.find((w) => w.rule === "china_centric")!.detail + " — 중국 중심 규칙 미달"] : []),
+        ...(long ? [`[headline_length] headline: ${long.detail} — "${cur.content.headline}" 을 뜻을 살려 ${HEADLINE_MAX}자 이내로 다시 쓰십시오`] : []),
         ...cur.report.warn
           .filter((w) => w.rule === "han_in_ko")
           .map((w) => `[han_in_ko] ${w.path}: 한자 "${w.detail}" 를 한국어 표기로 바꾸십시오 (예: 《不问凡尘》 → 《불문범진》, 千问 → 치엔원)`),

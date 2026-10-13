@@ -12,12 +12,15 @@
  *  - top_stories 에 subject / subject_is_chinese
  */
 import type { BriefingContent, CandidateGroup, EditionMode, ValidationIssue } from "./types";
+import { HEADLINE_MAX } from "./validate";
 
-export const PROMPT_VERSION = "ko-v2-2026-10-13";
-export const TRANSLATE_PROMPT_VERSION = "tr-v4-2026-10-13";
+// v3: headline 32자 엄수(수리 대상), lede 실체 근거·"중국 내" 귀속 규칙
+export const PROMPT_VERSION = "ko-v3-2026-10-13";
+// v5: 이름 힌트 숫자 마스킹, zh 숫자 그대로(억→亿·만→万), k 축약·연도 추가 금지
+export const TRANSLATE_PROMPT_VERSION = "tr-v5-2026-10-13";
 
 const SCHEMA = `{
- "headline": "오늘 판 제목, 32자 이내",
+ "headline": "오늘 판 제목, 공백 포함 ${HEADLINE_MAX}자 이내 (엄수)",
  "lede": "오늘의 핵심 2~3문장, 200자 이내",
  "lede_refs": ["A.."],
  "top_stories": [  // 중요도 순 {TOP_RANGE}개
@@ -60,6 +63,9 @@ export function buildSystemPrompt(mode: EditionMode): string {
 8. AI·반도체·로봇·AI 비즈니스와 무관한 기사, 특히 정치·외교 기사(정상·총리·대통령 발언 등)는 선정하지 말고 excluded 에 사유와 함께 적습니다. 행사 모집 공고·홍보성 기사도 낮게 봅니다.
 9. 한국어 문장에 한자를 쓰지 마십시오(용어 원어는 term_of_the_day.term 에만). 중국 기업·인물명은 기사 title_kr/summary_kr 의 한국어 표기를 따르되 한자 병기는 하지 않습니다.
 10. 과장·추측·투자 권유 금지. 논쟁적인 주장은 "~라고 주장"처럼 주체를 밝힙니다. 평가가 엇갈리면 함께 적습니다. 존댓말이 아닌 간결한 평서문(~했다, ~이다)으로 씁니다.
+11. headline 은 공백 포함 ${HEADLINE_MAX}자 이내입니다(넘으면 반려). 쓰고 나서 글자 수를 세어 보십시오. 가장 큰 이야기 1~2개만 담습니다.
+12. lede 의 모든 기업·인물·제품 이름은 lede_refs 기사에 나와야 합니다. lede 에 쓴 이야기의 근거 기사를 모두 lede_refs 에 넣으십시오.
+13. "중국 내", "중국에서는" 같은 표현에는 중국 기업·기관의 중국 안 사실만 담습니다. 해외 기업(Anthropic·OpenAI·Meta 등)의 해외 사업(일본 데이터센터 등)을 "중국 내" 흐름으로 묶지 마십시오.
 ${short ? "\n오늘은 기사가 적은 날입니다(짧은 판). top_stories 1~3건만 쓰고 sections 는 비웁니다. headline 은 \"오늘은 조용한 하루\"처럼 솔직하게 씁니다.\n" : ""}
 중요도 판단 기준(높은 순): 여러 매체가 함께 다룬 사건(sources 수) > 대형 모델·칩·인프라의 구체적 발표 > 큰 금액의 투자·인수·상장 > 정책·규제 > 산업 분석/칼럼. 업계 영향이 큰 중국 기업(바이트댄스·알리바바·텐센트·화웨이·딥시크·문샷·지푸·미니맥스·바이두·샤오미 등)을 우선합니다. ARTICLES 는 사전 점수(score) 순으로 정렬되어 있습니다(참고용).
 
@@ -107,6 +113,8 @@ ${problems}
 - 근거 기사에 없는 숫자·서열 표현은 기사에 나온 표현으로 바꾸거나 문장에서 뺍니다.
 - 존재하지 않거나 무관한 ref 는 빼고, 실제 근거 기사 id 로 바꿉니다.
 - 중국 중심 규칙을 어겼다면 ARTICLES 에서 중국 기업·기관이 주체인 이야기를 상위로 올립니다.
+- headline 이 ${HEADLINE_MAX}자를 넘었다면 뜻을 유지한 채 ${HEADLINE_MAX}자 이내로 다시 씁니다 (말줄임표로 자르지 않습니다).
+- unsupported_entity / china_attribution 이 나온 문장은 근거 기사에 있는 사실만 남기고, 해외 기업의 해외 사업을 "중국 내" 로 묶지 않게 고칩니다.
 - 문제가 없는 항목은 그대로 둡니다. 코드 펜스·설명 없이 JSON 하나만 출력합니다.
 
 ${JSON.stringify(draft)}`;
@@ -121,18 +129,20 @@ export function buildTranslateSystemPrompt(target: "en" | "zh"): string {
 Rules (violations are rejected automatically):
 1. Input is JSON. Output the SAME JSON structure: same keys, same array lengths, same order. Translate ONLY the string values of these keys: headline, lede, title, what, why, text, label, name, subject, story, reason, value.
 2. Never change ids (A01...), refs, primary_ref, ref, rank, section codes, subject_is_chinese, term, pinyin.
-3. Keep every number exactly as written in Arabic digits. ${
+3. Numbers: ${
     zh
-      ? "Korean 억 = 亿 and 만 = 万 (same magnitude), so '23억 위안' → '23亿元', '57.2만 개' → '57.2万个'."
-      : "Convert Korean large-number units by magnitude: 억 = 100 million, 만 = 10 thousand (e.g. '23억 위안' → '2.3 billion yuan', '57.2만 개' → '572,000 units'). Do not round."
+      ? "copy every number VERBATIM — the same digits in the same order. Only swap the unit character 1:1: 억 → 亿, 만 → 万, 조 → 万亿, 천 → 千 (e.g. '23억 위안' → '23亿元', '57.2만 개' → '57.2万个', '5억 3,700만 명' → '5亿3700万人'). Never rewrite the digits (no 53700万, no 0.23万亿), never use k/K, never convert currencies."
+      : "keep every value exactly. Korean 억/만/조 have no English unit, so state the SAME value with million/billion/trillion (억 = 100 million, 만 = 10 thousand, 조 = trillion): '23억 위안' → '2.3 billion yuan', '57.2만 개' → '572,000 units', '5억 3,700만 명' → '537 million people'. Never round, never abbreviate with k/K, never write long raw digits like 2300000000, never convert currencies. Numbers without a Korean unit (1,600 / 34% / 500MW) stay exactly as written."
   }
+   Never add a number, year, date or rank that is not in the Korean field — not even when it seems helpful context.
 4. ${
     zh
       ? "Write Simplified Chinese only; no Korean (Hangul) characters may remain. For company and person names use the Chinese name given in NAME_HINTS (taken from the original Chinese headlines) when available."
       : "Write English only; no Korean (Hangul) or Chinese characters may remain — not even inside quotes or 《》 titles. Write Chinese company, product and person names in their common English name or Hanyu Pinyin (e.g. 바이트댄스 → ByteDance, 량원펑 → Liang Wenfeng, 千问Go → Qwen Go, 《不问凡尘》 → \"Bu Wen Fan Chen\", 無問芯穹 → Infinigence)."
   }
 5. Plain, neutral news style. No additions, no omissions, no hype.
-6. NAME_HINTS are ONLY for spelling names. Never copy facts, years, ranks or numbers from NAME_HINTS into the translation — if the Korean text has no year or rank, the translation must not have one either.
+6. NAME_HINTS are ONLY for spelling names (their digits are masked as #). Never copy facts from NAME_HINTS into the translation.
+7. Translate each field on its own: the translated field must contain exactly the facts and numbers of the same Korean field — do not move information between fields.
 Output only the JSON, no code fences.`;
 }
 
