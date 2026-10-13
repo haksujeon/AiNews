@@ -341,19 +341,19 @@ export function SubscribersContainer() {
                     <td className="px-4 py-3 hidden md:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {(sub.categories || []).slice(0, 3).map((cat) => (
-                          <Badge key={cat} variant="secondary" className="text-[10px]">
+                          <Badge key={cat} variant="secondary" className="text-xs">
                             {categoryLabel(cat, locale, t("allCategories"))}
                           </Badge>
                         ))}
                         {(sub.categories || []).length > 3 && (
-                          <Badge variant="outline" className="text-[10px]">
+                          <Badge variant="outline" className="text-xs">
                             +{sub.categories.length - 3}
                           </Badge>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-xs">
                         {sub.language?.toUpperCase()}
                       </Badge>
                     </td>

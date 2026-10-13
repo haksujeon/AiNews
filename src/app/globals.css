@@ -180,6 +180,11 @@
     font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
   }
+  /* keep-all 은 한글 전용. 중국어는 한자 연속을 한 단어로 취급해 문장부호에서만 줄이 바뀌므로 normal */
+  body:lang(zh),
+  [lang|="zh"] {
+    word-break: normal;
+  }
   h1,
   h2,
   h3,
