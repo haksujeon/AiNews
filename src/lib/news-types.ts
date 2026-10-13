@@ -23,6 +23,8 @@ export interface NewsItem {
   thumbnail_url: string | null;
   og_image_url: string | null;
   country: string | null;
+  // 상세 조회(fetchNewsById)에만 실린다. 숨긴 기사(AI 무관 등)는 목록에서 빠지고 상세는 noindex.
+  is_hidden?: boolean;
 }
 
 export const NEWS_PAGE_SIZE = 30;
