@@ -1,10 +1,15 @@
 {
   "common": {
-    "appName": "AI NEWS PORTAL",
+    "appName": "AI NEWS",
     "loading": "加载中...",
     "search": "搜索",
     "statistics": "统计",
-    "footerText": "AI新闻数据通过自动化系统收集和翻译。"
+    "footerText": "AI新闻数据通过自动化系统收集和翻译。",
+    "admin": "管理",
+    "live": "实时",
+    "toggleTheme": "切换深色/浅色主题",
+    "changeLanguage": "切换语言",
+    "retry": "重试"
   },
   "filter": {
     "searchPlaceholder": "按标题或内容搜索...",
@@ -19,7 +24,10 @@
     "activeFilters": "已应用筛选",
     "search": "搜索",
     "dateRange": "日期范围",
-    "resetDate": "清除日期"
+    "resetDate": "清除日期",
+    "searchLabel": "搜索文章",
+    "gridView": "网格视图",
+    "listView": "列表视图"
   },
   "detail": {
     "backToList": "返回列表",
@@ -34,14 +42,40 @@
     "originalTitle": "原文标题",
     "relatedNews": "相关新闻",
     "readFullAtSource": "全文请前往原文媒体（{source}）阅读。",
-    "sourceFallback": "原文媒体"
+    "sourceFallback": "原文媒体",
+    "loading": "加载中...",
+    "loadError": "无法加载详细内容。",
+    "loadErrorHint": "请稍后重试。",
+    "newsContent": "新闻正文",
+    "toc": "目录",
+    "tocSummary": "AI摘要",
+    "tocKeyTerms": "关键词",
+    "readTime": "{minutes}分钟阅读",
+    "fewerRelated": "减少相关新闻",
+    "moreRelated": "增加相关新闻",
+    "imageFallback": "AI NEWS"
   },
   "admin": {
     "login": "管理员登录",
     "sendHistory": "发送记录",
     "subscribers": "订阅者管理",
     "backToSite": "返回网站",
-    "logout": "退出登录"
+    "logout": "退出登录",
+    "loginTitle": "管理员登录",
+    "password": "密码",
+    "passwordPlaceholder": "输入管理员密码",
+    "signIn": "登录",
+    "loginFailed": "登录失败。",
+    "networkError": "无法连接服务器，请检查网络。",
+    "serverError": "服务器错误（HTTP {status}），请稍后重试。",
+    "sessionExpired": "会话已过期，请重新登录。",
+    "loadFailed": "无法加载列表。",
+    "saveFailed": "保存失败。",
+    "toggleFailed": "状态更改失败。",
+    "deleteFailed": "删除失败。",
+    "toggled": "状态已更新。",
+    "deleted": "已删除。",
+    "dismiss": "关闭"
   },
   "statistics": {
     "title": "统计仪表板",
@@ -60,5 +94,26 @@
     "dailyAvg": "日均",
     "topKeywords": "热门关键词 TOP 15",
     "articles": "篇"
+  },
+  "meta": {
+    "brand": "AI NEWS",
+    "siteTitle": "AI NEWS — 中国与全球AI新闻速览",
+    "siteDescription": "汇集中国及全球AI技术、产品与商业新闻，附AI摘要与洞察。",
+    "statisticsTitle": "新闻统计"
+  },
+  "notFound": {
+    "title": "页面不存在",
+    "description": "该文章可能已被删除，或链接地址有误。",
+    "backHome": "返回新闻列表"
+  },
+  "list": {
+    "noResults": "没有搜索结果",
+    "noResultsHint": "请尝试其他搜索词或筛选条件。",
+    "unknownDate": "日期未指定",
+    "loadingMore": "加载中...",
+    "allLoaded": "已加载全部 {total} 篇文章",
+    "loadError": "无法加载新闻。",
+    "loadErrorHint": "请检查网络后重试。",
+    "loadMoreError": "无法加载更多文章。"
   }
 }

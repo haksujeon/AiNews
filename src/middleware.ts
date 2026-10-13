@@ -38,5 +38,7 @@ export default async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next|.*\\..*).*)"],
+  // "/" 를 명시해야 basePath 루트(/ainews, 슬래시 없음)에도 미들웨어가 돌아
+  // 기본/협상 로케일(/ainews/ko 등)로 리다이렉트된다. (없으면 /ainews 가 404)
+  matcher: ["/", "/((?!api|_next|.*\\..*).*)"],
 };

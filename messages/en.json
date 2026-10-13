@@ -1,10 +1,15 @@
 {
   "common": {
-    "appName": "AI NEWS PORTAL",
+    "appName": "AI NEWS",
     "loading": "Loading...",
     "search": "Search",
     "statistics": "Statistics",
-    "footerText": "AI news data is collected and translated through an automated system."
+    "footerText": "AI news data is collected and translated through an automated system.",
+    "admin": "Admin",
+    "live": "Live",
+    "toggleTheme": "Toggle dark/light theme",
+    "changeLanguage": "Change language",
+    "retry": "Retry"
   },
   "filter": {
     "searchPlaceholder": "Search by title or content...",
@@ -19,7 +24,10 @@
     "activeFilters": "Active filters",
     "search": "Search",
     "dateRange": "Date Range",
-    "resetDate": "Clear dates"
+    "resetDate": "Clear dates",
+    "searchLabel": "Search articles",
+    "gridView": "Grid view",
+    "listView": "List view"
   },
   "detail": {
     "backToList": "Back to list",
@@ -34,14 +42,40 @@
     "originalTitle": "Original Title",
     "relatedNews": "Related News",
     "readFullAtSource": "Read the full article at the original source ({source}).",
-    "sourceFallback": "the publisher"
+    "sourceFallback": "the publisher",
+    "loading": "Loading...",
+    "loadError": "Failed to load the article details.",
+    "loadErrorHint": "Please try again later.",
+    "newsContent": "News Content",
+    "toc": "Contents",
+    "tocSummary": "AI Summary",
+    "tocKeyTerms": "Key Terms",
+    "readTime": "{minutes} min read",
+    "fewerRelated": "Show fewer related articles",
+    "moreRelated": "Show more related articles",
+    "imageFallback": "AI NEWS"
   },
   "admin": {
     "login": "Admin Login",
     "sendHistory": "Send History",
     "subscribers": "Subscribers",
     "backToSite": "Back to Site",
-    "logout": "Logout"
+    "logout": "Logout",
+    "loginTitle": "Admin Login",
+    "password": "Password",
+    "passwordPlaceholder": "Enter admin password",
+    "signIn": "Sign In",
+    "loginFailed": "Login failed.",
+    "networkError": "Can't reach the server. Check your network.",
+    "serverError": "Server error (HTTP {status}). Please try again shortly.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "loadFailed": "Failed to load the list.",
+    "saveFailed": "Save failed.",
+    "toggleFailed": "Failed to change status.",
+    "deleteFailed": "Delete failed.",
+    "toggled": "Status updated.",
+    "deleted": "Deleted.",
+    "dismiss": "Dismiss"
   },
   "statistics": {
     "title": "Statistics Dashboard",
@@ -60,5 +94,26 @@
     "dailyAvg": "Daily Avg",
     "topKeywords": "Top 15 Keywords",
     "articles": "articles"
+  },
+  "meta": {
+    "brand": "AI NEWS",
+    "siteTitle": "AI NEWS — Chinese & global AI news in English",
+    "siteDescription": "AI technology, product and business news from China and around the world, with AI summaries and insights.",
+    "statisticsTitle": "News statistics"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "description": "The article may have been removed, or the address is incorrect.",
+    "backHome": "Back to news"
+  },
+  "list": {
+    "noResults": "No results found",
+    "noResultsHint": "Try different search terms or filters.",
+    "unknownDate": "Unknown date",
+    "loadingMore": "Loading more...",
+    "allLoaded": "All {total} articles loaded",
+    "loadError": "Couldn't load the news.",
+    "loadErrorHint": "Check your connection and try again.",
+    "loadMoreError": "Couldn't load more articles."
   }
 }

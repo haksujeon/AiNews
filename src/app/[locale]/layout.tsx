@@ -1,7 +1,35 @@
-import { NextIntlClientProvider } from "next-intl";
-import { getMessages } from "next-intl/server";
+import type { Metadata } from "next";
+import { NextIntlClientProvider, hasLocale } from "next-intl";
+import { getMessages, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { routing } from "@/i18n/routing";
+import { routing, LOCALE_HTML_LANG } from "@/i18n/routing";
+import { ThemeProvider } from "@/components/layout/theme-provider";
+import { fontVariables } from "@/lib/fonts";
+import { SITE_ORIGIN } from "@/lib/site";
+import "../globals.css";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  if (!hasLocale(routing.locales, locale)) return {};
+  const t = await getTranslations({ locale, namespace: "meta" });
+  return {
+    metadataBase: new URL(SITE_ORIGIN),
+    title: {
+      default: t("siteTitle"),
+      template: `%s | ${t("brand")}`,
+    },
+    description: t("siteDescription"),
+    openGraph: {
+      siteName: t("brand"),
+      type: "website",
+      locale: LOCALE_HTML_LANG[locale].replace("-", "_"),
+    },
+  };
+}
 
 export default async function LocaleLayout({
   children,
@@ -14,16 +42,22 @@ export default async function LocaleLayout({
 }) {
   const { locale } = await params;
 
-  if (!routing.locales.includes(locale as (typeof routing.locales)[number])) {
+  if (!hasLocale(routing.locales, locale)) {
     notFound();
   }
 
   const messages = await getMessages();
 
   return (
-    <NextIntlClientProvider messages={messages}>
-      {children}
-      {modal}
-    </NextIntlClientProvider>
+    <html lang={LOCALE_HTML_LANG[locale]} className="dark" suppressHydrationWarning>
+      <body className={`${fontVariables} antialiased`}>
+        <ThemeProvider>
+          <NextIntlClientProvider messages={messages}>
+            {children}
+            {modal}
+          </NextIntlClientProvider>
+        </ThemeProvider>
+      </body>
+    </html>
   );
 }

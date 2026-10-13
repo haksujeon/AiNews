@@ -1,8 +1,8 @@
 "use client";
 
 import { useLocale } from "next-intl";
-import Image from "next/image";
 import { Calendar } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import type { NewsItem } from "@/lib/supabase";
 import {
@@ -15,11 +15,10 @@ import {
   getSentimentStyle,
   getSentimentLabel,
 } from "@/lib/news-utils";
-import { NewsPlaceholder } from "./news-placeholder";
+import { NewsThumbnail } from "./news-thumbnail";
 
 interface NewsCardProps {
   item: NewsItem;
-  onClick?: () => void;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -33,7 +32,12 @@ const CATEGORY_COLORS: Record<string, string> = {
   tech: "from-orange-500 to-orange-400",
 };
 
-export function NewsCard({ item, onClick }: NewsCardProps) {
+/**
+ * 기사 카드. 실제 링크(/[locale]/news/[id])라서 탭 이동·새 탭 열기·주소 공유가 된다.
+ * 소프트 이동이면 @modal/(.)news/[id] 가로채기 라우트가 모달로 열고,
+ * 직접 접속/새로고침이면 전체 상세 페이지가 렌더된다. (목록/리스트/관련기사 모두 같은 경로)
+ */
+export function NewsCard({ item }: NewsCardProps) {
   const locale = useLocale();
   const title = getTitle(item, locale);
   const summary = getSummary(item, locale);
@@ -43,28 +47,26 @@ export function NewsCard({ item, onClick }: NewsCardProps) {
   const stripeGradient = CATEGORY_COLORS[item.category || ""] || "from-gray-500 to-gray-400";
 
   return (
-    <div onClick={onClick} className="cursor-pointer group">
+    <Link
+      href={`/news/${item.id}`}
+      prefetch={false}
+      className="block h-full cursor-pointer group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
       <article className="relative h-full rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden transition-all duration-300 hover:border-primary/30 hover:bg-card/80 hover:shadow-[0_8px_30px_-12px_oklch(0.78_0.14_210/20%)]">
         {/* Category color stripe */}
         <div className={`h-0.5 bg-gradient-to-r ${stripeGradient}`} />
 
-        {/* Image */}
-        {imageUrl ? (
-          <div className="h-44 overflow-hidden bg-muted/50 relative">
-            <Image
-              src={imageUrl}
-              alt={title}
-              fill
-              className="object-cover group-hover:scale-[1.03] transition-transform duration-500 ease-out"
-              sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
-              referrerPolicy="no-referrer"
-              unoptimized
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-card/60 via-transparent to-transparent" />
-          </div>
-        ) : (
-          <NewsPlaceholder category={item.category} className="h-44" />
-        )}
+        {/* Image (깨지면 카테고리 플레이스홀더로 대체) */}
+        <NewsThumbnail
+          src={imageUrl}
+          alt={title}
+          category={item.category}
+          className="h-44"
+          imageClassName="object-cover group-hover:scale-[1.03] transition-transform duration-500 ease-out"
+          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+        >
+          <div className="absolute inset-0 bg-gradient-to-t from-card/60 via-transparent to-transparent" />
+        </NewsThumbnail>
 
         {/* Content */}
         <div className="p-4 space-y-3">
@@ -121,6 +123,6 @@ export function NewsCard({ item, onClick }: NewsCardProps) {
           </div>
         </div>
       </article>
-    </div>
+    </Link>
   );
 }

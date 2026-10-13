@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import pool from './db';
 export type { NewsItem } from './news-types';
 export { NEWS_PAGE_SIZE } from './news-types';
@@ -18,6 +19,8 @@ const STATS_FIELDS = `${LIST_FIELDS}, key_terms`;
 const DETAIL_FIELDS = `${LIST_FIELDS},
   content_kr, content_en,
   ai_insights_cn, ai_insights_kr, ai_insights_en, key_terms`;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface NewsPage {
   items: NewsItem[];
@@ -82,13 +85,16 @@ export async function fetchNewsForStats(): Promise<NewsItem[]> {
   return rows;
 }
 
-export async function fetchNewsById(id: string): Promise<NewsItem | null> {
+// React cache(): 같은 요청 안에서 generateMetadata 와 page 가 한 번만 조회하도록.
+export const fetchNewsById = cache(async (id: string): Promise<NewsItem | null> => {
+  // id 컬럼이 uuid 라 형식이 틀린 값은 DB 오류(500)가 되므로 미리 걸러 404 로 처리한다.
+  if (!UUID_RE.test(id)) return null;
   const { rows } = await pool.query(
     `SELECT ${DETAIL_FIELDS} FROM ai_news_ex WHERE id = $1 LIMIT 1`,
     [id]
   );
   return rows[0] ?? null;
-}
+});
 
 export async function fetchRelatedNews(
   newsId: string,

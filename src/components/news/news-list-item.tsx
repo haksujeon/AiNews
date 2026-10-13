@@ -1,8 +1,8 @@
 "use client";
 
 import { useLocale } from "next-intl";
-import Image from "next/image";
 import { Calendar, ArrowRight } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import type { NewsItem } from "@/lib/supabase";
 import {
@@ -15,14 +15,14 @@ import {
   getSentimentStyle,
   getSentimentLabel,
 } from "@/lib/news-utils";
-import { NewsPlaceholder } from "./news-placeholder";
+import { NewsThumbnail } from "./news-thumbnail";
 
 interface NewsListItemProps {
   item: NewsItem;
-  onClick?: () => void;
 }
 
-export function NewsListItem({ item, onClick }: NewsListItemProps) {
+/** 리스트 보기용 기사 항목. NewsCard 와 같은 링크(/news/[id]) — 모달/전체페이지 동작 동일. */
+export function NewsListItem({ item }: NewsListItemProps) {
   const locale = useLocale();
   const title = getTitle(item, locale);
   const summary = getSummary(item, locale);
@@ -31,26 +31,21 @@ export function NewsListItem({ item, onClick }: NewsListItemProps) {
   const sentStyle = getSentimentStyle(item.sentiment);
 
   return (
-    <div onClick={onClick} className="cursor-pointer group">
+    <Link
+      href={`/news/${item.id}`}
+      prefetch={false}
+      className="block cursor-pointer group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
       <article className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden transition-all duration-300 hover:border-primary/30 hover:bg-card/80">
         <div className="flex flex-col sm:flex-row">
-          {imageUrl ? (
-            <div className="sm:w-52 h-44 sm:h-auto flex-shrink-0 overflow-hidden bg-muted/50 relative">
-              <Image
-                src={imageUrl}
-                alt={title}
-                fill
-                className="object-cover group-hover:scale-[1.03] transition-transform duration-500"
-                sizes="(max-width: 640px) 100vw, 208px"
-                referrerPolicy="no-referrer"
-                unoptimized
-              />
-            </div>
-          ) : (
-            <div className="sm:w-52 h-44 sm:h-auto flex-shrink-0">
-              <NewsPlaceholder category={item.category} className="h-full" />
-            </div>
-          )}
+          <NewsThumbnail
+            src={imageUrl}
+            alt={title}
+            category={item.category}
+            className="sm:w-52 h-44 sm:h-auto flex-shrink-0"
+            imageClassName="object-cover group-hover:scale-[1.03] transition-transform duration-500"
+            sizes="(max-width: 640px) 100vw, 208px"
+          />
 
           <div className="flex-1 p-4 flex flex-col justify-between gap-2">
             <div className="space-y-2">
@@ -99,6 +94,6 @@ export function NewsListItem({ item, onClick }: NewsListItemProps) {
           </div>
         </div>
       </article>
-    </div>
+    </Link>
   );
 }

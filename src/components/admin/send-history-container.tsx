@@ -1,17 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   ChevronRight,
   Mail,
   FileText,
   Users,
   Loader2,
+  RotateCw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiUrl } from "@/lib/api-path";
+import { extractErrorMessage } from "@/lib/api-error";
+import { useRouter } from "@/i18n/navigation";
 
 interface Article {
   id: string;
@@ -33,17 +37,48 @@ interface SendEvent {
 
 export function SendHistoryContainer() {
   const locale = useLocale();
+  const t = useTranslations("admin");
+  const tc = useTranslations("common");
+  const router = useRouter();
   const [events, setEvents] = useState<SendEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(apiUrl("/api/admin/send-history"))
-      .then((r) => r.json())
-      .then((d) => setEvents(d.data?.events || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl("/api/admin/send-history"));
+        if (cancelled) return;
+        if (res.status === 401) {
+          // 세션 만료 → 로그인으로
+          router.replace("/admin/login");
+          return;
+        }
+        if (!res.ok) {
+          const fallback =
+            res.status >= 500 ? t("serverError", { status: res.status }) : t("loadFailed");
+          const msg = await extractErrorMessage(res, fallback);
+          if (!cancelled) setLoadError(msg);
+          return;
+        }
+        const d = await res.json();
+        if (!cancelled) {
+          setEvents(d.data?.events || []);
+          setLoadError("");
+        }
+      } catch {
+        if (!cancelled) setLoadError(t("networkError"));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken, router, t]);
 
   const totalSends = events.length;
   const totalArticles = events.reduce((s, e) => s + e.articleCount, 0);
@@ -53,7 +88,31 @@ export function SendHistoryContainer() {
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground">
         <Loader2 className="w-5 h-5 animate-spin mr-2" />
-        Loading...
+        {tc("loading")}
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Send History</h1>
+        <Card className="border-destructive/40">
+          <CardContent role="alert" className="p-8 text-center space-y-4">
+            <p className="text-sm text-destructive">{loadError}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setLoading(true);
+                setReloadToken((n) => n + 1);
+              }}
+            >
+              <RotateCw className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+              {tc("retry")}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

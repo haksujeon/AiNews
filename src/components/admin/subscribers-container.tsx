@@ -9,7 +9,13 @@ import {
   Trash2,
   Power,
   Loader2,
+  RotateCw,
+  X,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
+import { cn } from "@/lib/utils";
+import { extractErrorMessage } from "@/lib/api-error";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,17 +90,51 @@ export function SubscribersContainer() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
+  // 목록 로드 실패 / 개별 작업(상태 변경·삭제) 결과 안내
+  const [loadError, setLoadError] = useState("");
+  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const t = useTranslations("admin");
+  const tc = useTranslations("common");
+  const router = useRouter();
+
   const debouncedSearch = useDebounce(search, 300);
+
+  /** 401 이면 로그인 페이지로 보내고 true. (세션 만료) */
+  const handleUnauthorized = useCallback(
+    (res: Response) => {
+      if (res.status !== 401) return false;
+      router.replace("/admin/login");
+      return true;
+    },
+    [router]
+  );
+
+  const failMessage = useCallback(
+    (res: Response, fallback: string) =>
+      extractErrorMessage(res, res.status >= 500 ? t("serverError", { status: res.status }) : fallback),
+    [t]
+  );
 
   const fetchSubscribers = useCallback(async () => {
     const params = new URLSearchParams();
     if (debouncedSearch) params.set("search", debouncedSearch);
     if (activeFilter !== "all") params.set("active", activeFilter);
-    const res = await fetch(apiUrl(`/api/admin/subscribers?${params}`));
-    const data = await res.json();
-    setSubscribers(data.data?.subscribers || []);
-    setLoading(false);
-  }, [debouncedSearch, activeFilter]);
+    try {
+      const res = await fetch(apiUrl(`/api/admin/subscribers?${params}`));
+      if (handleUnauthorized(res)) return;
+      if (!res.ok) {
+        setLoadError(await failMessage(res, t("loadFailed")));
+        return;
+      }
+      const data = await res.json();
+      setSubscribers(data.data?.subscribers || []);
+      setLoadError("");
+    } catch {
+      setLoadError(t("networkError"));
+    } finally {
+      setLoading(false);
+    }
+  }, [debouncedSearch, activeFilter, handleUnauthorized, failMessage, t]);
 
   useEffect(() => {
     fetchSubscribers();
@@ -124,10 +164,9 @@ export function SubscribersContainer() {
         body: JSON.stringify(body),
       });
 
+      if (handleUnauthorized(res)) return;
       if (!res.ok) {
-        const data = await res.json();
-        setFormError(data.error?.message || "Save failed");
-        setSaving(false);
+        setFormError(await failMessage(res, t("saveFailed")));
         return;
       }
 
@@ -135,28 +174,51 @@ export function SubscribersContainer() {
       setEditTarget(null);
       await fetchSubscribers();
     } catch {
-      setFormError("Network error");
+      setFormError(t("networkError"));
     } finally {
       setSaving(false);
     }
   };
 
   const handleToggleActive = async (sub: Subscriber) => {
-    await fetch(apiUrl(`/api/admin/subscribers/${sub.id}`), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: !sub.is_active }),
-    });
-    await fetchSubscribers();
+    setNotice(null);
+    try {
+      const res = await fetch(apiUrl(`/api/admin/subscribers/${sub.id}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: !sub.is_active }),
+      });
+      if (handleUnauthorized(res)) return;
+      if (!res.ok) {
+        setNotice({ kind: "error", text: await failMessage(res, t("toggleFailed")) });
+        return;
+      }
+      setNotice({ kind: "success", text: t("toggled") });
+      await fetchSubscribers();
+    } catch {
+      setNotice({ kind: "error", text: t("networkError") });
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await fetch(apiUrl(`/api/admin/subscribers/${deleteTarget.id}`), {
-      method: "DELETE",
-    });
-    setDeleteTarget(null);
-    await fetchSubscribers();
+    setNotice(null);
+    try {
+      const res = await fetch(apiUrl(`/api/admin/subscribers/${deleteTarget.id}`), {
+        method: "DELETE",
+      });
+      if (handleUnauthorized(res)) return;
+      if (!res.ok) {
+        setNotice({ kind: "error", text: await failMessage(res, t("deleteFailed")) });
+        return;
+      }
+      setNotice({ kind: "success", text: t("deleted") });
+      await fetchSubscribers();
+    } catch {
+      setNotice({ kind: "error", text: t("networkError") });
+    } finally {
+      setDeleteTarget(null);
+    }
   };
 
   const openEdit = (sub: Subscriber) => {
@@ -204,12 +266,52 @@ export function SubscribersContainer() {
         </Select>
       </div>
 
+      {notice && (
+        <div
+          role={notice.kind === "error" ? "alert" : "status"}
+          className={cn(
+            "flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 text-sm",
+            notice.kind === "error"
+              ? "border-destructive/40 bg-destructive/10 text-destructive"
+              : "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400"
+          )}
+        >
+          <span>{notice.text}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 shrink-0"
+            onClick={() => setNotice(null)}
+            aria-label={t("dismiss")}
+          >
+            <X className="w-3.5 h-3.5" aria-hidden="true" />
+          </Button>
+        </div>
+      )}
+
       {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center py-20 text-muted-foreground">
           <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          Loading...
+          {tc("loading")}
         </div>
+      ) : loadError ? (
+        <Card className="border-destructive/40">
+          <CardContent role="alert" className="p-8 text-center space-y-4">
+            <p className="text-sm text-destructive">{loadError}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setLoading(true);
+                fetchSubscribers();
+              }}
+            >
+              <RotateCw className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+              {tc("retry")}
+            </Button>
+          </CardContent>
+        </Card>
       ) : subscribers.length === 0 ? (
         <Card className="border-border/50">
           <CardContent className="p-8 text-center text-muted-foreground">

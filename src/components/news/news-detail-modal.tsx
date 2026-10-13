@@ -36,16 +36,18 @@ import {
   getSentimentLabel,
   getTermExplanation,
 } from "@/lib/news-utils";
+import { Link } from "@/i18n/navigation";
 import { NewsPlaceholder } from "./news-placeholder";
 
 interface NewsDetailModalProps {
   news: NewsItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelectNews?: (item: NewsItem) => void;
 }
 
-export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: NewsDetailModalProps) {
+// 가로채기 라우트(@modal/(.)news/[id])에서만 쓰인다. 카드/리스트/관련기사 클릭은 모두
+// /news/[id] 링크 이동이며, 직접 접속 시에는 같은 데이터로 전체 페이지(NewsDetail)가 렌더된다.
+export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalProps) {
   const locale = useLocale();
   const t = useTranslations("detail");
   const [detail, setDetail] = useState<NewsItem | null>(null);
@@ -55,6 +57,8 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
   const [relatedCount, setRelatedCount] = useState(2);
 
   useEffect(() => {
+    // 관련 기사로 연속 이동할 때 늦게 도착한 이전 기사 응답이 덮어쓰지 않도록 한다.
+    let cancelled = false;
     if (open && news) {
       setLoading(true);
       setError(false);
@@ -63,14 +67,15 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
         fetchRelatedNewsClient(news.category, news.id, 4),
       ])
         .then(([detailData, related]) => {
+          if (cancelled) return;
           setDetail(detailData);
           setRelatedNews(related);
         })
         .catch(() => {
-          setError(true);
+          if (!cancelled) setError(true);
         })
         .finally(() => {
-          setLoading(false);
+          if (!cancelled) setLoading(false);
         });
     }
     if (!open) {
@@ -78,6 +83,10 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
       setRelatedNews([]);
       setError(false);
     }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, news?.id]);
 
   if (!news) return null;
@@ -101,7 +110,6 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
               src={imageUrl}
               alt={title}
               referrerPolicy="no-referrer"
-              crossOrigin="anonymous"
               className="w-full h-full object-cover"
               onError={(e) => {
                 const img = e.target as HTMLImageElement;
@@ -171,26 +179,12 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-sm">
-                {locale === "ko" ? "로딩 중..." : locale === "zh" ? "加载中..." : "Loading..."}
-              </span>
+              <span className="text-sm">{t("loading")}</span>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center gap-1 py-8 text-center text-muted-foreground">
-              <span className="text-sm">
-                {locale === "ko"
-                  ? "상세 내용을 불러오지 못했습니다."
-                  : locale === "zh"
-                  ? "无法加载详细内容。"
-                  : "Failed to load the article details."}
-              </span>
-              <span className="text-xs text-muted-foreground/70">
-                {locale === "ko"
-                  ? "잠시 후 다시 시도해 주세요."
-                  : locale === "zh"
-                  ? "请稍后重试。"
-                  : "Please try again later."}
-              </span>
+            <div role="alert" className="flex flex-col items-center justify-center gap-1 py-8 text-center text-muted-foreground">
+              <span className="text-sm">{t("loadError")}</span>
+              <span className="text-xs text-muted-foreground/70">{t("loadErrorHint")}</span>
             </div>
           ) : (
             <>
@@ -215,7 +209,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
                   <CardHeader className="pb-2 pt-4">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-emerald-500" />
-                      {locale === "ko" ? "뉴스 본문" : locale === "zh" ? "新闻正文" : "News Content"}
+                      {t("newsContent")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pb-4">
@@ -306,27 +300,34 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
                     className="h-7 w-7"
                     disabled={relatedCount <= 1}
                     onClick={() => setRelatedCount((c) => Math.max(1, c - 1))}
+                    aria-label={t("fewerRelated")}
                   >
-                    <Minus className="w-3.5 h-3.5" />
+                    <Minus className="w-3.5 h-3.5" aria-hidden="true" />
                   </Button>
-                  <span className="text-sm text-muted-foreground w-5 text-center">{relatedCount}</span>
+                  <span className="text-sm text-muted-foreground w-5 text-center" aria-live="polite">{relatedCount}</span>
                   <Button
                     variant="outline"
                     size="icon"
                     className="h-7 w-7"
                     disabled={relatedCount >= Math.min(4, relatedNews.length)}
                     onClick={() => setRelatedCount((c) => Math.min(4, relatedNews.length, c + 1))}
+                    aria-label={t("moreRelated")}
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
                   </Button>
                 </div>
               </div>
               <div className={`grid gap-3 ${relatedCount <= 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-2"}`}>
                 {relatedNews.slice(0, relatedCount).map((item) => (
-                  <button
+                  // 관련 기사도 카드와 같은 링크 경로. replace 로 이동해 모달을 닫으면(back)
+                  // 이전 기사가 아니라 목록으로 돌아가게 한다.
+                  <Link
                     key={item.id}
-                    className="text-left p-3 rounded-lg border hover:bg-accent/50 transition-colors"
-                    onClick={() => onSelectNews?.(item)}
+                    href={`/news/${item.id}`}
+                    replace
+                    scroll={false}
+                    prefetch={false}
+                    className="block text-left p-3 rounded-lg border hover:bg-accent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <p className="text-sm font-medium line-clamp-2 mb-1">
                       {getTitle(item, locale)}
@@ -339,7 +340,7 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
                       )}
                       {item.news_date && <span>{formatDate(item.news_date, locale)}</span>}
                     </div>
-                  </button>
+                  </Link>
                 ))}
               </div>
             </>

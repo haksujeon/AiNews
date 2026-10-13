@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import {
   ArrowLeft,
   Calendar,
@@ -41,13 +41,10 @@ interface NewsDetailProps {
   relatedNews: NewsItem[];
 }
 
-function estimateReadTime(text: string, locale: string): string {
-  const len = text.length;
+/** 본문 길이로 대략의 읽기 시간(분)을 계산한다. 문구는 detail.readTime 메시지로 만든다. */
+function estimateReadMinutes(text: string, locale: string): number {
   const cpm = locale === "en" ? 1200 : 600;
-  const minutes = Math.max(1, Math.round(len / cpm));
-  if (locale === "ko") return `${minutes}분 소요`;
-  if (locale === "zh") return `${minutes}分钟阅读`;
-  return `${minutes} min read`;
+  return Math.max(1, Math.round(text.length / cpm));
 }
 
 export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
@@ -65,25 +62,27 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
   const imageUrl = news.thumbnail_url || news.og_image_url;
   const catStyle = getCategoryStyle(news.category);
   const sentStyle = getSentimentStyle(news.sentiment);
-  const readTime = content ? estimateReadTime(content, locale) : null;
+  const readTime = content
+    ? t("readTime", { minutes: estimateReadMinutes(content, locale) })
+    : null;
 
   const tocItems = [
-    { id: "summary", label: locale === "ko" ? "AI 요약" : locale === "zh" ? "AI摘要" : "AI Summary", show: !!summary },
-    { id: "content", label: locale === "ko" ? "뉴스 본문" : locale === "zh" ? "新闻正文" : "News Content", show: !!content },
-    { id: "insights", label: locale === "ko" ? "AI 인사이트" : locale === "zh" ? "AI洞察" : "AI Insights", show: !!aiInsights },
-    { id: "keywords", label: locale === "ko" ? "핵심 키워드" : locale === "zh" ? "关键词" : "Key Terms", show: !!(news.key_terms && news.key_terms.length > 0) },
+    { id: "summary", label: t("tocSummary"), show: !!summary },
+    { id: "content", label: t("newsContent"), show: !!content },
+    { id: "insights", label: t("aiInsights"), show: !!aiInsights },
+    { id: "keywords", label: t("tocKeyTerms"), show: !!(news.key_terms && news.key_terms.length > 0) },
   ].filter((item) => item.show);
 
   return (
     <article className="max-w-6xl mx-auto">
       {/* Top bar */}
-      <div className="mb-6 flex items-center justify-between">
-        <Link href="/">
-          <Button variant="ghost" size="sm">
+      <div className="mb-6 flex items-center justify-between gap-2">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/">
             <ArrowLeft className="w-4 h-4 mr-2" />
             {t("backToList")}
-          </Button>
-        </Link>
+          </Link>
+        </Button>
 
         {/* 원문 보기 = 원문 매체로 가는 외부 링크 (예전의 '중문 원문' 토글 대체) */}
         {news.source_url && (
@@ -103,7 +102,6 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
             src={imageUrl}
             alt={title}
             referrerPolicy="no-referrer"
-            crossOrigin="anonymous"
             className="w-full h-auto max-h-[400px] object-cover"
             onError={(e) => {
               const img = e.target as HTMLImageElement;
@@ -206,7 +204,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
                 <CardHeader className="pb-2 pt-4">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-emerald-500" />
-                    {locale === "ko" ? "뉴스 본문" : locale === "zh" ? "新闻正文" : "News Content"}
+                    {t("newsContent")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pb-4">
@@ -243,7 +241,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
                 <CardHeader className="pb-2 pt-3">
                   <CardTitle className="text-sm flex items-center gap-1.5">
                     <List className="w-4 h-4" />
-                    {locale === "ko" ? "목차" : locale === "zh" ? "目录" : "Contents"}
+                    {t("toc")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pb-3">
@@ -330,18 +328,20 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
                 className="h-8 w-8"
                 disabled={relatedCount <= 1}
                 onClick={() => setRelatedCount((c) => Math.max(1, c - 1))}
+                aria-label={t("fewerRelated")}
               >
-                <Minus className="w-4 h-4" />
+                <Minus className="w-4 h-4" aria-hidden="true" />
               </Button>
-              <span className="text-sm text-muted-foreground w-6 text-center">{relatedCount}</span>
+              <span className="text-sm text-muted-foreground w-6 text-center" aria-live="polite">{relatedCount}</span>
               <Button
                 variant="outline"
                 size="icon"
                 className="h-8 w-8"
                 disabled={relatedCount >= Math.min(4, relatedNews.length)}
                 onClick={() => setRelatedCount((c) => Math.min(4, relatedNews.length, c + 1))}
+                aria-label={t("moreRelated")}
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4" aria-hidden="true" />
               </Button>
             </div>
           </div>

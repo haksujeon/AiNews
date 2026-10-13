@@ -209,9 +209,10 @@ export function NewsFilter({
       <div className="space-y-2">
         <label className="text-sm font-medium">{t("search") || "Search"}</label>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" aria-hidden="true" />
           <Input
             type="text"
+            aria-label={t("searchLabel")}
             placeholder={t("searchPlaceholder")}
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
@@ -259,9 +260,10 @@ export function NewsFilter({
       <div className="flex items-center gap-2 p-2 rounded-xl border border-border/50 bg-card/30 backdrop-blur-sm">
         {/* Desktop Search */}
         <div className="hidden md:block relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 w-4 h-4" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 w-4 h-4" aria-hidden="true" />
           <Input
             type="text"
+            aria-label={t("searchLabel")}
             placeholder={t("searchPlaceholder")}
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
@@ -318,22 +320,28 @@ export function NewsFilter({
         <div className="w-px h-5 bg-border/50" />
 
         {/* View Toggle */}
-        <div className="flex items-center rounded-lg p-0.5">
+        <div className="flex items-center rounded-lg p-0.5" role="group">
           <Button
             variant={viewMode === "grid" ? "secondary" : "ghost"}
             size="icon"
             className="h-7 w-7"
             onClick={() => onViewModeChange("grid")}
+            aria-label={t("gridView")}
+            aria-pressed={viewMode === "grid"}
+            title={t("gridView")}
           >
-            <Grid3X3 className="h-3.5 w-3.5" />
+            <Grid3X3 className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
           <Button
             variant={viewMode === "list" ? "secondary" : "ghost"}
             size="icon"
             className="h-7 w-7"
             onClick={() => onViewModeChange("list")}
+            aria-label={t("listView")}
+            aria-pressed={viewMode === "list"}
+            title={t("listView")}
           >
-            <List className="h-3.5 w-3.5" />
+            <List className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
         </div>
       </div>

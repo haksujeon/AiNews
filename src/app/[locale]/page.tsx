@@ -1,7 +1,23 @@
+import type { Metadata } from "next";
 import { fetchNewsPage, fetchNewsFacets } from "@/lib/supabase";
+import { absoluteUrl, languageAlternates } from "@/lib/site";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { NewsContainer } from "@/components/news/news-container";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  return {
+    alternates: {
+      canonical: absoluteUrl(locale),
+      languages: languageAlternates(),
+    },
+  };
+}
 
 export default async function HomePage() {
   // 필터 선택지는 테이블 전체 기준으로 뽑아 초기 렌더에 함께 넘긴다.

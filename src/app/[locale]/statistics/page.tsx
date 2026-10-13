@@ -1,4 +1,23 @@
+import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { fetchNewsForStats } from "@/lib/supabase";
+import { absoluteUrl, languageAlternates } from "@/lib/site";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "meta" });
+  return {
+    title: t("statisticsTitle"),
+    alternates: {
+      canonical: absoluteUrl(locale, "/statistics"),
+      languages: languageAlternates("/statistics"),
+    },
+  };
+}
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { StatisticsContainer } from "@/components/statistics/statistics-container";

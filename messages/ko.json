@@ -1,10 +1,15 @@
 {
   "common": {
-    "appName": "AI NEWS PORTAL",
+    "appName": "AI NEWS",
     "loading": "로딩 중...",
     "search": "검색",
     "statistics": "통계",
-    "footerText": "AI 뉴스 데이터는 자동화 시스템을 통해 수집 및 번역됩니다."
+    "footerText": "AI 뉴스 데이터는 자동화 시스템을 통해 수집 및 번역됩니다.",
+    "admin": "관리자",
+    "live": "실시간",
+    "toggleTheme": "다크/라이트 테마 전환",
+    "changeLanguage": "언어 변경",
+    "retry": "다시 시도"
   },
   "filter": {
     "searchPlaceholder": "기사 제목, 내용으로 검색...",
@@ -19,7 +24,10 @@
     "activeFilters": "필터 적용됨",
     "search": "검색",
     "dateRange": "날짜 범위",
-    "resetDate": "날짜 초기화"
+    "resetDate": "날짜 초기화",
+    "searchLabel": "기사 검색",
+    "gridView": "그리드 보기",
+    "listView": "목록 보기"
   },
   "detail": {
     "backToList": "목록으로",
@@ -34,14 +42,40 @@
     "originalTitle": "원문 제목",
     "relatedNews": "관련 기사",
     "readFullAtSource": "기사 전문은 원문 매체({source})에서 확인하세요.",
-    "sourceFallback": "원문 매체"
+    "sourceFallback": "원문 매체",
+    "loading": "로딩 중...",
+    "loadError": "상세 내용을 불러오지 못했습니다.",
+    "loadErrorHint": "잠시 후 다시 시도해 주세요.",
+    "newsContent": "뉴스 본문",
+    "toc": "목차",
+    "tocSummary": "AI 요약",
+    "tocKeyTerms": "핵심 키워드",
+    "readTime": "{minutes}분 소요",
+    "fewerRelated": "관련 기사 줄이기",
+    "moreRelated": "관련 기사 늘리기",
+    "imageFallback": "AI NEWS"
   },
   "admin": {
     "login": "관리자 로그인",
     "sendHistory": "발신 내역",
     "subscribers": "구독자 관리",
     "backToSite": "사이트로 돌아가기",
-    "logout": "로그아웃"
+    "logout": "로그아웃",
+    "loginTitle": "관리자 로그인",
+    "password": "비밀번호",
+    "passwordPlaceholder": "관리자 비밀번호 입력",
+    "signIn": "로그인",
+    "loginFailed": "로그인에 실패했습니다.",
+    "networkError": "서버에 연결할 수 없습니다. 네트워크를 확인해 주세요.",
+    "serverError": "서버 오류가 발생했습니다 (HTTP {status}). 잠시 후 다시 시도해 주세요.",
+    "sessionExpired": "세션이 만료되었습니다. 다시 로그인해 주세요.",
+    "loadFailed": "목록을 불러오지 못했습니다.",
+    "saveFailed": "저장에 실패했습니다.",
+    "toggleFailed": "상태 변경에 실패했습니다.",
+    "deleteFailed": "삭제에 실패했습니다.",
+    "toggled": "상태를 변경했습니다.",
+    "deleted": "삭제했습니다.",
+    "dismiss": "닫기"
   },
   "statistics": {
     "title": "통계 대시보드",
@@ -60,5 +94,26 @@
     "dailyAvg": "일 평균",
     "topKeywords": "주요 키워드 TOP 15",
     "articles": "건"
+  },
+  "meta": {
+    "brand": "AI NEWS",
+    "siteTitle": "AI NEWS — 중국·글로벌 AI 뉴스를 한국어로",
+    "siteDescription": "중국을 비롯한 세계 AI 기술·제품·비즈니스 뉴스를 AI 요약·인사이트와 함께 한국어로 전합니다.",
+    "statisticsTitle": "뉴스 통계"
+  },
+  "notFound": {
+    "title": "페이지를 찾을 수 없습니다",
+    "description": "기사가 삭제되었거나 주소가 잘못되었을 수 있습니다.",
+    "backHome": "뉴스 목록으로"
+  },
+  "list": {
+    "noResults": "검색 결과가 없습니다",
+    "noResultsHint": "다른 검색어나 필터를 시도해보세요.",
+    "unknownDate": "날짜 미지정",
+    "loadingMore": "불러오는 중...",
+    "allLoaded": "총 {total}건의 기사를 모두 불러왔습니다",
+    "loadError": "뉴스를 불러오지 못했습니다.",
+    "loadErrorHint": "네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+    "loadMoreError": "다음 기사를 불러오지 못했습니다."
   }
 }
