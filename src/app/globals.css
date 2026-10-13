@@ -75,10 +75,10 @@
   --app-sans: "Pretendard Variable", "Pretendard Fallback", -apple-system, BlinkMacSystemFont,
     "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
 }
-/* zh: Noto Sans SC(next/font, 가변 한 벌). Pretendard 는 받지 않는다 — 한글이 나오면 시스템 서체 */
+/* zh: 웹폰트 없이 시스템 중국어 서체(전송량 0). Pretendard 도 받지 않는다 */
 :root:lang(zh) {
-  --app-sans: var(--font-noto-sc), "PingFang SC", "Microsoft YaHei", "Apple SD Gothic Neo",
-    "Malgun Gothic", system-ui, sans-serif;
+  --app-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", sans-serif;
 }
 
 /* ─── Light: 중성 종이 + 잉크 + 청자(jade) 포인트 1색 ─── */
