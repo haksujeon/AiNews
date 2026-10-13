@@ -10,7 +10,8 @@ export interface NewsItem {
   summary_cn: string | null;
   summary_kr: string | null;
   summary_en: string | null;
-  content_cn: string | null;
+  // content_cn(원문 매체의 RSS 본문 전문)은 DB에는 보관하지만 공개 UI/API로는 내보내지 않는다.
+  // 저작권: "요약 + 원문 링크" 정책(2026-10). 번역문(content_kr/en)은 2차 저작물로 계속 노출.
   content_kr: string | null;
   content_en: string | null;
   ai_insights_cn: string | null;

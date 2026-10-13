@@ -10,8 +10,6 @@ import {
   Globe,
   Lightbulb,
   BookOpen,
-  Languages,
-  FileText,
   Clock,
   List,
   Minus,
@@ -52,37 +50,22 @@ function estimateReadTime(text: string, locale: string): string {
   return `${minutes} min read`;
 }
 
-type ViewLang = "translated" | "cn";
-
 export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
   const locale = useLocale();
   const t = useTranslations("detail");
-  const [viewLang, setViewLang] = useState<ViewLang>("translated");
   const [relatedCount, setRelatedCount] = useState(3);
 
-  const showOriginal = viewLang === "cn";
-  const hasChinese = locale !== "zh" && !!news.title_cn;
-
-  const title = showOriginal && hasChinese
-    ? news.title_cn!
-    : getTitle(news, locale);
-
-  const summary = showOriginal && hasChinese
-    ? (news.summary_cn || getSummary(news, locale))
-    : getSummary(news, locale);
-
-  const content = showOriginal && hasChinese
-    ? getContent({ ...news, content_kr: null, content_en: null } as NewsItem, "zh")
-    : getContent(news, locale);
-
-  const aiInsights = showOriginal && hasChinese
-    ? (news.ai_insights_cn || getAiInsights(news, locale))
-    : getAiInsights(news, locale);
+  // 원문(content_cn) 전문은 재게시하지 않는다. 번역 본문(ko/en)만 보여주고,
+  // 원문은 source_url 외부 링크로 안내한다.
+  const title = getTitle(news, locale);
+  const summary = getSummary(news, locale);
+  const content = getContent(news, locale);
+  const aiInsights = getAiInsights(news, locale);
 
   const imageUrl = news.thumbnail_url || news.og_image_url;
   const catStyle = getCategoryStyle(news.category);
   const sentStyle = getSentimentStyle(news.sentiment);
-  const readTime = content ? estimateReadTime(content, showOriginal ? "zh" : locale) : null;
+  const readTime = content ? estimateReadTime(content, locale) : null;
 
   const tocItems = [
     { id: "summary", label: locale === "ko" ? "AI 요약" : locale === "zh" ? "AI摘要" : "AI Summary", show: !!summary },
@@ -102,28 +85,14 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
           </Button>
         </Link>
 
-        {/* Language toggle */}
-        {hasChinese && (
-          <div className="flex items-center gap-1 border rounded-lg p-0.5">
-            <Button
-              variant={!showOriginal ? "default" : "ghost"}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setViewLang("translated")}
-            >
-              <Languages className="w-3.5 h-3.5 mr-1" />
-              {locale === "ko" ? "번역" : "Translation"}
-            </Button>
-            <Button
-              variant={showOriginal ? "default" : "ghost"}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setViewLang("cn")}
-            >
-              <FileText className="w-3.5 h-3.5 mr-1" />
-              {locale === "ko" ? "중문 원문" : "中文原文"}
-            </Button>
-          </div>
+        {/* 원문 보기 = 원문 매체로 가는 외부 링크 (예전의 '중문 원문' 토글 대체) */}
+        {news.source_url && (
+          <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+            <a href={news.source_url} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="w-3.5 h-3.5 mr-1" />
+              {t("viewOriginal")}
+            </a>
+          </Button>
         )}
       </div>
 
@@ -249,13 +218,18 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
 
           {/* Source link */}
           {news.source_url && (
-            <div className="mb-8">
-              <a href={news.source_url} target="_blank" rel="noopener noreferrer">
-                <Button>
+            <div className="mb-8 space-y-2">
+              {!content && (
+                <p className="text-sm text-muted-foreground">
+                  {t("readFullAtSource", { source: news.source_name || t("sourceFallback") })}
+                </p>
+              )}
+              <Button asChild>
+                <a href={news.source_url} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-4 h-4 mr-2" />
                   {t("viewOriginal")}
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           )}
         </div>

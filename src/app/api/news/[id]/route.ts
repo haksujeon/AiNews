@@ -6,7 +6,7 @@ const DETAIL_FIELDS = `id,
   source_name, source_url,
   to_char(news_date::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS news_date,
   title_cn, title_kr, title_en, summary_cn, summary_kr, summary_en,
-  content_cn, content_kr, content_en, ai_insights_cn, ai_insights_kr, ai_insights_en,
+  content_kr, content_en, ai_insights_cn, ai_insights_kr, ai_insights_en,
   key_terms, sentiment, category, thumbnail_url, og_image_url, country`;
 
 export async function GET(

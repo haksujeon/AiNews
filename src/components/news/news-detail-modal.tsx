@@ -278,17 +278,18 @@ export function NewsDetailModal({ news, open, onOpenChange, onSelectNews }: News
 
           {/* Action buttons */}
           {news.source_url && (
-            <div className="flex gap-2 pt-2">
-              <a
-                href={news.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="outline" size="sm">
+            <div className="flex flex-col items-start gap-2 pt-2">
+              {!loading && !content && (
+                <p className="text-sm text-muted-foreground">
+                  {t("readFullAtSource", { source: fullItem.source_name || t("sourceFallback") })}
+                </p>
+              )}
+              <Button variant="outline" size="sm" asChild>
+                <a href={news.source_url} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-4 h-4 mr-1.5" />
                   {t("viewOriginal")}
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           )}
 

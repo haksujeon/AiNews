@@ -14,8 +14,9 @@ const LIST_FIELDS = `id,
 
 const STATS_FIELDS = `${LIST_FIELDS}, key_terms`;
 
+// content_cn(원문 전문)은 의도적으로 제외한다 — 공개 페이지/RSC 페이로드에 실리지 않도록.
 const DETAIL_FIELDS = `${LIST_FIELDS},
-  content_cn, content_kr, content_en,
+  content_kr, content_en,
   ai_insights_cn, ai_insights_kr, ai_insights_en, key_terms`;
 
 export interface NewsPage {

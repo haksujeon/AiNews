@@ -26,13 +26,15 @@
     "aiSummary": "AI Summary",
     "aiInsights": "AI Insights",
     "keyTerms": "Key Terms",
-    "viewOriginal": "View Original",
+    "viewOriginal": "Read original",
     "viewFullDetail": "View Full Detail",
     "viewFullArticle": "View Full Article",
     "close": "Close",
     "aiTranslation": "AI Translation",
     "originalTitle": "Original Title",
-    "relatedNews": "Related News"
+    "relatedNews": "Related News",
+    "readFullAtSource": "Read the full article at the original source ({source}).",
+    "sourceFallback": "the publisher"
   },
   "admin": {
     "login": "Admin Login",

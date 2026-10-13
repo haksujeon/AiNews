@@ -32,7 +32,9 @@
     "close": "닫기",
     "aiTranslation": "AI 번역",
     "originalTitle": "원문 제목",
-    "relatedNews": "관련 기사"
+    "relatedNews": "관련 기사",
+    "readFullAtSource": "기사 전문은 원문 매체({source})에서 확인하세요.",
+    "sourceFallback": "원문 매체"
   },
   "admin": {
     "login": "관리자 로그인",

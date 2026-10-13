@@ -237,14 +237,16 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+/**
+ * 화면에 보여줄 본문. 우리가 만든 번역문(content_kr/content_en)만 반환한다.
+ * - zh: 원문(content_cn)을 재게시하지 않으므로 항상 "" (요약·인사이트·원문 링크로 대체)
+ * - ko/en: 번역문이 없으면 "" — 예전처럼 content_cn 으로 폴백하지 않는다.
+ */
 export function getContent(item: NewsItem, locale: string): string {
   let raw = "";
-  if (locale === "zh")
-    raw = item.content_cn || item.content_kr || item.content_en || "";
-  else if (locale === "en")
-    raw = item.content_en || item.content_kr || item.content_cn || "";
-  else
-    raw = item.content_kr || item.content_en || item.content_cn || "";
+  if (locale === "zh") raw = "";
+  else if (locale === "en") raw = item.content_en || item.content_kr || "";
+  else raw = item.content_kr || item.content_en || "";
   return stripHtml(raw);
 }
 
