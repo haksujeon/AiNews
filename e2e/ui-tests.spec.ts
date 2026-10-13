@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = 'http://localhost:3000';
+// basePath(/ainews) 포함. 다른 포트/서버로 돌릴 때: E2E_BASE_URL=http://localhost:3097/ainews
+const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:3000/ainews';
 
 test.describe('AiNews UI/UX Tests', () => {
   
@@ -15,12 +16,13 @@ test.describe('AiNews UI/UX Tests', () => {
     // 타이틀 확인
     await expect(page).toHaveTitle(/AI NEWS/);
     
-    // 헤더 확인
+    // 헤더 확인 (로고 링크) + <html lang>
     await expect(page.locator('header')).toBeVisible();
-    await expect(page.locator('text=AI NEWS PORTAL')).toBeVisible();
-    
-    // 뉴스 카드 또는 스켈레톤 확인
-    const cards = page.locator('[data-testid="news-card"], [data-testid="skeleton-card"]').first();
+    await expect(page.locator('header a[aria-label="AI NEWS"]')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+
+    // 뉴스 카드는 기사 상세로 가는 실제 링크
+    const cards = page.locator('main a[href*="/news/"]').first();
     await expect(cards).toBeVisible({ timeout: 10000 });
     
     console.log('✅ 페이지 로드 완료');
@@ -65,9 +67,9 @@ test.describe('AiNews UI/UX Tests', () => {
   });
 
   test('그리드/리스트 뷰 전환', async ({ page }) => {
-    // 그리드 버튼 클릭
-    const gridBtn = page.locator('button').filter({ has: page.locator('svg') }).nth(0);
-    const listBtn = page.locator('button').filter({ has: page.locator('svg') }).nth(1);
+    // 그리드/목록 토글 (aria-label 로 지정)
+    const gridBtn = page.getByRole('button', { name: '그리드 보기' });
+    const listBtn = page.getByRole('button', { name: '목록 보기' });
     
     await expect(gridBtn).toBeVisible();
     await expect(listBtn).toBeVisible();
@@ -75,6 +77,7 @@ test.describe('AiNews UI/UX Tests', () => {
     // 리스트 뷰로 전환
     await listBtn.click();
     await page.waitForTimeout(300);
+    await expect(listBtn).toHaveAttribute('aria-pressed', 'true');
     
     // 리스트 레이아웃 확인
     const listLayout = page.locator('[class*="space-y"]').first();
