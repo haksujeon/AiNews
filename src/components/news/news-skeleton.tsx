@@ -1,49 +1,32 @@
 "use client";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
+// 실제 카드/리스트와 같은 골격(괘선 + 여백, 테두리 카드 없음)이라 로드 뒤 자리 이동이 적다.
 export function NewsCardSkeleton() {
   return (
-    <Card className="overflow-hidden">
-      <Skeleton className="h-48 w-full" />
-      <CardContent className="p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Skeleton className="h-5 w-16" />
-          <Skeleton className="h-5 w-20" />
-        </div>
-        <Skeleton className="h-6 w-full mb-2" />
-        <Skeleton className="h-6 w-3/4 mb-4" />
-        <Skeleton className="h-4 w-full mb-2" />
-        <Skeleton className="h-4 w-2/3" />
-        <div className="flex items-center justify-between mt-4 pt-4 border-t">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-20" />
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-2.5 border-t border-rule pt-4">
+      <Skeleton className="mb-1 aspect-[16/9] w-full rounded-none" />
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-5 w-full" />
+      <Skeleton className="h-5 w-3/4" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-2/3" />
+    </div>
   );
 }
 
 export function NewsListItemSkeleton() {
   return (
-    <Card className="overflow-hidden">
-      <div className="flex flex-col sm:flex-row">
-        <Skeleton className="sm:w-56 h-48 sm:h-auto flex-shrink-0" />
-        <div className="flex-1 p-5">
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <Skeleton className="h-5 w-16" />
-            <Skeleton className="h-5 w-20" />
-            <Skeleton className="h-5 w-24" />
-          </div>
-          <Skeleton className="h-7 w-full mb-2" />
-          <Skeleton className="h-7 w-3/4 mb-3" />
-          <Skeleton className="h-4 w-full mb-2" />
-          <Skeleton className="h-4 w-2/3 mb-4" />
-          <Skeleton className="h-4 w-24" />
-        </div>
+    <div className="flex items-start gap-4 border-b border-rule py-4 sm:gap-6">
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-5 w-full" />
+        <Skeleton className="h-5 w-3/4" />
+        <Skeleton className="h-4 w-2/3" />
       </div>
-    </Card>
+      <Skeleton className="aspect-[4/3] w-24 shrink-0 rounded-none sm:w-40" />
+    </div>
   );
 }
 
@@ -65,15 +48,15 @@ export function NewsContainerSkeleton({ viewMode = "grid" }: { viewMode?: "grid"
 
       {/* Date group skeleton */}
       <div className="space-y-4">
-        <Skeleton className="h-6 w-32" />
+        <Skeleton className="h-6 w-40" />
         {viewMode === "grid" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <NewsCardSkeleton key={i} />
             ))}
           </div>
         ) : (
-          <div className="space-y-4">
+          <div>
             {Array.from({ length: 5 }).map((_, i) => (
               <NewsListItemSkeleton key={i} />
             ))}

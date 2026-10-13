@@ -210,7 +210,7 @@ export function SendHistoryContainer() {
                         {article.category && (
                           <Badge
                             variant="secondary"
-                            className="text-[10px] shrink-0"
+                            className="text-xs shrink-0"
                           >
                             {getCategoryLabel(article.category, locale)}
                           </Badge>

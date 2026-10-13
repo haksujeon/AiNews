@@ -14,7 +14,7 @@ export default function LocaleNotFound() {
       <Header />
       <main className="flex-1 container mx-auto px-4 py-20 flex flex-col items-center text-center gap-4">
         <FileQuestion className="w-12 h-12 text-muted-foreground" aria-hidden="true" />
-        <h1 className="font-display text-2xl sm:text-3xl font-bold">{t("title")}</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground max-w-md">{t("description")}</p>
         <Button asChild variant="outline" className="mt-2">
           <Link href="/">

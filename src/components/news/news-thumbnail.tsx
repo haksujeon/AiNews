@@ -3,51 +3,40 @@
 import { useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { NewsPlaceholder } from "./news-placeholder";
+import { isRealImage } from "@/lib/news-utils";
 
 interface NewsThumbnailProps {
   src: string | null;
   alt: string;
-  category: string | null;
   sizes: string;
-  /** 이미지/플레이스홀더를 감싸는 박스 클래스(크기 지정) */
+  /** 이미지를 감싸는 박스 클래스. 크기는 aspect-ratio 로 고정한다(예: "aspect-[16/9] w-full"). */
   className?: string;
   imageClassName?: string;
-  children?: React.ReactNode;
 }
 
 /**
- * 카드/목록 썸네일. 원격 이미지가 깨지면(핫링크 차단, 404 등) 카테고리 플레이스홀더로 대체한다.
- * 모달/상세의 히어로 이미지 onError 처리와 같은 목적.
+ * 카드/목록/상세/모달 공용 이미지.
+ * - 이미지가 없거나, 플레이스홀더성 이미지(虎嗅 AI 커버, 量子位 로고)거나, 로드에 실패하면
+ *   아무것도 그리지 않는다(그라데이션 플레이스홀더 없음). 남는 폭은 텍스트가 쓴다.
+ * - aspect-ratio 박스로 자리를 먼저 잡아 이미지 로드 시 레이아웃 이동이 없다.
  */
-export function NewsThumbnail({
-  src,
-  alt,
-  category,
-  sizes,
-  className,
-  imageClassName,
-  children,
-}: NewsThumbnailProps) {
+export function NewsThumbnail({ src, alt, sizes, className, imageClassName }: NewsThumbnailProps) {
   const [failed, setFailed] = useState(false);
 
-  if (!src || failed) {
-    return <NewsPlaceholder category={category} className={className} />;
-  }
+  if (!isRealImage(src) || failed) return null;
 
   return (
-    <div className={cn("overflow-hidden bg-muted/50 relative", className)}>
+    <div className={cn("relative overflow-hidden bg-surface", className)}>
       <Image
         src={src}
         alt={alt}
         fill
-        className={imageClassName}
+        className={cn("object-cover", imageClassName)}
         sizes={sizes}
         referrerPolicy="no-referrer"
         unoptimized
         onError={() => setFailed(true)}
       />
-      {children}
     </div>
   );
 }

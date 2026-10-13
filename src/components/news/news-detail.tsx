@@ -3,324 +3,127 @@
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import {
-  ArrowLeft,
-  Calendar,
-  ExternalLink,
-  Globe,
-  Lightbulb,
-  BookOpen,
-  Clock,
-  List,
-  Minus,
-  Plus,
-} from "lucide-react";
+import { ArrowLeft, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import type { NewsItem } from "@/lib/supabase";
 import {
-  getCountryLabel,
-  formatDate,
   getTitle,
   getSummary,
   getContent,
   getAiInsights,
-  getCategoryStyle,
+  getImageUrl,
   getCategoryLabel,
-  getSentimentStyle,
   getSentimentLabel,
-  getTermExplanation,
+  getSourceName,
 } from "@/lib/news-utils";
 import { NewsCard } from "./news-card";
-import { NewsPlaceholder } from "./news-placeholder";
+import { NewsThumbnail } from "./news-thumbnail";
+import { ArticleKicker } from "./article-kicker";
+import { ArticleBody, ArticleByline, KeyTerms } from "./article-body";
 
 interface NewsDetailProps {
   news: NewsItem;
   relatedNews: NewsItem[];
 }
 
-/** 본문 길이로 대략의 읽기 시간(분)을 계산한다. 문구는 detail.readTime 메시지로 만든다. */
-function estimateReadMinutes(text: string, locale: string): number {
-  const cpm = locale === "en" ? 1200 : 600;
-  return Math.max(1, Math.round(text.length / cpm));
-}
-
+/**
+ * 기사 전체 페이지(직접 접속/새로고침). 모달과 같은 렌더 컴포넌트(ArticleByline/ArticleBody/KeyTerms)를 쓴다.
+ * 레이아웃: 약 40rem 읽기 칼럼 + 오른쪽 300px 사이드(목차·핵심 용어·분류).
+ */
 export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
   const locale = useLocale();
   const t = useTranslations("detail");
   const [relatedCount, setRelatedCount] = useState(3);
 
-  // 원문(content_cn) 전문은 재게시하지 않는다. 번역 본문(ko/en)만 보여주고,
-  // 원문은 source_url 외부 링크로 안내한다.
   const title = getTitle(news, locale);
   const summary = getSummary(news, locale);
   const content = getContent(news, locale);
   const aiInsights = getAiInsights(news, locale);
-
-  const imageUrl = news.thumbnail_url || news.og_image_url;
-  const catStyle = getCategoryStyle(news.category);
-  const sentStyle = getSentimentStyle(news.sentiment);
-  const readTime = content
-    ? t("readTime", { minutes: estimateReadMinutes(content, locale) })
-    : null;
+  const source = getSourceName(news.source_name);
+  const hasKeyTerms = !!(news.key_terms && news.key_terms.length > 0);
 
   const tocItems = [
     { id: "summary", label: t("tocSummary"), show: !!summary },
-    { id: "content", label: t("newsContent"), show: !!content },
     { id: "insights", label: t("aiInsights"), show: !!aiInsights },
-    { id: "keywords", label: t("tocKeyTerms"), show: !!(news.key_terms && news.key_terms.length > 0) },
+    { id: "content", label: t("translatedBody"), show: !!content },
+    { id: "keywords", label: t("tocKeyTerms"), show: hasKeyTerms },
   ].filter((item) => item.show);
 
+  const facts = [
+    { label: t("categoryLabel"), value: news.category ? getCategoryLabel(news.category, locale) : "" },
+    { label: t("toneLabel"), value: getSentimentLabel(news.sentiment, locale) },
+    { label: t("sourceLabel"), value: source, lang: source && source !== news.source_name ? "zh-CN" : undefined },
+  ].filter((f) => f.value);
+
   return (
-    <article className="max-w-6xl mx-auto">
-      {/* Top bar */}
-      <div className="mb-6 flex items-center justify-between gap-2">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            {t("backToList")}
-          </Link>
-        </Button>
+    <article className="mx-auto max-w-6xl">
+      <Link
+        href="/"
+        className="mb-8 inline-flex items-center gap-1.5 rounded-sm text-[13px] text-ink-3 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        {t("backToList")}
+      </Link>
 
-        {/* 원문 보기 = 원문 매체로 가는 외부 링크 (예전의 '중문 원문' 토글 대체) */}
-        {news.source_url && (
-          <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
-            <a href={news.source_url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="w-3.5 h-3.5 mr-1" />
-              {t("viewOriginal")}
-            </a>
-          </Button>
-        )}
-      </div>
+      <div className="grid gap-12 lg:grid-cols-[minmax(0,42rem)_300px] lg:justify-between">
+        {/* 읽기 칼럼 */}
+        <div className="min-w-0">
+          <ArticleKicker category={news.category} sourceName={news.source_name} locale={locale} className="mb-3" />
+          <h1 className="mb-6 text-[28px] font-bold leading-[1.25] tracking-[-0.022em] text-ink sm:text-[34px] lg:text-[40px]">
+            {title}
+          </h1>
+          <ArticleByline news={news} locale={locale} className="mb-8" />
 
-      {/* Hero image */}
-      {imageUrl ? (
-        <div className="mb-8 rounded-xl overflow-hidden relative bg-muted">
-          <img
-            src={imageUrl}
+          <NewsThumbnail
+            src={getImageUrl(news)}
             alt={title}
-            referrerPolicy="no-referrer"
-            className="w-full h-auto max-h-[400px] object-cover"
-            onError={(e) => {
-              const img = e.target as HTMLImageElement;
-              img.style.display = "none";
-              const parent = img.parentElement!;
-              if (!parent.querySelector(".img-fallback")) {
-                const fallback = document.createElement("div");
-                fallback.className = "img-fallback flex items-center justify-center h-48 bg-muted text-muted-foreground";
-                fallback.textContent = "AI NEWS";
-                parent.appendChild(fallback);
-              }
-            }}
+            className="mb-8 aspect-[16/9] w-full"
+            sizes="(max-width: 1024px) 100vw, 672px"
           />
-        </div>
-      ) : (
-        <div className="mb-8 rounded-xl overflow-hidden">
-          <NewsPlaceholder category={news.category} className="h-64" />
-        </div>
-      )}
 
-      {/* Badges */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        {news.country && (
-          <Badge variant="secondary">
-            <Globe className="w-3 h-3 mr-1" />
-            {getCountryLabel(news.country)}
-          </Badge>
-        )}
-        {news.category && (
-          <Badge
-            variant="outline"
-            className={`${catStyle.text} ${catStyle.border}`}
-          >
-            {getCategoryLabel(news.category, locale)}
-          </Badge>
-        )}
-        {news.sentiment && (
-          <Badge
-            variant="outline"
-            className={`${sentStyle.text} ${sentStyle.border}`}
-          >
-            <span className={`w-2 h-2 rounded-full ${sentStyle.dot} mr-1.5`} />
-            {getSentimentLabel(news.sentiment, locale)}
-          </Badge>
-        )}
-      </div>
-
-      {/* Title */}
-      <h1 className="font-display text-2xl sm:text-4xl lg:text-5xl font-bold mb-4 leading-tight">{title}</h1>
-
-      {/* Meta: date, source, read time */}
-      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-6">
-        {news.news_date && (
-          <span className="flex items-center gap-1">
-            <Calendar className="w-4 h-4" />
-            {formatDate(news.news_date, locale)}
-          </span>
-        )}
-        {news.source_name && (
-          <span className="flex items-center gap-1">
-            <BookOpen className="w-4 h-4" />
-            {news.source_name}
-          </span>
-        )}
-        {readTime && (
-          <span className="flex items-center gap-1">
-            <Clock className="w-4 h-4" />
-            {readTime}
-          </span>
-        )}
-      </div>
-
-      <Separator className="mb-8" />
-
-      {/* 2-column layout: main content + sidebar */}
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Left: Main content */}
-        <div className="flex-1 min-w-0">
-          {/* AI Summary */}
-          {summary && (
-            <section id="summary" className="mb-6 scroll-mt-20">
-              <Card className="border-l-4 border-l-blue-500 bg-blue-500/5 border-border/30">
-                <CardHeader className="pb-2 pt-4">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Lightbulb className="w-4 h-4 text-blue-500" />
-                    {t("aiSummary")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pb-4">
-                  <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p>
-                </CardContent>
-              </Card>
-            </section>
-          )}
-
-          {/* News Content */}
-          {content && (
-            <section id="content" className="mb-6 scroll-mt-20">
-              <Card className="border-l-4 border-l-emerald-500 bg-emerald-500/5 border-border/30">
-                <CardHeader className="pb-2 pt-4">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-emerald-500" />
-                    {t("newsContent")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pb-4">
-                  <div className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">{content}</div>
-                </CardContent>
-              </Card>
-            </section>
-          )}
-
-          {/* Source link */}
-          {news.source_url && (
-            <div className="mb-8 space-y-2">
-              {!content && (
-                <p className="text-sm text-muted-foreground">
-                  {t("readFullAtSource", { source: news.source_name || t("sourceFallback") })}
-                </p>
-              )}
-              <Button asChild>
-                <a href={news.source_url} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  {t("viewOriginal")}
-                </a>
-              </Button>
-            </div>
-          )}
+          <ArticleBody news={news} locale={locale} headingTag="h2" />
         </div>
 
-        {/* Right: Sticky sidebar */}
-        <aside className="lg:w-80 flex-shrink-0">
-          <div className="lg:sticky lg:top-20 space-y-5">
-            {/* TOC */}
-            {tocItems.length > 1 && (
-              <Card>
-                <CardHeader className="pb-2 pt-3">
-                  <CardTitle className="text-sm flex items-center gap-1.5">
-                    <List className="w-4 h-4" />
-                    {t("toc")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pb-3">
-                  <nav className="space-y-1">
-                    {tocItems.map((item) => (
-                      <a
-                        key={item.id}
-                        href={`#${item.id}`}
-                        className="block text-sm text-muted-foreground hover:text-primary transition-colors py-1 pl-3 border-l-2 border-transparent hover:border-primary"
-                      >
-                        {item.label}
-                      </a>
-                    ))}
-                  </nav>
-                </CardContent>
-              </Card>
-            )}
+        {/* 사이드 */}
+        <aside className="lg:sticky lg:top-20 lg:self-start space-y-10">
+          {tocItems.length > 1 && (
+            <nav aria-label={t("toc")} className="hidden lg:block">
+              <h2 className="border-b border-rule-strong pb-2 text-sm font-bold text-ink">{t("toc")}</h2>
+              <ul className="mt-2 space-y-0.5">
+                {tocItems.map((item) => (
+                  <li key={item.id}>
+                    <a
+                      href={`#${item.id}`}
+                      className="block rounded-sm py-1.5 text-sm text-ink-2 hover:text-ink hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
 
-            {/* AI Insights */}
-            {aiInsights && (
-              <section id="insights" className="scroll-mt-20">
-                <Card className="border-l-4 border-l-amber-500 bg-amber-500/5 border-border/30">
-                  <CardHeader className="pb-2 pt-4">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Lightbulb className="w-4 h-4 text-amber-500" />
-                      {t("aiInsights")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pb-4">
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      {aiInsights}
-                    </p>
-                  </CardContent>
-                </Card>
-              </section>
-            )}
+          <KeyTerms terms={news.key_terms} locale={locale} headingTag="h2" />
 
-            {/* Key Terms */}
-            {news.key_terms && news.key_terms.length > 0 && (
-              <section id="keywords" className="scroll-mt-20">
-                <Card className="border-l-4 border-l-violet-500 bg-violet-500/5 border-border/30">
-                  <CardHeader className="pb-2 pt-4">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-violet-500" />
-                      {t("keyTerms")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pb-4">
-                    <div className="space-y-3">
-                      {news.key_terms.map((term, index) => (
-                        <div key={index} className="flex gap-3 items-start">
-                          <div className="shrink-0 mt-0.5">
-                            <Badge variant="secondary" className="text-xs">
-                              {term.term}
-                            </Badge>
-                            {term.pinyin && (
-                              <p className="text-[10px] text-muted-foreground/60 mt-0.5 pl-0.5">{term.pinyin}</p>
-                            )}
-                          </div>
-                          <p className="text-xs leading-relaxed text-muted-foreground">
-                            {getTermExplanation(term, locale)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </section>
-            )}
-          </div>
+          {facts.length > 0 && (
+            <dl className="space-y-3 text-sm">
+              {facts.map((f) => (
+                <div key={f.label}>
+                  <dt className="text-xs text-ink-3">{f.label}</dt>
+                  <dd className="mt-0.5 text-ink" lang={f.lang}>{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </aside>
       </div>
 
       {/* Related news */}
       {relatedNews.length > 0 && (
-        <>
-          <Separator className="my-8" />
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold">{t("relatedNews")}</h2>
+        <section className="mt-16">
+          <div className="mb-6 flex items-center justify-between border-b border-rule-strong pb-2">
+            <h2 className="text-lg font-bold text-ink">{t("relatedNews")}</h2>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -330,9 +133,9 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
                 onClick={() => setRelatedCount((c) => Math.max(1, c - 1))}
                 aria-label={t("fewerRelated")}
               >
-                <Minus className="w-4 h-4" aria-hidden="true" />
+                <Minus className="h-4 w-4" aria-hidden="true" />
               </Button>
-              <span className="text-sm text-muted-foreground w-6 text-center" aria-live="polite">{relatedCount}</span>
+              <span className="w-6 text-center text-sm text-ink-2" aria-live="polite">{relatedCount}</span>
               <Button
                 variant="outline"
                 size="icon"
@@ -341,21 +144,26 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
                 onClick={() => setRelatedCount((c) => Math.min(4, relatedNews.length, c + 1))}
                 aria-label={t("moreRelated")}
               >
-                <Plus className="w-4 h-4" aria-hidden="true" />
+                <Plus className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </div>
-          <div className={`grid gap-6 ${
-            relatedCount === 1 ? "grid-cols-1" :
-            relatedCount === 2 ? "grid-cols-1 md:grid-cols-2" :
-            relatedCount === 3 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" :
-            "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
-          }`}>
+          <div
+            className={`grid gap-x-8 gap-y-6 ${
+              relatedCount === 1
+                ? "grid-cols-1"
+                : relatedCount === 2
+                  ? "grid-cols-1 md:grid-cols-2"
+                  : relatedCount === 3
+                    ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+            }`}
+          >
             {relatedNews.slice(0, relatedCount).map((item) => (
               <NewsCard key={item.id} item={item} />
             ))}
           </div>
-        </>
+        </section>
       )}
     </article>
   );

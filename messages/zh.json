@@ -1,15 +1,15 @@
 {
   "common": {
-    "appName": "AI NEWS",
+    "appName": "AI 新闻",
     "loading": "加载中...",
     "search": "搜索",
     "statistics": "统计",
-    "footerText": "AI新闻数据通过自动化系统收集和翻译。",
-    "admin": "管理",
-    "live": "实时",
+    "footerText": "自动收集中国媒体报道并进行翻译与摘要。摘要与洞察由AI撰写，并附原文链接。",
     "toggleTheme": "切换深色/浅色主题",
     "changeLanguage": "切换语言",
-    "retry": "重试"
+    "retry": "重试",
+    "brandTagline": "中国 AI 简报",
+    "sourcesLabel": "来源"
   },
   "filter": {
     "searchPlaceholder": "按标题或内容搜索...",
@@ -53,7 +53,12 @@
     "readTime": "{minutes}分钟阅读",
     "fewerRelated": "减少相关新闻",
     "moreRelated": "增加相关新闻",
-    "imageFallback": "AI NEWS"
+    "imageFallback": "AI NEWS",
+    "aiInsightDisclosure": "以上为AI根据原文生成的分析，请结合原文判断。",
+    "translatedBody": "正文翻译",
+    "categoryLabel": "分类",
+    "toneLabel": "论调",
+    "sourceLabel": "来源"
   },
   "admin": {
     "login": "管理员登录",
@@ -148,6 +153,7 @@
     "allLoaded": "已加载全部 {total} 篇文章",
     "loadError": "无法加载新闻。",
     "loadErrorHint": "请检查网络后重试。",
-    "loadMoreError": "无法加载更多文章。"
+    "loadMoreError": "无法加载更多文章。",
+    "groupCount": "{count} 篇"
   }
 }

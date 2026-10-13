@@ -2,8 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Search, CalendarDays, Loader2, AlertTriangle, RotateCw } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Search, Loader2, AlertTriangle, RotateCw } from "lucide-react";
 import type { NewsItem } from "@/lib/news-types";
 import { NEWS_PAGE_SIZE } from "@/lib/news-types";
 import { fetchNewsPageClient, isAbortError } from "@/lib/supabase-client";
@@ -25,12 +24,6 @@ interface NewsContainerProps {
   facets?: { countries: string[]; categories: string[] };
   isLoading?: boolean;
 }
-
-const springTransition = {
-  type: "spring" as const,
-  stiffness: 100,
-  damping: 15,
-};
 
 // 기사 상세는 카드/리스트 항목의 링크(/news/[id])로 연다.
 // 소프트 이동이면 @modal/(.)news/[id] 가 모달로 가로채고, 직접 접속이면 전체 페이지가 뜬다.
@@ -248,140 +241,74 @@ export function NewsContainer({
         onReset={handleReset}
       />
 
-      <AnimatePresence mode="wait">
-        {filtering ? (
-          <NewsContainerSkeleton viewMode={viewMode} />
-        ) : listError ? (
-          <motion.div
-            key="error"
-            role="alert"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="text-center py-20"
-            data-testid="news-list-error"
-          >
-            <AlertTriangle className="w-12 h-12 text-destructive/80 mx-auto mb-4" aria-hidden="true" />
-            <h3 className="text-lg font-semibold mb-2">{t("loadError")}</h3>
-            <p className="text-sm text-muted-foreground mb-6">{t("loadErrorHint")}</p>
-            <Button variant="outline" onClick={retryList}>
-              <RotateCw className="w-4 h-4 mr-2" aria-hidden="true" />
-              {tc("retry")}
-            </Button>
-          </motion.div>
-        ) : allNews.length === 0 ? (
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="text-center py-20"
-          >
-            <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-muted-foreground mb-2">
-              {t("noResults")}
-            </h3>
-            <p className="text-sm text-muted-foreground">{t("noResultsHint")}</p>
-          </motion.div>
-        ) : (
-          <motion.div
-            key={`content-${filterKey}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="space-y-8"
-          >
-            {dateGroups.map((group) => (
-              <motion.section
-                key={group.date}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={springTransition}
-                className="space-y-4"
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card/40 border border-border/30 backdrop-blur-sm">
-                    <CalendarDays className="w-3.5 h-3.5 text-primary/60" />
-                    <h3 className="text-xs font-medium text-muted-foreground">
-                      {group.date === "unknown"
-                        ? t("unknownDate")
-                        : formatDateGroup(group.date, locale)}
-                    </h3>
-                    <span className="text-[10px] text-muted-foreground/50">
-                      {group.items.length}
-                    </span>
-                  </div>
-                  <div className="flex-1 h-px bg-gradient-to-r from-border/30 to-transparent" />
-                </div>
+      {/* 진입 애니메이션 없음: 뉴스는 즉시 보여야 한다(스크롤마다 깜박이던 whileInView 제거). */}
+      {filtering ? (
+        <NewsContainerSkeleton viewMode={viewMode} />
+      ) : listError ? (
+        <div role="alert" className="py-20 text-center" data-testid="news-list-error">
+          <AlertTriangle className="mx-auto mb-4 h-10 w-10 text-destructive" aria-hidden="true" />
+          <h3 className="mb-2 text-lg font-semibold text-ink">{t("loadError")}</h3>
+          <p className="mb-6 text-sm text-ink-2">{t("loadErrorHint")}</p>
+          <Button variant="outline" onClick={retryList}>
+            <RotateCw className="mr-2 h-4 w-4" aria-hidden="true" />
+            {tc("retry")}
+          </Button>
+        </div>
+      ) : allNews.length === 0 ? (
+        <div className="py-20 text-center">
+          <Search className="mx-auto mb-4 h-10 w-10 text-ink-3" aria-hidden="true" />
+          <h3 className="mb-2 text-lg font-semibold text-ink">{t("noResults")}</h3>
+          <p className="text-sm text-ink-2">{t("noResultsHint")}</p>
+        </div>
+      ) : (
+        <div key={`content-${filterKey}`} className="space-y-12">
+          {dateGroups.map((group) => (
+            <section key={group.date} aria-labelledby={`date-${group.date}`}>
+              <div className="mb-2 flex items-baseline justify-between gap-4 border-b-2 border-rule-strong pb-2">
+                <h3 id={`date-${group.date}`} className="text-[15px] font-bold text-ink">
+                  {group.date === "unknown"
+                    ? t("unknownDate")
+                    : formatDateGroup(group.date, locale)}
+                </h3>
+                <span className="text-xs text-ink-3">
+                  {t("groupCount", { count: group.items.length })}
+                </span>
+              </div>
 
-                <AnimatePresence mode="wait">
-                  {viewMode === "grid" ? (
-                    <motion.div
-                      key="grid"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-                    >
-                      {group.items.map((item) => (
-                        <motion.div
-                          key={item.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          whileInView={{ opacity: 1, y: 0 }}
-                          viewport={{ once: true }}
-                          transition={springTransition}
-                        >
-                          <NewsCard item={item} />
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="list"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="space-y-4"
-                    >
-                      {group.items.map((item) => (
-                        <motion.div
-                          key={item.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          whileInView={{ opacity: 1, x: 0 }}
-                          viewport={{ once: true }}
-                          transition={springTransition}
-                        >
-                          <NewsListItem item={item} />
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.section>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+              {viewMode === "grid" ? (
+                <div className="grid grid-cols-1 gap-x-8 gap-y-8 pt-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {group.items.map((item) => (
+                    <NewsCard key={item.id} item={item} />
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  {group.items.map((item) => (
+                    <NewsListItem key={item.id} item={item} />
+                  ))}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
 
       {/* Infinite scroll sentinel */}
       <div ref={sentinelRef} className="h-1" />
       {loadingMore && (
-        <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
-          <Loader2 className="w-5 h-5 animate-spin" />
+        <div className="flex items-center justify-center gap-2 py-6 text-ink-3">
+          <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
           <span className="text-sm">{t("loadingMore")}</span>
         </div>
       )}
       {moreError && !listError && (
         <div
           role="alert"
-          className="flex flex-col sm:flex-row items-center justify-center gap-3 py-6 text-sm text-muted-foreground"
+          className="flex flex-col sm:flex-row items-center justify-center gap-3 py-6 text-sm text-ink-2"
           data-testid="news-more-error"
         >
           <span className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-destructive/80" aria-hidden="true" />
+            <AlertTriangle className="w-4 h-4 text-destructive" aria-hidden="true" />
             {t("loadMoreError")}
           </span>
           <Button variant="outline" size="sm" onClick={retryMore}>
@@ -391,7 +318,7 @@ export function NewsContainer({
         </div>
       )}
       {!hasMore && !listError && allNews.length > NEWS_PAGE_SIZE && (
-        <p className="text-center text-xs text-muted-foreground/50 py-4">
+        <p className="text-center text-xs text-ink-3 py-4">
           {t("allLoaded", { total })}
         </p>
       )}
