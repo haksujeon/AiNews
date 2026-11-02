@@ -119,8 +119,43 @@ export interface HanClassification {
   replaced: [string, string][];
 }
 
+/** 낱말 끝 받침 종류: 'none'(모음·라틴·숫자로 끝남) / 'rieul'(ㄹ) / 'other' */
+function finalOf(word: string): "none" | "rieul" | "other" {
+  const code = word.charCodeAt(word.length - 1);
+  if (code < 0xac00 || code > 0xd7a3) return "none"; // SMIC·TSMC 처럼 라틴으로 끝나면 모음으로 본다
+  const jong = (code - 0xac00) % 28;
+  return jong === 0 ? "none" : jong === 8 ? "rieul" : "other";
+}
+
+const PARTICLES: [string, string][] = [
+  ["으로", "로"], // [받침 있음, 받침 없음] — ㄹ 받침은 "로"
+  ["은", "는"],
+  ["이", "가"],
+  ["을", "를"],
+  ["과", "와"],
+];
+const HANGUL_SYLLABLE = /[가-힣]/;
+
 /**
- * 괄호 밖 한자 덩어리 중 사전에 정확히 일치하는 4자 이하 덩어리만 바꾼다.
+ * 치환한 낱말 바로 뒤의 조사를 새 낱말 받침에 맞춘다 (科大讯飞가 → 아이플라이텍이, 千问는 → 치엔원은).
+ * 조사 뒤가 한글 음절이면(가격·이다 등) 조사가 아니므로 건드리지 않는다.
+ */
+function agreeParticle(word: string, rest: string): { from: string; to: string } | null {
+  const fin = finalOf(word);
+  for (const [withFinal, noFinal] of PARTICLES) {
+    for (const p of [withFinal, noFinal]) {
+      if (!rest.startsWith(p)) continue;
+      const after = rest.charAt(p.length);
+      if (after && HANGUL_SYLLABLE.test(after)) continue;
+      const to = withFinal === "으로" ? (fin === "other" ? "으로" : "로") : fin === "none" ? noFinal : withFinal;
+      return to === p ? null : { from: p, to };
+    }
+  }
+  return null;
+}
+
+/**
+ * 괄호 밖 한자 덩어리 중 사전에 정확히 일치하는 4자 이하 덩어리만 바꾼다. 바로 뒤 조사는 새 낱말 받침에 맞춘다.
  * (덩어리 일부만 맞는 경우 — 华为云 — 는 바꾸지 않는다: 잘못된 부분 치환을 막기 위해)
  */
 export function applyHanGlossary(text: string, glossary: ReadonlyMap<string, string>): { text: string; replaced: [string, string][] } {
@@ -133,6 +168,12 @@ export function applyHanGlossary(text: string, glossary: ReadonlyMap<string, str
     if (!ko) continue;
     out += text.slice(last, k.index) + ko;
     last = k.index + k.text.length;
+    // 조사 맞춤: 조사 글자(최대 2자)만 바꾸고 그만큼만 건너뛴다 (뒤에 오는 한자 덩어리 위치는 그대로)
+    const fix = agreeParticle(ko, text.slice(last, last + 3));
+    if (fix) {
+      out += fix.to;
+      last += fix.from.length;
+    }
     replaced.push([k.text, ko]);
   }
   return { text: out + text.slice(last), replaced };

@@ -155,7 +155,22 @@ async function main() {
     stage2_replacements: [...s2Repl.entries()].sort((a, b) => b[1] - a[1]),
     top_tokens: [...tokenFreq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 40),
     samples: {
-      stage2: work.filter((w) => w.stage === 2).slice(0, samples).map((w) => ({ id: w.id, field: w.field, replaced: w.replaced })),
+      // 사람이 눈으로 확인할 수 있게 첫 치환 앞뒤 12자 (조사 맞춤 포함)
+      stage2: work
+        .filter((w) => w.stage === 2)
+        .slice(0, samples)
+        .map((w) => {
+          const [cn, ko] = w.replaced[0] ?? ["", ""];
+          const i = Math.max(0, w.old.indexOf(cn));
+          const j = Math.max(0, w.fixed.indexOf(ko, Math.max(0, i - 12)));
+          return {
+            id: w.id,
+            field: w.field,
+            replaced: w.replaced,
+            before: w.old.slice(Math.max(0, i - 12), i + cn.length + 12),
+            after: w.fixed.slice(Math.max(0, j - 12), j + ko.length + 12),
+          };
+        }),
       stage3: work
         .filter((w) => w.stage === 3)
         .slice(0, samples)

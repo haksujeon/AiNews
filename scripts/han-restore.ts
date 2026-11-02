@@ -1,5 +1,5 @@
 /**
- * han-backfill 되돌리기. 변경 기록(JSONL)의 status=updated 줄을 거꾸로 적용한다.
+ * han-backfill 되돌리기. 변경 기록(JSONL)의 status=updated·pending 줄을 거꾸로 적용한다.
  *
  *   npx tsx scripts/han-restore.ts ~/backups/ainews/han-backfill-<시각>.jsonl          # 미리보기 (기본)
  *   npx tsx scripts/han-restore.ts ~/backups/ainews/han-backfill-<시각>.jsonl --apply
@@ -21,7 +21,16 @@ async function main() {
     .split("\n")
     .filter(Boolean)
     .map((l) => JSON.parse(l) as { id: string; field: string; status: string; old: string | null; new: string });
-  const updated = lines.filter((l) => l.status === "updated");
+  // pending = UPDATE 직전에 적은 줄. 갱신 뒤 updated 를 적기 전에 멈췄을 수 있으므로 함께 되돌린다
+  // (지금 값이 new 와 같을 때만 바꾸므로 실제로 갱신되지 않은 행은 conflict 로 남을 뿐 안전하다)
+  const seen = new Set<string>();
+  const updated = lines.filter((l) => {
+    if (l.status !== "updated" && l.status !== "pending") return false;
+    const k = `${l.id}|${l.field}|${l.new}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
   const counts = { candidates: updated.length, restored: 0, conflict: 0 };
   for (const l of updated.reverse()) {
     if (!FIELDS.has(l.field)) throw new Error(`허용하지 않는 필드: ${l.field}`);
