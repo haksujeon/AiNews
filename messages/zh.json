@@ -411,5 +411,19 @@
     "emptyTitle": "暂无已发布的周报",
     "emptyBody": "周报每周一发布上一周的总结。在此之前，请查看每日简报。",
     "backDaily": "查看每日简报"
+  },
+  "seo": {
+    "feedAllTitle": "AI NEWS — 最新资讯",
+    "feedAllDescription": "中国及全球 AI 新闻的标题与摘要，全文请阅读原始媒体。",
+    "feedBriefingTitle": "AI NEWS — 中国AI简报",
+    "feedBriefingDescription": "每日发布的中国AI简报与每周报告。",
+    "feedCategoryTitle": "AI NEWS — {category}",
+    "feedCategoryDescription": "{category}领域最新资讯的标题与摘要。",
+    "weeklyItemTitle": "{week}周报：{headline}",
+    "rssLinkTitle": "AI NEWS 最新资讯 RSS",
+    "breadcrumbHome": "首页",
+    "ogBriefingKicker": "中国AI简报",
+    "ogBriefingFallback": "一份简报，读懂当天的中国AI",
+    "ogAlt": "AI NEWS 分享卡片"
   }
 }

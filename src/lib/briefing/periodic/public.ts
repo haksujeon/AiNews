@@ -148,3 +148,25 @@ export async function getPublishedWeeklyLocales(isoWeek?: string): Promise<{ wee
   );
   return rows[0] ? { week: rows[0].week, start: rows[0].d, locales: rows[0].locales } : null;
 }
+
+export interface WeeklySummary {
+  iso_week: string;
+  locale: BriefingLocale;
+  published_at: string | null;
+  headline: string;
+  dek: string;
+}
+
+/** 발행된 주간 판 목록(모든 언어, 최신순) — sitemap·브리핑 RSS 가 쓴다. 조건은 getPublishedWeekly 와 같다 */
+export async function listPublishedWeeklies(limit = 1000): Promise<WeeklySummary[]> {
+  const { rows } = await pool.query(
+    `SELECT content->'meta'->>'iso_week' AS iso_week, locale,
+            COALESCE(content->>'headline', '') AS headline, COALESCE(content->>'dek', '') AS dek,
+            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at
+       FROM daily_briefings
+      WHERE status = 'published' AND edition_type = 'weekly' AND content->'meta'->>'iso_week' IS NOT NULL
+      ORDER BY edition_date DESC, locale LIMIT $1`,
+    [limit]
+  );
+  return rows as WeeklySummary[];
+}
