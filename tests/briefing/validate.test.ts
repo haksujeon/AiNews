@@ -215,6 +215,17 @@ test("리드·헤드라인: 근거 기사에 없는 고유명사는 unsupported_
   assert.ok(!run(load()).report.fatal.some((f) => f.path === "lede"));
 });
 
+test("리드 숫자는 lede_refs + 주요 기사 refs 에서 찾는다 (v13 '2점' 으로 판 전체 failed 회귀)", () => {
+  const c = load();
+  c.lede = "메타가 Muse Wonder를 공개했고 지수 점수에서 Opus 5.5에 2점 뒤졌다.";
+  c.lede_refs = ["A41"]; // '2점' 은 주요 기사 2번의 A24 에만 있다
+  const { report } = run(c);
+  assert.ok(!report.fatal.some((f) => f.path === "lede"), JSON.stringify(report.fatal.filter((f) => f.path === "lede")));
+  // 주요 기사 refs 에도 없는 숫자는 여전히 치명
+  c.lede = "메타가 Muse Wonder를 공개했고 지수 점수에서 Opus 5.5에 7점 뒤졌다.";
+  assert.ok(run(c).report.fatal.some((f) => f.path === "lede" && /7점/.test(f.detail)));
+});
+
 test("번역: zh 는 숫자를 그대로(억→亿, 만→万), 자릿수 환산은 위반", () => {
   const ko = load();
   ko.lede = "무문신궁이 23억 위안을 조달했고 사용자는 5억 3,700만 명이다.";

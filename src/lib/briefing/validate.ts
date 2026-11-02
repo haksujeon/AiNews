@@ -139,13 +139,18 @@ interface Unit {
   refs: string[];
   /** headline 은 자체 refs 가 없어 본문 전체 refs 로 숫자만 검사한다 (ref 위반은 해당 항목에서 잡힘) */
   numbersOnly?: boolean;
+  /** 숫자 대조에 쓸 refs (없으면 refs). 리드는 주요 기사 요약이므로 lede_refs + 주요 기사 refs 로 대조한다 */
+  numberRefs?: string[];
 }
 
 function collectUnits(c: BriefingContent): Unit[] {
   const allRefs = [...new Set(citedRefs(c))];
+  // 2026-10-13 v13: 리드가 주요 기사(메타)의 "2점" 을 썼는데 lede_refs 에 그 기사가 없어 판 전체가 failed 가 됐다.
+  // 리드의 숫자는 lede_refs 와 주요 기사 refs 안에서 찾는다 (실체 근거 검사는 여전히 lede_refs 기준).
+  const ledeNumberRefs = [...new Set([...c.lede_refs, ...c.top_stories.flatMap((s) => s.refs)])];
   const units: Unit[] = [
     { path: "headline", item: "headline", text: c.headline, refs: allRefs, numbersOnly: true },
-    { path: "lede", item: "lede", text: c.lede, refs: c.lede_refs },
+    { path: "lede", item: "lede", text: c.lede, refs: c.lede_refs, numberRefs: ledeNumberRefs },
   ];
   c.top_stories.forEach((s, i) => {
     for (const f of ["title", "what", "why"] as const) {
@@ -344,7 +349,7 @@ export function validateKo(
       else if (ctx.hidden.has(r) || excludedIds.has(r))
         fatal.push({ level: "fatal", rule: "excluded_or_hidden_ref", path: u.path, detail: `${r} 는 ${ctx.hidden.has(r) ? "숨긴" : "제외한"} 기사` });
     }
-    const cited = norm(u.refs.map((r) => ctx.sourceText.get(r) ?? "").join(" "));
+    const cited = norm((u.numberRefs ?? u.refs).map((r) => ctx.sourceText.get(r) ?? "").join(" "));
     for (const m of u.text.match(NUM_RE) ?? []) {
       numbersChecked++;
       const n = norm(m).replace(/[.]+$/, "");
