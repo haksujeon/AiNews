@@ -78,6 +78,7 @@ export function NewsFilter({
   onReset,
 }: NewsFilterProps) {
   const t = useTranslations("filter");
+  const tc = useTranslations("common");
   const locale = useLocale();
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -290,7 +291,7 @@ export function NewsFilter({
               )}
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-[300px]">
+          <SheetContent side="left" className="w-[300px]" closeLabel={tc("close")}>
             <SheetHeader>
               <SheetTitle>{t("filters") || "Filters"}</SheetTitle>
             </SheetHeader>
