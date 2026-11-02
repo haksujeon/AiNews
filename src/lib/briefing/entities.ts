@@ -73,6 +73,18 @@ export const ENTITIES: Entity[] = [
 // 기존 tesla 줄을 고치지 않고 덧붙인다(다른 작업과 충돌을 줄이려고).
 ENTITIES.find((e) => e.key === "tesla")?.aliases.push(/\bOptimus\b/, "옵티머스");
 
+// 편집 QA(2026-11-02) 보강 — 덧붙이기만 한다(다른 작업과 충돌을 줄이려고).
+//  - 알파벳(구글 모회사): 10-30 lede "알파벳 시가총액 증발" 이 근거 검사를 빠져나갔다
+//  - 이름표에 없던 중국 기업: 중국 주체 판정·refs 관련성에 쓰인다. 다른 낱말과 겹치는 단독 표기("지위안")는 쓰지 않는다
+ENTITIES.find((e) => e.key === "google")?.aliases.push("알파벳", /\bAlphabet\b/);
+ENTITIES.push(
+  { key: "metax", chinese: true, tier: 0.5, aliases: ["沐曦", "MetaX", "목시"] },
+  { key: "baai", chinese: true, tier: 0.5, aliases: ["智源研究院", "北京智源", /\bBAAI\b/, "지위안연구원", "지위안 연구원"] },
+  { key: "iluvatar", chinese: true, tier: 0.5, aliases: ["天数智芯", "Iluvatar", "톈수즈신"] },
+  { key: "moore_threads", chinese: true, tier: 0.5, aliases: ["摩尔线程", "Moore Threads", "모어스레드", "무어스레드"] },
+  { key: "xunce", chinese: true, tier: 0.5, aliases: ["迅策", "쉰처"] }
+);
+
 function aliasMatches(alias: string | RegExp, text: string): boolean {
   if (typeof alias === "string") return text.includes(alias);
   return alias.test(text);

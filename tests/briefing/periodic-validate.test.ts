@@ -38,25 +38,26 @@ function load(kind: "weekly" | "monthly") {
 }
 const pick = (list: { rule: string; path: string }[]) => list.map((i) => `${i.rule}@${i.path}`).sort();
 
-test("주간 실제 출력 회귀: 치명 2 (china_lens 근거 밖 기업) + 경고 5 (프로토타입 4 + 엄격한 제목 40/36)", () => {
+test("주간 실제 출력 회귀: 치명 5 (china_lens 근거 밖 기업 2 + 2026-11-02 부터 치명인 방향 충돌·한자·제목 40/36) + 경고 2", () => {
   const { ctx, content, issues } = load("weekly");
   const r = validateWeekly(content, ctx, issues);
-  assert.deepEqual(pick(r.fatal), ["unsupported_entity@china_lens", "unsupported_entity@china_lens"]);
-  assert.deepEqual(r.fatal.map((f) => f.detail).sort(), ["anthropic", "google"]);
-  assert.deepEqual(pick(r.warn), [
+  assert.deepEqual(pick(r.fatal), [
     "direction_conflict@big_picture[2]",
     "han_in_ko@big_picture[1]",
     "headline_length@headline",
-    "metric_relevance@big_picture[3]",
-    "metric_relevance@china_lens",
+    "unsupported_entity@china_lens",
+    "unsupported_entity@china_lens",
   ]);
+  assert.deepEqual(r.fatal.filter((f) => f.rule === "unsupported_entity").map((f) => f.detail).sort(), ["anthropic", "google"]);
+  assert.deepEqual(pick(r.warn), ["metric_relevance@big_picture[3]", "metric_relevance@china_lens"]);
   assert.ok(needsRepair(r));
 });
 
 test("월간 실제 출력 회귀: 주별 원 건수 비교·근거 없는 증감·통화 간 서열이 치명", () => {
   const { ctx, content, issues } = load("monthly");
   const r = validateWeekly(content, ctx, issues);
-  assert.deepEqual(pick(r.fatal), ["change_unbacked@big_picture[3]", "cross_currency_rank@money", "volume_week_unadjusted@dek"]);
+  // money_rank (2026-11-02): money 문단의 "가장 큰" 서열 표현은 통화가 같아도 치명
+  assert.deepEqual(pick(r.fatal), ["change_unbacked@big_picture[3]", "cross_currency_rank@money", "money_rank@money", "volume_week_unadjusted@dek"]);
   assert.deepEqual(pick(r.warn), ["metric_relevance@china_lens"]);
 });
 
@@ -113,21 +114,22 @@ test("기간 표기(10월·11월 1일·W44)는 숫자 검사에서 뺀다", () =
   assert.equal(stripPeriodLabels("2026년 10월, AI 자금").trim(), ", AI 자금");
 });
 
-test("제목은 여유 없이 36자: 37자면 headline_length 경고", () => {
+test("제목은 여유 없이 36자: 37자면 headline_length 치명 (수리 뒤에도 길면 결정적 제목으로 대체)", () => {
   const { ctx, content } = load("weekly");
   const c = { ...content, headline: "가".repeat(37) };
-  assert.ok(validateWeekly(c, ctx).warn.some((w) => w.rule === "headline_length" && w.detail === "37/36자"));
+  assert.ok(validateWeekly(c, ctx).fatal.some((w) => w.rule === "headline_length" && w.detail === "37/36자"));
   const ok = { ...content, headline: "가".repeat(36) };
-  assert.ok(!validateWeekly(ok, ctx).warn.some((w) => w.rule === "headline_length"));
+  assert.ok(!validateWeekly(ok, ctx).fatal.some((w) => w.rule === "headline_length"));
 });
 
 test("남은 치명 항목 삭제: china_lens 는 빼고, dek·headline 은 결정적 대체 대상으로 돌려준다", () => {
   const { ctx, content } = load("weekly");
   const r = validateWeekly(content, ctx);
-  const d = dropFatalPeriodic(content, [...r.fatal, { level: "fatal", rule: "x", path: "dek", detail: "" }]);
+  const lens = r.fatal.filter((f) => f.path === "china_lens");
+  const d = dropFatalPeriodic(content, [...lens, { level: "fatal", rule: "x", path: "dek", detail: "" }]);
   assert.equal(d.content.china_lens, null);
   assert.deepEqual(d.dropped, ["china_lens"]);
   assert.deepEqual(d.needsFallback, ["dek"]);
   assert.equal(d.content.big_picture.length, content.big_picture.length);
-  assert.equal(validateWeekly(d.content, ctx).fatal.length, 0);
+  assert.equal(validateWeekly(d.content, ctx).fatal.filter((f) => f.path === "china_lens").length, 0);
 });

@@ -2,12 +2,14 @@
  * 브리핑 생성 — 모든 실행 경로(n8n HTTP 호출, cron, 관리자 재생성, CLI)가 이 함수 하나를 부른다 (Gate 2).
  *
  *  1. 날짜 잠금 → 후보 선정(§3.2) → 물량 규칙(§1.2) → 입력 해시가 같으면 건너뜀(force 제외)
- *  2. ko 생성 → 검증 → 치명 위반(또는 중국 중심 미달)이면 수리 1회 → 남은 치명 항목 삭제 → 재검증
- *     → 주요 기사가 최소 건수 이상이면 draft, 아니면 failed
+ *  2. ko 생성 → 괄호 병기 한자 정리 → 검증 → 치명 위반(중국 중심 미달·한자·길이·헤드라인 규칙 포함)이면 수리 1회
+ *     → 남은 치명 항목 삭제 → 전체 재검증(삭제한 항목을 헤드라인·리드가 쓰고 있으면 다시 잡힘, 최대 2회)
+ *     → 최소 개수(주요 4·숫자 3·주목 기업 3) 충족이면 draft, 주요 기사 3건 이상이면 짧은 판(mode short) draft, 아니면 failed
  *  3. ko 가 draft 면 en / zh 값만 번역 + 재검증 (각 언어판은 독립적으로 draft/failed)
  *  4. 토큰·비용·지연·LiteLLM request id 를 행마다 기록. 1회 실행 비용 상한(BRIEFING_MAX_COST_USD, 기본 $0.10)
  *  5. 주말 합본(결정 D7, 규칙은 sla.ts): 토요일 판 = 토·일 기사, period_start~period_end 에 기록.
- *     일요일 날짜는 force 가 없으면 생성하지 않는다(토요일 합본에 들어감).
+ *     일요일 날짜는 생성하지 않는다(토요일 합본에 들어감). force 로도 만들지 않는다 — 관리자 "다시 생성"(force)이
+ *     일요일 단독판을 만들어 합본과 같은 기사를 두 번 싣게 됐다(2026-11-01 초안). 꼭 필요하면 sunday 옵션(CLI --sunday).
  */
 import type {
   BriefingContent,
@@ -22,11 +24,32 @@ import type {
   ValidationReport,
 } from "./types";
 import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "./llm";
+import { findEntities } from "./entities";
 import { PROMPT_VERSION, TRANSLATE_PROMPT_VERSION, buildRepairPrompt, buildSystemPrompt, buildUserPrompt } from "./prompt";
 import { computeInputHash, editionModeFor, selectCandidates } from "./select";
-import { HEADLINE_MAX, citedRefs, contextFromGroups, dropFatalItems, normalizeContent, validateKo } from "./validate";
+import {
+  HEADLINE_MAX,
+  citedRefs,
+  contextFromGroups,
+  dropFatalItems,
+  fitSentenceLengths,
+  itemOf,
+  minCountShortfall,
+  normalizeContent,
+  stripParentheticalHan,
+  validateKo,
+  type ValidationContext,
+} from "./validate";
 import { translateBriefing } from "./translate";
-import { finishGenerating, insertBriefing, latestBriefing, loadCandidateArticles, withDateLock } from "./repository";
+import {
+  finishGenerating,
+  insertBriefing,
+  latestBriefing,
+  loadCandidateArticles,
+  previousEditionSummary,
+  withDateLock,
+  type PreviousEdition,
+} from "./repository";
 import { editionPeriod, scheduledRunEdition, weekday } from "./sla";
 import { beijingDate, periodDayQuality } from "@/lib/metrics/period";
 import pool from "@/lib/db";
@@ -109,86 +132,164 @@ interface KoOutcome {
   validation: Record<string, unknown>;
   usages: LlmUsage[];
   error?: string;
+  /** 삭제 뒤 최소 개수 미달로 짧은 판이 됐으면 "short" */
+  mode?: EditionMode;
 }
 
-async function generateKo(dateLabel: string, mode: EditionMode, groups: CandidateGroup[], cost: CostTracker): Promise<KoOutcome> {
+const MAX_REPAIRS = 2;
+
+/** 헤드라인 치명이 남았고 1위 기사 제목이 상한 안이면 그 제목을 헤드라인으로 쓴 판 (아니면 null) */
+export function headlineFallback(c: BriefingContent, r: ValidationReport): BriefingContent | null {
+  if (!r.fatal.some((f) => f.path === "headline")) return null;
+  const title = c.top_stories[0]?.title?.trim();
+  if (!title || title.length > HEADLINE_MAX) return null;
+  return { ...structuredClone(c), headline: title };
+}
+
+/** 삭제할 수 없는 항목(headline·lede·top_stories 전체)의 치명 수 */
+function unrecoverableCount(r: ValidationReport): number {
+  return r.fatal.filter((f) => ["headline", "lede", "top_stories"].includes(itemOf(f.path))).length;
+}
+
+/** 수리 프롬프트 보충: 중국 중심 미달이면 상위 5건에 안 쓴 중국 주체 후보 id 를 짚어 준다, 한자 표기 예 */
+export function repairHints(c: BriefingContent, r: ValidationReport, groups: CandidateGroup[]): string[] {
+  const out: string[] = [];
+  if (r.fatal.some((f) => f.rule === "china_centric")) {
+    const used = new Set(c.top_stories.slice(0, 5).flatMap((s) => s.refs));
+    const cands = groups
+      .filter((g) => !used.has(g.shortId) && findEntities(`${g.primary.title_kr} ${g.primary.title_cn}`).some((e) => e.chinese))
+      .slice(0, 6)
+      .map((g) => `${g.shortId}(${g.primary.title_kr.slice(0, 30)})`);
+    out.push(
+      `중국 중심 규칙 미달 — 상위 5건 중 3건 이상이 중국 기업·기관 주체여야 합니다. 같은 사건을 두 칸에 나눈 해외 이야기는 하나로 합치고, 중국 주체 후보를 올리십시오: ${cands.join(", ")}`
+    );
+  }
+  for (const f of r.fatal.filter((x) => x.rule === "han_in_ko"))
+    out.push(`${f.path}: 한자 "${f.detail}" 를 한국어 표기로 바꾸십시오 (예: 《不问凡尘》 → 《불문범진》, 千问 → 치엔원). 괄호 병기도 쓰지 않습니다`);
+  return out;
+}
+
+/** 삭제 → 전체 재검증을 반복 (삭제한 항목을 헤드라인·리드가 쓰고 있으면 다음 검증에서 잡힌다). 최대 2회 */
+export function dropAndRevalidate(
+  content: BriefingContent,
+  report: ValidationReport,
+  ctx: ValidationContext
+): { content: BriefingContent; report: ValidationReport; dropped: string[]; unrecoverable: string[] } {
+  let c = content;
+  let r = report;
+  const dropped: string[] = [];
+  for (let pass = 0; pass < 2 && r.fatal.length; pass++) {
+    const d = dropFatalItems(c, r.fatal);
+    dropped.push(...d.dropped.map((x) => (pass ? `${x}(재검증)` : x)));
+    if (d.unrecoverable.length) return { content: c, report: r, dropped, unrecoverable: d.unrecoverable };
+    const v = validateKo(d.content, ctx);
+    c = v.content;
+    r = v.report;
+  }
+  return { content: c, report: r, dropped, unrecoverable: [] };
+}
+
+async function generateKo(
+  dateLabel: string,
+  mode: EditionMode,
+  groups: CandidateGroup[],
+  cost: CostTracker,
+  editionDate: string,
+  previous: PreviousEdition | null
+): Promise<KoOutcome> {
   const usages: LlmUsage[] = [];
   const track = (u: LlmUsage) => {
     usages.push(u);
     cost.add(u);
   };
-  const ctx = contextFromGroups(groups, mode);
+  const ctx = contextFromGroups(groups, mode, new Set(), editionDate);
   const system = buildSystemPrompt(mode);
-  const user = buildUserPrompt(dateLabel, groups);
+  const user = buildUserPrompt(dateLabel, groups, previous);
   const minTop = mode === "normal" ? 3 : 1;
   const validation: Record<string, unknown> = { prompt_version: PROMPT_VERSION };
 
+  // 결정적 정리: 괄호 병기 한자 삭제 + 여러 문장 필드는 넘친 끝 문장 삭제
+  const trimmed: string[] = [];
+  const prepare = (c: BriefingContent) => {
+    const f = fitSentenceLengths(stripParentheticalHan(c));
+    trimmed.push(...f.trimmed);
+    return f.content;
+  };
   cost.check();
   const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 8000 }, track);
   const parsed1 = normalizeContent(parseJsonContent(first.content));
-  let cur = validateKo(parsed1.content, ctx, parsed1.issues);
+  let cur = validateKo(prepare(parsed1.content), ctx, parsed1.issues);
   validation.initial = cur.report;
 
-  const chinaMiss = (r: ValidationReport) => r.warn.some((w) => w.rule === "china_centric");
-  // 헤드라인 길이 초과는 경고지만 수리 호출 대상이다 (자동으로 자르지 않는다). 수리 뒤에도 길면 경고로 남겨 관리자가 고친다.
-  const headlineLong = (r: ValidationReport) => r.warn.find((w) => w.rule === "headline_length");
-  if (cur.report.fatal.length || chinaMiss(cur.report) || headlineLong(cur.report)) {
+  // 중국 중심·헤드라인 길이·한자·길이도 치명이라 치명이 있으면 수리 (자동으로 자르지 않는다).
+  // 1차 수리 뒤에도 삭제할 수 없는 항목(headline·lede·top_stories 전체 — 중국 중심 미달 포함)의 치명이 남으면 한 번 더 (최대 2회).
+  const messages: { role: "user" | "assistant"; content: string }[] = [
+    { role: "user", content: user },
+    { role: "assistant", content: first.content },
+  ];
+  validation.used = "initial";
+  for (let round = 1; round <= MAX_REPAIRS && cur.report.fatal.length; round++) {
+    // 2차 수리는 지금 판을 삭제·재검증해도 살릴 수 없을 때만 (삭제할 수 없는 치명, 또는 삭제 뒤 중국 중심 미달 등)
+    if (round > 1) {
+      const sim = dropAndRevalidate(cur.content, cur.report, ctx);
+      if (!sim.unrecoverable.length && !sim.report.fatal.length) break;
+    }
     try {
       cost.check();
-      // 어차피 수리 호출을 하는 김에 한자 잔존 경고도 함께 고치게 한다 (en 번역에 한자가 넘어가는 것을 막음)
-      const long = headlineLong(cur.report);
-      const extra = [
-        ...(chinaMiss(cur.report) ? [cur.report.warn.find((w) => w.rule === "china_centric")!.detail + " — 중국 중심 규칙 미달"] : []),
-        ...(long ? [`[headline_length] headline: ${long.detail} — "${cur.content.headline}" 을 뜻을 살려 ${HEADLINE_MAX}자 이내로 다시 쓰십시오`] : []),
-        ...cur.report.warn
-          .filter((w) => w.rule === "han_in_ko")
-          .map((w) => `[han_in_ko] ${w.path}: 한자 "${w.detail}" 를 한국어 표기로 바꾸십시오 (예: 《不问凡尘》 → 《불문범진》, 千问 → 치엔원)`),
-      ];
-      const second = await chat(
-        {
-          system,
-          messages: [
-            { role: "user", content: user },
-            { role: "assistant", content: first.content },
-            { role: "user", content: buildRepairPrompt(cur.content, cur.report.fatal, extra) },
-          ],
-          maxTokens: 8000,
-        },
-        track
-      );
-      const parsed2 = normalizeContent(parseJsonContent(second.content));
-      const repaired = validateKo(parsed2.content, ctx, parsed2.issues);
-      validation.repair = repaired.report;
-      // 수리본이 더 나쁘면(치명 증가·주요 기사 감소) 원본 유지
-      if (
-        repaired.report.fatal.length <= cur.report.fatal.length &&
-        repaired.report.stats.topStories >= Math.min(cur.report.stats.topStories, minTop)
-      ) {
+      const extra = repairHints(cur.content, cur.report, groups);
+      messages.push({ role: "user", content: buildRepairPrompt(cur.content, cur.report.fatal, extra) });
+      const reply = await chat({ system, messages, maxTokens: 8000 }, track);
+      messages.push({ role: "assistant", content: reply.content });
+      const parsed = normalizeContent(parseJsonContent(reply.content));
+      const repaired = validateKo(prepare(parsed.content), ctx, parsed.issues);
+      validation[round === 1 ? "repair" : `repair${round}`] = repaired.report;
+      // 수리본이 더 나쁘면(삭제할 수 없는 치명·전체 치명 증가, 주요 기사 감소) 이전 판 유지
+      const better =
+        unrecoverableCount(repaired.report) < unrecoverableCount(cur.report) ||
+        (unrecoverableCount(repaired.report) === unrecoverableCount(cur.report) && repaired.report.fatal.length <= cur.report.fatal.length);
+      if (better && repaired.report.stats.topStories >= Math.min(cur.report.stats.topStories, minTop)) {
         cur = repaired;
-        validation.used = "repair";
-      } else validation.used = "initial";
+        validation.used = round === 1 ? "repair" : `repair${round}`;
+      }
     } catch (e) {
       if (e instanceof BudgetExceeded) throw e;
       validation.repair_error = (e as Error).message;
-      validation.used = "initial";
+      break;
     }
   }
 
+  if (trimmed.length) validation.trimmed_sentences = [...new Set(trimmed)];
+  // 수리 뒤에도 헤드라인만 치명이면(길이·1위 기사·최상급 등) 1위 기사 제목으로 대체 — 주간·월간의 결정적 제목 대체와 같은 방식.
+  // 1위 기사 제목은 그 자체로 검증을 거친 문장이고 헤드라인 규칙(1위 기사)도 만족한다. 그래도 걸리면 판 failed.
+  const fb = headlineFallback(cur.content, cur.report);
+  if (fb) {
+    const v = validateKo(fb, ctx);
+    if (!v.report.fatal.some((f) => f.path === "headline")) {
+      cur = v;
+      validation.fallbacks = ["headline"];
+    }
+  }
   let content = cur.content;
   if (cur.report.fatal.length) {
-    const dropped = dropFatalItems(content, cur.report.fatal);
-    validation.dropped_items = dropped.dropped;
-    if (dropped.unrecoverable.length) {
-      validation.final = cur.report;
-      return { status: "failed", content, validation, usages, error: `삭제할 수 없는 항목의 치명 위반: ${dropped.unrecoverable.join(", ")}` };
+    const d = dropAndRevalidate(content, cur.report, ctx);
+    validation.dropped_items = d.dropped;
+    if (d.unrecoverable.length) {
+      validation.final = d.report;
+      return { status: "failed", content: d.content, validation, usages, error: `삭제할 수 없는 항목의 치명 위반: ${d.unrecoverable.join(", ")}` };
     }
-    cur = validateKo(dropped.content, ctx);
+    cur = { content: d.content, report: d.report };
     content = cur.content;
   }
   validation.final = cur.report;
   if (cur.report.fatal.length) return { status: "failed", content, validation, usages, error: "재검증 후에도 치명 위반이 남음" };
   if (content.top_stories.length < minTop)
     return { status: "failed", content, validation, usages, error: `주요 기사 ${content.top_stories.length}건 < ${minTop}건` };
+  // 최소 개수 (QA 권고 10): 못 미치면 짧은 판으로 내린다 (주요 기사 3건 이상일 때만 — 위에서 걸렀다)
+  const short = minCountShortfall(content, mode);
+  if (short.length) {
+    validation.short_reason = short;
+    return { status: "draft", content, validation, usages, mode: "short" };
+  }
   return { status: "draft", content, validation, usages };
 }
 
@@ -206,10 +307,10 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
     return { date, outcome: "failed", mode: null, candidateCount: 0, inputHash: null, locales: [], totalCostUsd: 0, message: "날짜 형식이 틀렸거나 미래 날짜입니다" };
   }
 
-  if (weekday(date) === 0 && !opts.force) {
+  if (weekday(date) === 0 && !opts.sunday) {
     return {
       date, outcome: "skipped_weekend", mode: null, candidateCount: 0, inputHash: null, locales: [], totalCostUsd: 0,
-      message: "일요일 기사는 토요일 판(토·일 합본)에 들어갑니다",
+      message: "일요일 기사는 토요일 판(토·일 합본)에 들어갑니다 (force 로도 단독판을 만들지 않습니다)",
     };
   }
   const period = editionPeriod(date);
@@ -273,7 +374,8 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
 
     let ko: KoOutcome;
     try {
-      ko = await generateKo(dateLabel, mode, sel.groups, cost);
+      const previous = await previousEditionSummary(period.periodStart);
+      ko = await generateKo(dateLabel, mode, sel.groups, cost, period.periodStart, previous);
     } catch (e) {
       const msg = e instanceof LlmError || e instanceof BudgetExceeded ? e.message : `예상치 못한 오류: ${(e as Error).message}`;
       const u = sumUsage(cost.usages);
@@ -283,9 +385,12 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
 
     const finalReport = ko.validation.final as ValidationReport | undefined;
     const china = finalReport?.stats.chinaCentric ?? 0;
-    const stored = ko.content ? toStored(ko.content, sel.groups, "ko", { ...metaBase, china_centric_count: china }) : null;
+    const finalMode: EditionMode = ko.mode ?? mode;
+    const meta = { ...metaBase, mode: finalMode, china_centric_count: china };
+    const stored = ko.content ? toStored(ko.content, sel.groups, "ko", meta) : null;
     const koUsage = sumUsage(ko.usages);
     await finishGenerating(koRow.id, {
+      mode: finalMode,
       status: ko.status,
       content: stored?.content ?? {},
       articleIds: stored?.articleIds ?? [],
@@ -313,10 +418,10 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
         const ok = Boolean(tr.content);
         // failed 여도 마지막 번역본은 남긴다 (발행 불가 상태라 공개되지 않음)
         const shown = tr.content ?? tr.candidate;
-        const st = shown ? toStored(shown, sel.groups, target, { ...metaBase, china_centric_count: china }) : null;
+        const st = shown ? toStored(shown, sel.groups, target, meta) : null;
         const error = ok ? null : tr.error ?? `번역 재검증 실패 (${tr.problems.length}건)`;
         const row = await insertBriefing({
-          ...periodCols, date, locale: target, status: ok ? "draft" : "failed", mode,
+          ...periodCols, date, locale: target, status: ok ? "draft" : "failed", mode: finalMode,
           content: st?.content ?? {}, articleIds: st?.articleIds ?? stored?.articleIds ?? [], inputArticleIds,
           candidateCount: articles.length, inputHash,
           validation: { prompt_version: TRANSLATE_PROMPT_VERSION, repaired: tr.repaired, problems: tr.problems },

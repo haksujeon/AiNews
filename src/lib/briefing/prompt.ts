@@ -12,12 +12,18 @@
  *  - top_stories 에 subject / subject_is_chinese
  */
 import type { BriefingContent, CandidateGroup, EditionMode, ValidationIssue } from "./types";
+import type { PreviousEdition } from "./repository";
 import { HEADLINE_MAX } from "./validate";
+import { findEntities } from "./entities";
 
 // v3: headline 32자 엄수(수리 대상), lede 실체 근거·"중국 내" 귀속 규칙
-export const PROMPT_VERSION = "ko-v3-2026-10-13";
-// v5: 이름 힌트 숫자 마스킹, zh 숫자 그대로(억→亿·만→万), k 축약·연도 추가 금지
-export const TRANSLATE_PROMPT_VERSION = "tr-v5-2026-10-13";
+// v4 (2026-11-02 편집 QA): 헤드라인 = 1위 기사, 원문 수식어 보존, 예전 사건 시점 표시, 직전 판 반복 표시,
+//   매출·가치 금액을 거래처럼 쓰지 않기, 매체 수 그대로, 지시문 누출 금지, 사건 단위 매체 수(event_sources)
+// v4.1: ARTICLES 에 cn(중국 주체 후보) 표시, 같은 사건을 두 칸에 나누지 않기, 상위 5건 중국 주체 수를 세어 보기
+// v4.2: 중국 주체 목표 4건(최소 3건) — 검증에서 중국 주체 기사 1건이 빠져도 판이 살아남게
+export const PROMPT_VERSION = "ko-v4.2-2026-11-02";
+// v6: 이름 힌트에 중국어 요약 앞부분(고유명사 표기용), 범위 "7~10%" 를 "7%至10%" 로 써도 됨
+export const TRANSLATE_PROMPT_VERSION = "tr-v6-2026-11-02";
 
 const SCHEMA = `{
  "headline": "오늘 판 제목, 공백 포함 ${HEADLINE_MAX}자 이내 (엄수)",
@@ -59,21 +65,26 @@ export function buildSystemPrompt(mode: EditionMode): string {
 4. 숫자(금액·%·MW·토큰·인원 등)는 근거 기사 title_kr/summary_kr/insight_kr 에 나온 값과 단위를 그대로 씁니다. 환산·반올림·합산 금지.
 5. 순위("2위")·배수("3배")·비교("최초", "최대") 같은 서열 표현은 근거 기사에 그 표현이 그대로 있을 때만 씁니다. "2점 뒤졌다"를 "2위"로 바꾸는 식의 추론을 하지 마십시오.
 6. clusters 에는 "같은 주체가 같은 행위를 한 같은 사건"을 다룬 기사만 묶습니다(예: 같은 기업의 같은 모델 발표를 여러 매체가 보도). "칩·메모리", "구현형 AI" 같은 주제 묶음은 금지입니다. 묶인 사건은 하나의 이야기로 쓰고 refs 에 모두 넣습니다.
-7. 중국 중심: top_stories 상위 5건 중 3건 이상은 중국 기업·기관이 주체인 이야기여야 합니다. 해외 기업 소식은 중국 시장 영향이나 중국 매체의 시각이 드러나게 씁니다. subject_is_chinese 를 정직하게 표시하십시오.
+7. 중국 중심: top_stories 상위 5건 중 3건 이상(목표 4건)은 중국 기업·기관이 주체인 이야기여야 합니다(3건 미만이면 판 전체가 반려됩니다). 해외 이야기는 상위 5건에 많아야 1~2건입니다. ARTICLES 의 cn:true 는 제목에 중국 기업·기관이 나오는 후보입니다. 다 쓴 뒤 상위 5건의 subject_is_chinese:true 수를 세어 보십시오. 같은 사건(같은 주체의 같은 발표·같은 서류)을 top_stories 두 칸에 나누지 마십시오. 해외 기업 소식은 중국 시장 영향이나 중국 매체의 시각이 드러나게 씁니다. subject_is_chinese 를 정직하게 표시하십시오.
 8. AI·반도체·로봇·AI 비즈니스와 무관한 기사, 특히 정치·외교 기사(정상·총리·대통령 발언 등)는 선정하지 말고 excluded 에 사유와 함께 적습니다. 행사 모집 공고·홍보성 기사도 낮게 봅니다.
 9. 한국어 문장에 한자를 쓰지 마십시오(용어 원어는 term_of_the_day.term 에만). 중국 기업·인물명은 기사 title_kr/summary_kr 의 한국어 표기를 따르되 한자 병기는 하지 않습니다.
 10. 과장·추측·투자 권유 금지. 논쟁적인 주장은 "~라고 주장"처럼 주체를 밝힙니다. 평가가 엇갈리면 함께 적습니다. 존댓말이 아닌 간결한 평서문(~했다, ~이다)으로 씁니다.
-11. headline 은 공백 포함 ${HEADLINE_MAX}자 이내입니다(넘으면 반려). 쓰고 나서 글자 수를 세어 보십시오. 가장 큰 이야기 1~2개만 담습니다.
+11. headline 은 공백 포함 ${HEADLINE_MAX}자 이내입니다(넘으면 반려). 쓰고 나서 글자 수를 세어 보십시오. top_stories 1위 이야기(필요하면 2위까지)의 사건만 담고, 1위 이야기의 주체 이름을 넣습니다. "~로 무게 이동", "~ 경쟁 가열" 같은 추세 문장은 쓰지 않습니다.
 12. lede 의 모든 기업·인물·제품 이름은 lede_refs 기사에 나와야 합니다. lede 에 쓴 이야기의 근거 기사를 모두 lede_refs 에 넣으십시오.
 13. "중국 내", "중국에서는" 같은 표현에는 중국 기업·기관의 중국 안 사실만 담습니다. 해외 기업(Anthropic·OpenAI·Meta 등)의 해외 사업(일본 데이터센터 등)을 "중국 내" 흐름으로 묶지 마십시오.
+14. 원문 수식어를 지우지 마십시오: "경량 모델 중 최고"의 '중', "IPO가 될 전망"의 '전망', '예정·계획·가능성·~로 알려졌다', "OpenRouter에서 처음" 같은 플랫폼·데이터 범위, 기간(1분기 등). 회사가 스스로 내세운 "세계 최초"는 "~라고 밝혔다"로 씁니다.
+15. 시점: 기사가 오늘 이전 날짜의 사건(예: "9월 8일 공개한 증명")을 다루면 "지난 9월 공개한 ~"처럼 시점을 밝히고 오늘 일어난 일처럼 쓰지 마십시오.
+16. PREVIOUS_EDITION 에 이미 나온 사건은 새 사실이 있을 때만 쓰고, 그때는 title 을 "후속:"으로 시작합니다.
+17. 매출·영업이익·손실·기업가치·시가총액 금액을 "확보·유치·조달" 같은 거래 금액처럼 쓰지 마십시오. 금액은 단위까지 기사 그대로("162억 9,000만 달러"를 "162억 달러"로 자르지 않음).
+18. "두 매체가 전했다"처럼 매체 수를 쓸 때는 그 기사의 sources 수 그대로 씁니다. 출력 문장에 지시·메모(괄호 설명, "~ 대신 ~")를 남기지 마십시오.
 ${short ? "\n오늘은 기사가 적은 날입니다(짧은 판). top_stories 1~3건만 쓰고 sections 는 비웁니다. headline 은 \"오늘은 조용한 하루\"처럼 솔직하게 씁니다.\n" : ""}
-중요도 판단 기준(높은 순): 여러 매체가 함께 다룬 사건(sources 수) > 대형 모델·칩·인프라의 구체적 발표 > 큰 금액의 투자·인수·상장 > 정책·규제 > 산업 분석/칼럼. 업계 영향이 큰 중국 기업(바이트댄스·알리바바·텐센트·화웨이·딥시크·문샷·지푸·미니맥스·바이두·샤오미 등)을 우선합니다. ARTICLES 는 사전 점수(score) 순으로 정렬되어 있습니다(참고용).
+중요도 판단 기준(높은 순): 여러 매체가 함께 다룬 사건(event_sources = 같은 사건을 다룬 매체 수, 제목이 달라도 같은 사건이면 함께 셈) > 대형 모델·칩·인프라의 구체적 발표 > 큰 금액의 투자·인수·상장 > 정책·규제 > 산업 분석/칼럼. 업계 영향이 큰 중국 기업(바이트댄스·알리바바·텐센트·화웨이·딥시크·문샷·지푸·미니맥스·바이두·샤오미 등)을 우선합니다. 한 매체만 다룬 해외 연구 논문은 상위 5건에 넣지 않습니다. ARTICLES 는 사전 점수(score) 순으로 정렬되어 있습니다(참고용).
 
 출력: 아래 스키마의 JSON 하나만. 코드 펜스·설명 금지.
 ${schema}`;
 }
 
-export function buildUserPrompt(date: string, groups: CandidateGroup[]): string {
+export function buildUserPrompt(date: string, groups: CandidateGroup[], previous: PreviousEdition | null = null): string {
   const lines = groups.map((g) => {
     const a = g.primary;
     const terms = (a.key_terms ?? [])
@@ -84,6 +95,8 @@ export function buildUserPrompt(date: string, groups: CandidateGroup[]): string 
     return JSON.stringify({
       id: g.shortId,
       sources: g.sources,
+      ...(g.eventSources && g.eventSources.length > g.sources.length ? { event_sources: g.eventSources.length } : {}),
+      ...(findEntities(`${a.title_kr} ${a.title_cn}`).some((e) => e.chinese) ? { cn: true } : {}),
       score: g.score,
       category: a.category,
       title_kr: a.title_kr,
@@ -93,7 +106,10 @@ export function buildUserPrompt(date: string, groups: CandidateGroup[]): string 
       terms,
     });
   });
-  return `EDITION_DATE: ${date} (베이징 시간 기준 발행일)\nARTICLES (${lines.length}건, 한 줄에 하나):\n${lines.join("\n")}`;
+  const prev = previous
+    ? `PREVIOUS_EDITION (${previous.date} 판 — 같은 사건이면 새 사실만, title 을 "후속:"으로): ${[previous.headline, ...previous.titles].join(" / ")}\n`
+    : "";
+  return `EDITION_DATE: ${date} (베이징 시간 기준 발행일)\n${prev}ARTICLES (${lines.length}건, 한 줄에 하나):\n${lines.join("\n")}`;
 }
 
 export function buildRepairPrompt(
@@ -115,6 +131,11 @@ ${problems}
 - 중국 중심 규칙을 어겼다면 ARTICLES 에서 중국 기업·기관이 주체인 이야기를 상위로 올립니다.
 - headline 이 ${HEADLINE_MAX}자를 넘었다면 뜻을 유지한 채 ${HEADLINE_MAX}자 이내로 다시 씁니다 (말줄임표로 자르지 않습니다).
 - unsupported_entity / china_attribution 이 나온 문장은 근거 기사에 있는 사실만 남기고, 해외 기업의 해외 사업을 "중국 내" 로 묶지 않게 고칩니다.
+- headline_not_top_story: headline 을 top_stories 1위 이야기(주체 이름 포함)로 다시 쓰거나, 헤드라인의 이야기를 1위로 올립니다.
+- qualifier_dropped / superlative_unsupported / trend_unsupported: 기사에 있는 표현과 한정어('중', '전망', 플랫폼 범위)를 그대로 쓰거나 그 표현을 뺍니다.
+- stale_event: 예전 사건은 "지난 ○월 공개한 ~" 처럼 시점을 밝힙니다. money_not_deal / currency_mismatch / amount_not_in_source: 매출·가치를 거래처럼 쓰지 말고, 금액·통화는 기사 그대로.
+- length: 글자 수 상한 안으로 줄입니다 (말줄임표로 자르지 않습니다).
+- 고친 결과만 씁니다. "~ 대신 ~", "(수정)" 같은 지시문·메모를 본문에 남기지 마십시오.
 - 문제가 없는 항목은 그대로 둡니다. 코드 펜스·설명 없이 JSON 하나만 출력합니다.
 
 ${JSON.stringify(draft)}`;
@@ -148,10 +169,10 @@ Output only the JSON, no code fences.`;
 
 export function buildTranslateUserPrompt(
   koPayload: unknown,
-  nameHints: { ref: string; title_kr: string; title_cn: string }[]
+  nameHints: { ref: string; title_kr: string; title_cn: string; summary_cn?: string }[]
 ): string {
-  return `NAME_HINTS (Korean headline → original Chinese headline):\n${nameHints
-    .map((h) => `${h.ref}: ${h.title_kr} ⇢ ${h.title_cn}`)
+  return `NAME_HINTS (Korean headline → original Chinese headline [| start of the original Chinese summary, for names only]):\n${nameHints
+    .map((h) => `${h.ref}: ${h.title_kr} ⇢ ${h.title_cn}${h.summary_cn ? ` | ${h.summary_cn}` : ""}`)
     .join("\n")}\n\nBRIEFING_JSON:\n${JSON.stringify(koPayload)}`;
 }
 

@@ -11,8 +11,10 @@
  *
  * 수치 규칙(설계 검토서 §1.4):
  *  - 결손일(incomplete) = 두 가지의 합:
- *      (a) 축소 수집일(reduced, capped_backfill): COMPLETE_SINCE(2026-10-13) 이전 날짜. 보충 수집에 매체별 하루 상한
- *          (36Kr ≤ 12건, ITHome ≤ 6건)이 걸려 있어 건수가 실제 보도량보다 훨씬 적다 — 건수와 상관없이 언제나 결손.
+ *      (a) 축소 수집일(reduced, capped_backfill): 보충 수집에 매체별 하루 상한(36Kr ≤ 12건, ITHome ≤ 6건)이 걸린 날.
+ *          2026-11-02 부터 날짜(COMPLETE_SINCE 이전)만이 아니라 매체별 실제 건수로 판정한다 (reducedDaysFrom):
+ *          상한 매체가 모두 상한 이하이고, (그 앞뒤 14일의 COMPLETE_SINCE 이전 날짜에서 상한 매체가 상한을 넘은 적이 없거나
+ *          그날 36Kr 이 수집 완전 구간 같은 요일 중앙값의 50% 미만). 3~4월 원 수집 데이터(36Kr 하루 20건 안팎)는 축소 수집이 아니다.
  *      (b) 부분 수집일(partial): 같은 요일군(평일/주말) 중앙값의 50% 미만. 기준선은 COMPLETE_SINCE 이후, 기간 끝에서 8주 이내.
  *    중앙값은 정렬 후 floor(n/2) 번째(위쪽 중앙값) — 프로토타입과 같게 (W44 주말 중앙값 43).
  *  - 기사 수 증감은 같은 요일끼리, 양쪽 주 모두 완전한 요일만.
@@ -168,8 +170,75 @@ export function prevMonth(month: string): string {
   return monthOf(addDays(r.start, -1));
 }
 
-/** 축소 수집일(보충 수집 상한이 걸린 날)인가 */
+/** 축소 수집일 후보(보충 수집 기간)인가 — 실제 판정은 매체별 건수(reducedDaysFrom). 매체별 건수가 없을 때의 기본값 */
 export const isReducedDay = (day: string) => day < COMPLETE_SINCE;
+
+/** 결손일 판정 규칙 판 (스냅숏 fingerprint 에 넣는다 — 판정이 바뀌면 예전 스냅숏을 재사용하지 않게) */
+export const DATA_QUALITY_RULE = "dq-source-caps-2026-11-02";
+
+export interface SourceDayCount {
+  date: string;
+  source: string;
+  count: number;
+}
+
+/** 날짜·매체별 기사 수 */
+export async function countBySourceDay(q: Queryable, opts: MetricOptions): Promise<SourceDayCount[]> {
+  const { where, values } = whereOf(opts);
+  const { rows } = await q.query(
+    `SELECT to_char(${DAY_SQL}, 'YYYY-MM-DD') AS date, COALESCE(source_name, 'Unknown') AS source, COUNT(*)::int AS count
+       FROM ai_news_ex WHERE ${where} GROUP BY 1, 2 ORDER BY 1, 2`,
+    values
+  );
+  return rows as SourceDayCount[];
+}
+
+export const CAP_WINDOW_DAYS = 14;
+/** 수집 완전 구간의 매체별 같은 요일 중앙값을 볼 기간 (COMPLETE_SINCE 부터 8주) */
+export const COMPLETE_REFERENCE_DAYS = 55;
+
+/**
+ * 축소 수집일 (매체별 실제 건수 기준, 순수 함수). perSource 는 days 앞뒤 CAP_WINDOW_DAYS 와
+ * 수집 완전 구간(COMPLETE_SINCE ~ +COMPLETE_REFERENCE_DAYS)의 매체별 건수를 담아야 한다.
+ *  1) COMPLETE_SINCE 이전 날짜만 (보충 수집이 있었던 기간)
+ *  2) 상한 매체(BACKFILL_CAPS)가 그날 모두 상한 이하
+ *  3) 상한이 걸린 구간: 앞뒤 14일(COMPLETE_SINCE 이전)에서 상한 매체가 상한을 넘은 날이 없음,
+ *     또는 그날 36Kr 건수가 수집 완전 구간의 같은 요일 중앙값의 50% 미만
+ */
+export function reducedDaysFrom(perSource: SourceDayCount[], days: string[]): Set<string> {
+  const caps = Object.entries(BACKFILL_CAPS);
+  const at = new Map<string, number>();
+  for (const r of perSource) at.set(`${r.date}|${r.source}`, (at.get(`${r.date}|${r.source}`) ?? 0) + r.count);
+  const cnt = (d: string, src: string) => at.get(`${d}|${src}`) ?? 0;
+  const refEnd = addDays(COMPLETE_SINCE, COMPLETE_REFERENCE_DAYS);
+  const refDays = daysBetween(COMPLETE_SINCE, refEnd).filter((d) => perSource.some((r) => r.date === d));
+  const medianFor = (src: string, day: string) => {
+    const same = refDays.filter((d) => weekdayOf(d) === weekdayOf(day)).map((d) => cnt(d, src));
+    const group = refDays.filter((d) => isWeekend(d) === isWeekend(day)).map((d) => cnt(d, src));
+    return upperMedian(same.length >= 2 ? same : group);
+  };
+  const out = new Set<string>();
+  for (const day of days) {
+    if (!isReducedDay(day)) continue;
+    if (!caps.every(([src, cap]) => cnt(day, src) <= cap)) continue;
+    const win = daysBetween(addDays(day, -CAP_WINDOW_DAYS), addDays(day, CAP_WINDOW_DAYS)).filter((d) => isReducedDay(d));
+    const capped = caps.every(([src, cap]) => win.every((d) => cnt(d, src) <= cap));
+    const lead = caps[0][0];
+    const med = medianFor(lead, day);
+    const below = med > 0 && cnt(day, lead) < med * MISSING_RATIO;
+    if (capped || below) out.add(day);
+  }
+  return out;
+}
+
+/** [start, end] 의 축소 수집일 (DB). 앞뒤 14일과 수집 완전 구간 기준 건수를 함께 읽는다 */
+export async function reducedDaysFor(q: Queryable, start: string, end: string, population: Population): Promise<Set<string>> {
+  if (start >= COMPLETE_SINCE) return new Set();
+  const winEnd = addDays(end, CAP_WINDOW_DAYS);
+  const near = await countBySourceDay(q, { population, range: { start: addDays(start, -CAP_WINDOW_DAYS), end: winEnd < COMPLETE_SINCE ? winEnd : addDays(COMPLETE_SINCE, -1) } });
+  const ref = await countBySourceDay(q, { population, range: { start: COMPLETE_SINCE, end: addDays(COMPLETE_SINCE, COMPLETE_REFERENCE_DAYS) } });
+  return reducedDaysFrom([...near, ...ref], daysBetween(start, end));
+}
 
 export interface WeekSlice {
   /** "W42" */
@@ -469,12 +538,15 @@ export function baselineFrom(series: DayCount[], since: string, until: string): 
   };
 }
 
-/** 일별 건수에 결손일 판정을 붙인다: 축소 수집일(COMPLETE_SINCE 이전) 또는 같은 요일군 중앙값의 50% 미만 */
-export function detectMissingDays(series: DayCount[], baseline: MissingDayBaseline): DailyPoint[] {
+/**
+ * 일별 건수에 결손일 판정을 붙인다: 축소 수집일 또는 같은 요일군 중앙값의 50% 미만.
+ * reducedDays(매체별 건수 판정, reducedDaysFor)를 주면 그것을 쓰고, 없으면 날짜 기준(COMPLETE_SINCE 이전)으로 본다.
+ */
+export function detectMissingDays(series: DayCount[], baseline: MissingDayBaseline, reducedDays?: ReadonlySet<string>): DailyPoint[] {
   return series.map((d) => {
     const weekend = isWeekend(d.date);
     const expected = weekend ? baseline.weekend_median : baseline.weekday_median;
-    const reduced = isReducedDay(d.date);
+    const reduced = reducedDays ? reducedDays.has(d.date) : isReducedDay(d.date);
     const partial = !reduced && expected > 0 && d.count < expected * MISSING_RATIO;
     return { day: d.date, count: d.count, weekend, expected, incomplete: reduced || partial, reduced, partial };
   });
@@ -522,16 +594,20 @@ export interface DayQuality {
   partial_days: string[];
   /** 결손일의 건수·기대치 (데이터 알림 문구) */
   days: { day: string; count: number; expected: number; reduced: boolean }[];
+  /** COMPLETE_SINCE 이전이지만 상한이 걸리지 않은 원 수집일 — 결손은 아니고, 비교 기준(중앙값)이 없다 */
+  no_baseline_days?: string[];
 }
 
 /** 결손일 판정 결과만 (데일리 판의 데이터 알림 — 주간·월간과 같은 detectMissingDays) */
 export function dayQualityOf(points: DailyPoint[]): DayQuality {
   const bad = points.filter((d) => d.incomplete);
+  const noBase = points.filter((d) => !d.incomplete && isReducedDay(d.day)).map((d) => d.day);
   return {
     incomplete_days: bad.map((d) => d.day),
     reduced_days: bad.filter((d) => d.reduced).map((d) => d.day),
     partial_days: bad.filter((d) => d.partial).map((d) => d.day),
     days: bad.map((d) => ({ day: d.day, count: d.count, expected: d.expected, reduced: Boolean(d.reduced) })),
+    ...(noBase.length ? { no_baseline_days: noBase } : {}),
   };
 }
 
@@ -544,7 +620,8 @@ export async function periodDayQuality(q: Queryable, start: string, end: string,
   const since = eightWeeks > COMPLETE_SINCE ? eightWeeks : COMPLETE_SINCE;
   const baseSeries = await countByDay(q, { population, range: { start: since, end } });
   const cur = fillDays(start, end, await countByDay(q, { population, range: { start, end } }));
-  return dayQualityOf(detectMissingDays(cur, baselineFrom(baseSeries, since, end)));
+  const reduced = await reducedDaysFor(q, start, end, population);
+  return dayQualityOf(detectMissingDays(cur, baselineFrom(baseSeries, since, end), reduced));
 }
 
 // ───────────────────────── 월간: 주별 궤적 (순수)
@@ -1099,8 +1176,10 @@ export async function computePeriodMetrics(
 
   const baseline = baselineFrom(baseSeries, since, end);
   const curDays = fillDays(start, end, await countByDay(q, cur));
-  const daily = detectMissingDays(curDays, baseline);
-  const prevDaily = prev ? detectMissingDays(fillDays(opts.prevStart!, opts.prevEnd!, await countByDay(q, prev)), baseline) : [];
+  // 축소 수집일: 매체별 실제 건수 (데일리 데이터 알림과 같은 reducedDaysFor)
+  const reduced = await reducedDaysFor(q, prev ? (opts.prevStart! < start ? opts.prevStart! : start) : start, end, population);
+  const daily = detectMissingDays(curDays, baseline, reduced);
+  const prevDaily = prev ? detectMissingDays(fillDays(opts.prevStart!, opts.prevEnd!, await countByDay(q, prev)), baseline, reduced) : [];
   const lfl = prev && opts.likeForLike !== false ? sameWeekdayComparison(daily, prevDaily) : null;
   const sentC = toSentimentShare(sentCur);
   const sentP = sentPrev ? toSentimentShare(sentPrev) : null;
@@ -1154,8 +1233,8 @@ export async function computePeriodMetrics(
     fingerprint: periodFingerprint(
       [...curDays, ...(prev ? prevDaily.map((d) => ({ date: d.day, count: d.count })) : [])],
       [...arts, ...(prevArts ?? [])],
-      // 지역 판정(백필·재분류)이 바뀌면 지문도 바뀌게 지역 건수를 넣는다
-      `${population}|${start}|${end}|${opts.prevStart ?? ""}|${opts.prevEnd ?? ""}|region:${JSON.stringify([regionCur.by_region, regionCur.us_china, regionPrev?.by_region ?? null])}`
+      // 지역 판정(백필·재분류)이나 데이터 알림 판정 규칙이 바뀌면 지문도 바뀌게 둘 다 넣는다
+      `${population}|${start}|${end}|${opts.prevStart ?? ""}|${opts.prevEnd ?? ""}|${DATA_QUALITY_RULE}|region:${JSON.stringify([regionCur.by_region, regionCur.us_china, regionPrev?.by_region ?? null])}`
     ),
   };
   return { metrics, stories, articles: arts };

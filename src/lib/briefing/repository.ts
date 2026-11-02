@@ -69,7 +69,8 @@ export async function loadCandidateArticles(date: string, endDate: string = date
     `SELECT id, source_name, source_url, category,
             COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr,
             COALESCE(summary_kr, '') AS summary_kr, COALESCE(ai_insights_kr, '') AS ai_insights_kr,
-            COALESCE(key_terms, '[]'::jsonb) AS key_terms
+            COALESCE(key_terms, '[]'::jsonb) AS key_terms,
+            COALESCE(summary_cn, '') AS summary_cn, to_char((news_date AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS news_date
        FROM ai_news_ex
       WHERE ${PUBLIC_NEWS_WHERE}
         AND ${scopeCategorySql()}
@@ -116,6 +117,29 @@ export async function latestBriefing(date: string, locale: BriefingLocale, editi
     [editionType, date, locale]
   );
   return (rows[0] as BriefingRow) ?? null;
+}
+
+/** 직전 판(발행본 우선, 없으면 최신 초안)의 헤드라인·주요 기사 제목 — 같은 사건 반복을 "후속" 으로 쓰게 프롬프트에 넣는다 */
+export interface PreviousEdition {
+  date: string;
+  headline: string;
+  titles: string[];
+}
+
+export async function previousEditionSummary(date: string): Promise<PreviousEdition | null> {
+  const { rows } = await pool.query(
+    `SELECT to_char(edition_date, 'YYYY-MM-DD') AS date, content->>'headline' AS headline,
+            COALESCE((SELECT array_agg(x->>'title') FROM jsonb_array_elements(
+              CASE WHEN jsonb_typeof(content->'top_stories') = 'array' THEN content->'top_stories' ELSE '[]'::jsonb END) x), '{}') AS titles
+       FROM daily_briefings
+      WHERE edition_type = 'daily' AND locale = 'ko' AND edition_date < $1::date AND edition_date >= $1::date - 4
+        AND status IN ('published', 'draft')
+      ORDER BY edition_date DESC, (status = 'published') DESC, version DESC
+      LIMIT 1`,
+    [date]
+  );
+  const r = rows[0] as { date: string; headline: string | null; titles: string[] } | undefined;
+  return r && r.headline ? { date: r.date, headline: r.headline, titles: (r.titles ?? []).filter(Boolean) } : null;
 }
 
 export interface NewBriefing {
@@ -172,20 +196,23 @@ export async function insertBriefing(b: NewBriefing): Promise<{ id: string; vers
 /** 'generating' 행 마무리. 다른 상태(특히 published)는 건드리지 않는다. */
 export async function finishGenerating(
   id: string,
-  patch: Omit<NewBriefing, "date" | "locale" | "inputHash" | "candidateCount" | "inputArticleIds" | "mode" | "editionType" | "periodStart" | "periodEnd">
+  patch: Omit<NewBriefing, "date" | "locale" | "inputHash" | "candidateCount" | "inputArticleIds" | "mode" | "editionType" | "periodStart" | "periodEnd"> & {
+    /** 삭제 뒤 최소 개수에 못 미쳐 짧은 판으로 내릴 때만 (없으면 그대로) */
+    mode?: EditionMode;
+  }
 ): Promise<boolean> {
   const { rowCount } = await pool.query(
     `UPDATE daily_briefings
         SET status = $2, content = $3::jsonb, article_ids = $4::uuid[], validation = $5::jsonb,
             model = $6, prompt_version = $7, llm_request_ids = $8::text[], input_tokens = $9, output_tokens = $10,
-            cost_usd = $11, latency_ms = $12, error = $13, updated_at = now()
+            cost_usd = $11, latency_ms = $12, error = $13, mode = COALESCE($14, mode), updated_at = now()
       WHERE id = $1 AND status = 'generating'`,
     [
       id, patch.status, JSON.stringify(patch.content ?? {}), patch.articleIds,
       patch.validation === undefined ? null : JSON.stringify(patch.validation),
       patch.model ?? null, patch.promptVersion ?? null, patch.llmRequestIds ?? [],
       patch.inputTokens ?? null, patch.outputTokens ?? null, patch.costUsd ?? null, patch.latencyMs ?? null,
-      patch.error ?? null,
+      patch.error ?? null, patch.mode ?? null,
     ]
   );
   return rowCount === 1;

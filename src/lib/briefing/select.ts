@@ -11,11 +11,23 @@
  */
 import { createHash } from "node:crypto";
 import type { CandidateArticle, CandidateGroup, EditionMode } from "./types";
-import { LATIN_STOP, findEntities, ENTITIES } from "./entities";
-import { bigrams, jaccard, rankStories } from "../news-rank";
+import { findEntities } from "./entities";
+import { rankStories, sameEvent } from "../news-rank";
 
 // 묶기·점수 공식은 홈 목록 "주요 4건"과 공유한다 (src/lib/news-rank.ts). 여기서 다시 쓰지 말 것.
-export { REPOST_JACCARD, SOURCE_WEIGHT, bigrams, jaccard, dedupeReposts, scoreGroup } from "../news-rank";
+// 같은 사건 판정(sameEvent)도 news-rank.ts 로 옮겼다 — 데일리·홈 점수(사건 단위 매체 수)와 주간·월간 2단계 묶기가 같은 함수.
+export {
+  REPOST_JACCARD,
+  SOURCE_WEIGHT,
+  bigrams,
+  jaccard,
+  dedupeReposts,
+  scoreGroup,
+  sameEvent,
+  productTokens,
+  EVENT_TITLE_JACCARD,
+  EVENT_MAX_DAY_GAP,
+} from "../news-rank";
 
 export const MAX_CANDIDATES = 40;
 
@@ -46,6 +58,7 @@ export function selectCandidates(articles: CandidateArticle[], max = MAX_CANDIDA
         primary: st.primary,
         siblings: st.siblings,
         sources: st.sources,
+        eventSources: st.eventSources,
         score: st.score,
         scoreDetail: st.scoreDetail,
       }) satisfies CandidateGroup
@@ -84,10 +97,8 @@ export function computeInputHash(groups: CandidateGroup[], promptVersion: string
 //
 // 1단계(전재 묶기, rankStories)는 같은 글만 묶어 정밀하지만, 같은 사건을 다른 글로 쓴 기사
 // ("Gemini 4 Carbon 발표" 와 "Gemini 4 Carbon 지능 지수 1위")는 갈라진다.
-// 2단계: 같은 실체 + (같은 영문 제품 토큰 또는 한국어 제목 바이그램 Jaccard ≥ 0.3) + 날짜 차이 ±2일 이내면 같은 사건.
-
-export const EVENT_TITLE_JACCARD = 0.3;
-export const EVENT_MAX_DAY_GAP = 2;
+// 2단계: 같은 실체 + (같은 영문 제품 토큰 또는 한국어 제목 바이그램 Jaccard ≥ 0.3) + 날짜 차이 ±2일 이내면 같은 사건
+// (판정 sameEvent 는 news-rank.ts).
 
 /** 2단계 묶기 입력: 1단계 묶음 하나 */
 export interface PeriodStoryInput {
@@ -108,32 +119,6 @@ export interface PeriodEvent<T extends PeriodStoryInput = PeriodStoryInput> {
   ids: string[];
   sources: string[];
   days: string[];
-}
-
-const ALIAS_STRINGS = new Set(ENTITIES.flatMap((e) => e.aliases.filter((a): a is string => typeof a === "string").map((a) => a.toLowerCase())));
-
-/** 제목의 영문 제품 토큰 (숫자를 포함한 3자 이상, 또는 대문자로 시작하는 4자 이상). 실체 별칭·일반 약어는 뺀다 */
-export function productTokens(title: string): Set<string> {
-  const out = new Set<string>();
-  for (const tok of title.match(/[A-Za-z][A-Za-z0-9]*(?:[.\-+][A-Za-z0-9]+)*/g) ?? []) {
-    if (LATIN_STOP.has(tok) || ALIAS_STRINGS.has(tok.toLowerCase())) continue;
-    const hasDigit = /\d/.test(tok);
-    if ((hasDigit && tok.length >= 3) || (/^[A-Z]/.test(tok) && tok.length >= 4)) out.add(tok.toLowerCase());
-  }
-  return out;
-}
-
-const dayNum = (d: string) => Date.parse(`${d}T00:00:00Z`) / 86_400_000;
-
-/** 두 1단계 묶음이 같은 사건인가 (순수 함수) */
-export function sameEvent(a: PeriodStoryInput, b: PeriodStoryInput): boolean {
-  if (!a.entities.some((e) => b.entities.includes(e))) return false;
-  const gap = Math.min(...a.days.flatMap((x) => b.days.map((y) => Math.abs(dayNum(x) - dayNum(y)))));
-  if (!(gap <= EVENT_MAX_DAY_GAP)) return false;
-  const ta = productTokens(`${a.title_kr} ${a.title_cn}`);
-  const tb = productTokens(`${b.title_kr} ${b.title_cn}`);
-  for (const t of ta) if (tb.has(t)) return true;
-  return jaccard(bigrams(a.title_kr), bigrams(b.title_kr)) >= EVENT_TITLE_JACCARD;
 }
 
 /** 1단계 묶음들 → 사건 (union-find). 반환 순서: 매체 수 내림차순 → 점수 내림차순 → 대표 id */

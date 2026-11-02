@@ -127,7 +127,8 @@ export async function saveEditedBriefing(
     `SELECT id, source_name, source_url, category,
             COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr,
             COALESCE(summary_kr, '') AS summary_kr, COALESCE(ai_insights_kr, '') AS ai_insights_kr,
-            COALESCE(key_terms, '[]'::jsonb) AS key_terms, (${PUBLIC_NEWS_WHERE}) AS visible
+            COALESCE(key_terms, '[]'::jsonb) AS key_terms, (${PUBLIC_NEWS_WHERE}) AS visible,
+            COALESCE(summary_cn, '') AS summary_cn, to_char((news_date AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS news_date
        FROM ai_news_ex WHERE id = ANY($1::uuid[])`,
     [ids]
   );
@@ -135,7 +136,8 @@ export async function saveEditedBriefing(
     visible: boolean;
   })[];
   const hidden = new Set(articles.filter((a) => !a.visible).map((a) => a.id));
-  const ctx = contextFromArticles(articles, row.mode, hidden);
+  // 생성 때와 같은 의미 규칙(예전 사건 시점 등)을 쓰도록 판 시작일을 넘긴다
+  const ctx = contextFromArticles(articles, row.mode, hidden, row.period_start ?? row.edition_date);
 
   const { meta, ...body } = stored;
   const edited = applyTextPatch(body as BriefingContent, patch);

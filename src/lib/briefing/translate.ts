@@ -35,11 +35,25 @@ const MULT: Record<string, number> = {
 const NUM_TOKEN =
   /(\d[\d,]*(?:\.\d+)?)\s*(万亿|千亿|百亿|十亿|천억|백억|십억|조|兆|억|亿|만|万|천|千|[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|bn|[kK](?![A-Za-z])|B(?![A-Za-z])|M(?![A-Za-z]))?\s*(%|퍼센트|percent)?/g;
 
+/** 범위 구분자 (~ ～ 〜 - – — 至 到 to) */
+const RANGE_RE =
+  /(\d[\d,]*(?:\.\d+)?)\s*(~|～|〜|–|—|-|至|到|to)\s*(\d[\d,]*(?:\.\d+)?)\s*(%|퍼센트|percent|万亿|千亿|百亿|十亿|천억|백억|십억|亿|万|억|만|조|兆|[Tt]rillion|[Bb]illion|[Mm]illion)/g;
+
+/**
+ * 범위의 뒤쪽 단위를 앞 수에도 붙인다: "7~10%" → "7%~10%", "5~7억" → "5억~7억".
+ * "7%至10%" 와 같은 값 집합이 되게 (2026-10-29 zh 오탐: "7~10%" vs "7%至10%").
+ */
+export function expandRanges(text: string): string {
+  return text.replace(RANGE_RE, (_m, a: string, sep: string, b: string, unit: string) => `${a}${unit} ${sep} ${b}${unit}`);
+}
+
 /**
  * 텍스트 속 "의미 있는" 수치의 정규화 값 집합.
  * 12 이하 정수는 월·순서·개수처럼 말로 풀어 쓰는 경우가 많아 비교에서 뺀다 (단위·%·소수가 붙으면 포함).
+ * 범위("7~10%", "7-10%", "7%至10%")는 양쪽 수에 단위를 붙여 같은 값으로 본다.
  */
-export function numericValues(text: string): Set<string> {
+export function numericValues(raw: string): Set<string> {
+  const text = expandRanges(raw);
   const out: number[] = [];
   const tokens: { v: number; unit: string; end: number; start: number }[] = [];
   for (const m of text.matchAll(NUM_TOKEN)) {
@@ -228,9 +242,18 @@ export async function translateBriefing(
 ): Promise<TranslateResult> {
   const usages: LlmUsage[] = [];
   const byId = new Map(groups.map((g) => [g.shortId, g.primary]));
+  // 이름 힌트: 제목 + 중국어 요약 앞부분 (요약에만 나오는 고유명사 — 天垓300·超衍智能 — 를 원어로 쓰게, 숫자는 가림)
   const hints = [...new Set(citedRefs(ko))]
     .filter((r) => byId.has(r))
-    .map((r) => ({ ref: r, title_kr: maskDigits(byId.get(r)!.title_kr), title_cn: maskDigits(byId.get(r)!.title_cn) }));
+    .map((r) => {
+      const a = byId.get(r)!;
+      return {
+        ref: r,
+        title_kr: maskDigits(a.title_kr),
+        title_cn: maskDigits(a.title_cn),
+        summary_cn: a.summary_cn ? maskDigits(a.summary_cn.slice(0, 90)) : undefined,
+      };
+    });
   const system = buildTranslateSystemPrompt(target);
   const user = buildTranslateUserPrompt(payloadOf(ko), hints);
   try {

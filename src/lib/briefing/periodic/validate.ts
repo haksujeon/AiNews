@@ -19,16 +19,32 @@
  * | cross_currency_rank (신규)     | 치명 | 통화가 다른 금액의 서열 표현 |
  * | summed_amount                 | 치명 | 금액 합산 표현 |
  * | term_unknown / unknown_entity_key | 치명 | 용어·실체 키가 지표에 없음 |
- * | direction_conflict (신규)      | 경고 → 수리 호출 대상 | 하락 지표를 인용하며 상승 표현(또는 반대) |
- * | metric_relevance (신규)        | 경고 | 인용 지표의 대상(기업·매체)이 문장에 없음 |
- * | headline_length               | 경고 → 수리 호출 대상 | 제목 상한 초과 (여유 없이 엄격) |
- * | han_in_ko / length / china_centric | 경고 | |
+ * | direction_conflict            | 치명 (2026-11-02) | 하락 지표를 인용하며 상승 표현(또는 반대). 인용하지 않았어도 문장이 그 용어·기업의 언급 증감을 말하면 본다 |
+ * | rank_mismatch / rank_unbacked | 치명 | "가장 많이 늘었다·가장 많이 다뤄졌다" 가 지표 1위와 다름 / 대상 지표 없음 |
+ * | money_rank / money_not_deal / currency_mismatch / amount_not_in_source | 치명 | 금액 서열·매출을 거래로·원문과 다른 통화·금액 잘라 쓰기 (rules.ts) |
+ * | cvo_conflict                  | 치명 | "국내 기업 소식을 주로" 인데 cvo 지표는 해외가 더 많음 |
+ * | superlative_unsupported / trend_unsupported / qualifier_dropped / outlet_count / leaked_instruction | 치명 | 데일리와 같은 rules.ts |
+ * | metric_relevance (신규)        | 경고 → 수리 호출 대상 | 인용 지표의 대상(기업·매체)이 문장에 없음 |
+ * | headline_length               | 치명 → 수리, 그래도 넘으면 결정적 제목 | 제목 상한 초과 (여유 없이 엄격) |
+ * | han_in_ko / length            | 치명 (여유 없음) | |
+ * | china_centric                 | 치명 | 흐름 4개 중 2개 이상 중국 주체 (rules.ts isChinaSubject). 수리 뒤에도 미달이면 failed |
+ * | top_event_missing             | 경고 → 수리 호출 대상 | 매체 수 1·2위 사건이 본문 어디에도 없음 |
  *
  * 이 파일은 DB 를 import 하지 않는다.
  */
 import type { ValidationIssue } from "../types";
-import { ENTITIES, entityMentioned, properNouns } from "../entities";
+import { ENTITIES, entityMentioned, findEntities, properNouns } from "../entities";
 import { HAN_RE, NUM_RE, norm } from "../validate";
+import {
+  claimIssues,
+  entityNotInOriginal,
+  isChinaSubject,
+  leakedInstruction,
+  moneyIssues,
+  moneyRankIssue,
+  outletClaimIssue,
+  type SourceDoc,
+} from "../rules";
 import type { PeriodicValidationReport, PeriodicContent as WeeklyContent } from "./types";
 
 export interface PeriodicValidationContext {
@@ -44,6 +60,31 @@ export interface PeriodicValidationContext {
   headlineMax: number;
   /** 월간: 지표 weeks[].key (month_arc.week 검사) */
   weekKeys?: Set<string>;
+  /** S id → 근거 기사(번역 + 중국어 원문). 의미 규칙(rules.ts)용 — 없으면 건너뛴다 */
+  docs?: Map<string, SourceDoc[]>;
+  /** S id → 매체 이름 */
+  outlets?: Map<string, string[]>;
+  /** 지표 순위 ("가장 많이 늘었다" 검사): 실체 언급 순, 용어 언급 순, 늘어난 용어 순, 줄어든 용어 순 */
+  ranks?: { entities: string[]; terms: string[]; rising: string[]; falling: string[] };
+  /** 매체 수 상위 사건(1·2위)의 기사 id, S id → 기사 id (top_event_missing 경고) */
+  topEvents?: string[][];
+  poolIds?: Map<string, string[]>;
+}
+
+/** 지표 용어(중국어) → 본문에 쓰는 한국어 표기. 방향 검사·순위 검사가 "에이전트 언급이 늘었다" 를 智能体 로 읽게 한다 */
+export const TERM_KO: Record<string, string[]> = {
+  智能体: ["에이전트", "지능체"],
+  具身智能: ["구현형 AI", "구현형 지능", "구현지능", "구현 지능", "체화 지능", "체화지능", "임바디드"],
+  算力: ["연산력", "컴퓨팅 파워", "컴퓨팅 자원", "산력"],
+  人形机器人: ["휴머노이드", "인간형 로봇"],
+  大模型: ["대형 모델", "대모델", "거대 모델"],
+  自由现金流: ["잉여현금흐름", "자유현금흐름"],
+  开源: ["오픈소스"],
+};
+
+/** 문장이 용어(중국어 원어 또는 한국어 표기)를 말하는가 */
+export function termMentioned(term: string, text: string): boolean {
+  return text.includes(term) || (TERM_KO[term] ?? []).some((k) => text.includes(k));
 }
 
 // ───────────────────────── 정규화
@@ -175,15 +216,15 @@ export function crossCurrencyRank(text: string): boolean {
   return RANK_RE.test(text) && /위안/.test(text) && /달러/.test(text);
 }
 
-const UP_RE = /열풍|늘었|늘어|증가|확산|급증|쏠림|뛰어들/;
-const DOWN_RE = /줄었|줄어|감소|식었|급감/;
+const UP_RE = /열풍|늘었|늘어|늘고|늘며|증가|확산|급증|쏠림|뛰어들/;
+const DOWN_RE = /줄었|줄어|줄고|줄며|감소|식었|급감/;
 const splitSentences = (text: string) => text.split(/(?<=[.!?。！？])\s+/).filter((s) => s.trim());
 
 /** 지표의 대상(용어·기업·매체)이 나오는지. 대상이 없는 지표(vol.* 등)는 null */
 function metricTargetIn(k: string, sentence: string): boolean | null {
   const [ns, id] = k.split(".");
   if (!id) return null;
-  if (ns === "term") return sentence.includes(id);
+  if (ns === "term") return termMentioned(id, sentence);
   if (ns === "ent") {
     const e = ENTITIES.find((x) => x.key === id);
     return e ? entityMentioned(e, sentence) : null;
@@ -212,6 +253,100 @@ export function directionConflicts(text: string, metrics: string[], facts: Recor
   return out;
 }
 
+const MENTION_RE = /언급|기사|보도|다뤄|다룬|등장/;
+const CLAUSE_SPLIT = /,|，|(?<=[가-힣](?:고|며|지만|으나|는데|반면))\s/;
+
+/**
+ * 인용하지 않은 증감 지표와 반대 방향 (2026-11-02 W44 dek "구현형 AI와 에이전트 용어의 언급이 함께 늘었다" — 智能体 84→55).
+ * 언급·기사·보도 이야기를 하는 문장에서, 용어(한국어 표기 포함)·기업이 나오는 절의 방향(없으면 다음 절)을 지표와 맞춘다.
+ */
+export function uncitedDirectionConflicts(text: string, facts: Record<string, string>, cited: string[] = []): string[] {
+  const out: string[] = [];
+  const keys = Object.keys(facts).filter((k) => /^(term|ent)\..+\.(rise|fall|chg)$/.test(k) && !cited.includes(k));
+  for (const s of splitSentences(text)) {
+    if (!MENTION_RE.test(s)) continue;
+    const clauses = s.split(CLAUSE_SPLIT).filter((c) => c.trim());
+    for (const k of keys) {
+      const v = facts[k] ?? "";
+      const neg = k.endsWith(".fall") || (k.endsWith(".chg") && /-\d/.test(v));
+      const pos = k.endsWith(".rise") || (k.endsWith(".chg") && /\+\d/.test(v));
+      if (!neg && !pos) continue;
+      const i = clauses.findIndex((c) => metricTargetIn(k, c) === true);
+      if (i < 0) continue;
+      const scope = clauses.slice(i).find((c) => UP_RE.test(c) || DOWN_RE.test(c));
+      if (!scope) continue;
+      const up = UP_RE.test(scope) && !DOWN_RE.test(scope);
+      const down = DOWN_RE.test(scope) && !UP_RE.test(scope);
+      if (neg && up) out.push(`${k}=${v} 인데 상승 표현`);
+      if (pos && down) out.push(`${k}=${v} 인데 하락 표현`);
+    }
+  }
+  return out;
+}
+
+// ───────────────────────── 지표 순위 ("가장 많이 늘었다")
+
+const RISE_TOP_RE = /가장\s?(?:많이|크게)\s?(?:늘|증가)|증가\s?폭이\s?가장|가장 큰 (?:폭|증가)/;
+const FALL_TOP_RE = /가장\s?(?:많이|크게)\s?(?:줄|감소)|감소\s?폭이\s?가장/;
+const MOST_RE = /가장\s?(?:많이|크게)\s?(?:다뤄|다룬|다뤘|언급|보도|등장|나온|쓰인|쓰였)|언급\s?(?:최다|1위)|최다\s?언급|가장\s?많(?:았|은)/;
+/** 순위 표현 (일반 최상급 검사에서는 뺀다 — 지표 순위로 따로 본다) */
+export const RANK_PHRASE_RE = new RegExp(`${RISE_TOP_RE.source}|${FALL_TOP_RE.source}|${MOST_RE.source}`, "g");
+
+/**
+ * "가장 많이 늘었다·가장 많이 다뤄졌다" 가 지표 1위와 같은가. subjectTerm = term 칸의 용어(문장에 없어도 대상).
+ * 대상(용어·기업)이 문장에 없으면 rank_unbacked. ranks 가 없으면 건너뛴다 (단위 테스트·예전 스냅숏).
+ */
+export function rankIssues(
+  text: string,
+  ctx: Pick<PeriodicValidationContext, "ranks">,
+  subjectTerm?: string,
+  subjectEntity?: string
+): { rule: string; detail: string }[] {
+  const r = ctx.ranks;
+  if (!r) return [];
+  const out: { rule: string; detail: string }[] = [];
+  for (const s of splitSentences(text)) {
+    if (!(RISE_TOP_RE.test(s) || FALL_TOP_RE.test(s) || MOST_RE.test(s))) continue;
+    const ents = findEntities(s).map((e) => e.key);
+    if (subjectEntity && !ents.includes(subjectEntity)) ents.push(subjectEntity);
+    const terms = [...new Set([...r.terms, ...r.rising, ...r.falling])].filter((t) => termMentioned(t, s));
+    if (subjectTerm && !terms.includes(subjectTerm)) terms.push(subjectTerm);
+    if (!terms.length && !ents.length) {
+      out.push({ rule: "rank_unbacked", detail: `"${(s.match(RANK_PHRASE_RE) ?? [""])[0]}" — 순위를 뒷받침할 지표 대상(용어·기업)이 문장에 없음` });
+      continue;
+    }
+    const check = (re: RegExp, list: string[], targets: string[], label: string) => {
+      const m = s.match(re);
+      if (!m || !targets.length) return;
+      if (!list.length || !targets.includes(list[0]))
+        out.push({ rule: "rank_mismatch", detail: `"${m[0]}" — ${label} 1위는 ${list[0] ?? "(없음)"} (문장: ${targets.join(",")})` });
+    };
+    check(RISE_TOP_RE, r.rising, terms, "늘어난 용어");
+    check(FALL_TOP_RE, r.falling, terms, "줄어든 용어");
+    // 용어가 나오면 용어 순위로 ("智能体 21건으로 가장 많이 쓰였다"), 아니면 기업 순위로
+    if (MOST_RE.test(s)) {
+      if (terms.length) check(MOST_RE, r.terms, terms, "언급 용어");
+      else check(MOST_RE, r.entities, ents, "언급 기업");
+    }
+  }
+  return out;
+}
+
+// ───────────────────────── 중국 대 해외 구도 (china_lens)
+
+const DOMESTIC_MAIN_RE = /(?:국내|중국)\s?(?:기업|업체|회사)?[^.。]{0,25}(?:주로|중심|대부분|위주|압도)/;
+const FOREIGN_MAIN_RE = /해외\s?(?:기업|업체|회사)?[^.。]{0,25}(?:주로|중심|대부분|위주|압도)/;
+/** "중국 매체는 국내 기업 소식을 주로 다뤘다" 인데 cvo 지표는 해외 실체 기사가 더 많음 (또는 반대) */
+export function cvoConflict(text: string, facts: Record<string, string>): string | null {
+  const num = (k: string) => Number((facts[k] ?? "").match(/(\d+(?:\.\d+)?)%/)?.[1] ?? NaN);
+  const cn = num("cvo.china");
+  const fo = num("cvo.foreign");
+  if (!Number.isFinite(cn) || !Number.isFinite(fo)) return null;
+  if (DOMESTIC_MAIN_RE.test(text) && !FOREIGN_MAIN_RE.test(text) && cn < fo) return `국내 기업 위주라고 썼지만 중국 ${cn}% < 해외 ${fo}%`;
+  if (FOREIGN_MAIN_RE.test(text) && !DOMESTIC_MAIN_RE.test(text) && fo < cn) return `해외 기업 위주라고 썼지만 해외 ${fo}% < 중국 ${cn}%`;
+  return null;
+}
+
 /** 인용 지표의 대상(기업·매체)이 문장에 없음. 용어는 한국어 번역어 사전(v2) 전까지 보지 않는다 */
 export function irrelevantMetrics(text: string, metrics: string[], entityNames: Map<string, string>, subject = ""): string[] {
   const out: string[] = [];
@@ -227,12 +362,9 @@ export function irrelevantMetrics(text: string, metrics: string[], entityNames: 
   return out;
 }
 
-const CN_SUBJECT_RE = /중국|베이징|상하이|항저우|선전/;
-export function chinaCentricCount(c: WeeklyContent): number {
-  return c.big_picture.filter((b) => {
-    const t = `${b.title} ${b.text}`;
-    return CN_SUBJECT_RE.test(t) || ENTITIES.some((e) => e.chinese && entityMentioned(e, t));
-  }).length;
+/** 중국 주체 흐름 수 (데일리와 같은 rules.ts isChinaSubject) */
+export function chinaCentricCount(c: WeeklyContent, ctx?: Pick<PeriodicValidationContext, "docs">): number {
+  return c.big_picture.filter((b) => isChinaSubject({ title: b.title, text: b.text }, b.refs.flatMap((r) => ctx?.docs?.get(r) ?? []))).length;
 }
 
 // ───────────────────────── 본 검증
@@ -272,14 +404,22 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
     if (/합계|총\s?\d|모두 합쳐|합산/.test(u.text)) push("fatal", "summed_amount", u.path, "금액 합산 표현");
 
     if (!u.headline) {
-      for (const d of directionConflicts(u.text, u.metrics, F)) push("warn", "direction_conflict", u.path, d);
+      for (const d of directionConflicts(u.text, u.metrics, F)) push("fatal", "direction_conflict", u.path, d);
       for (const k of irrelevantMetrics(u.text, u.metrics, ctx.entityNames, u.subject)) push("warn", "metric_relevance", u.path, `${k} 대상이 문장에 없음`);
     }
+    // 인용하지 않은 지표와도 방향이 맞아야 한다 (dek·term·china_lens 포함)
+    for (const d of uncitedDirectionConflicts(u.text, F, u.metrics)) push("fatal", "direction_conflict", u.path, d);
+    for (const i of rankIssues(u.text, ctx, u.path === "term" ? c.term?.term : undefined, u.subject)) push("fatal", i.rule, u.path, i.detail);
+    for (const i of periodicSemanticIssues(u, ctx, groundText)) push("fatal", i.rule, u.path, i.detail);
+    if (u.path === "china_lens") {
+      const cv = cvoConflict(u.text, F);
+      if (cv) push("fatal", "cvo_conflict", u.path, cv);
+    }
     const han = u.path === "term" ? null : u.text.match(HAN_RE);
-    if (han) push("warn", "han_in_ko", u.path, han.join(""));
+    if (han) push("fatal", "han_in_ko", u.path, han.join(""));
     if (u.headline) {
-      if (u.text.length > ctx.headlineMax) push("warn", "headline_length", "headline", `${u.text.length}/${ctx.headlineMax}자`);
-    } else if (u.limit && u.text.length > Math.round(u.limit * 1.15)) push("warn", "length", u.path, `${u.text.length}/${u.limit}자`);
+      if (u.text.length > ctx.headlineMax) push("fatal", "headline_length", "headline", `${u.text.length}/${ctx.headlineMax}자`);
+    } else if (u.limit && u.text.length > u.limit) push("fatal", "length", u.path, `${u.text.length}/${u.limit}자`);
   }
 
   if (c.term && !ctx.terms.has(c.term.term)) push("fatal", "term_unknown", "term", c.term.term);
@@ -290,10 +430,43 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
     (c.month_arc ?? []).forEach((b, i) => {
       if (!ctx.weekKeys!.has(b.week)) push("fatal", "unknown_week", `month_arc[${i}]`, b.week || "(없음)");
     });
-  const cn = chinaCentricCount(c);
-  if (cn < Math.min(2, c.big_picture.length)) push("warn", "china_centric", "big_picture", `중국 주체 흐름 ${cn}개`);
+  const cn = chinaCentricCount(c, ctx);
+  if (cn < Math.min(2, c.big_picture.length))
+    push("fatal", "china_centric", "big_picture", `중국 주체 흐름 ${cn}개 (흐름 ${c.big_picture.length}개 중 2개 이상 필요)`);
+
+  // 매체 수 1·2위 사건이 본문 어디에도 없으면 경고 (QA 권고 16)
+  if (ctx.topEvents && ctx.poolIds) {
+    const citedIds = new Set(citedSids(c).flatMap((sid) => ctx.poolIds!.get(sid) ?? []));
+    ctx.topEvents.forEach((ids, i) => {
+      if (ids.length && !ids.some((id) => citedIds.has(id))) push("warn", "top_event_missing", "big_picture", `매체 수 ${i + 1}위 사건이 본문에 없음`);
+    });
+  }
 
   return { fatal: dedupe(fatal), warn: dedupe(warn), stats: { bigPicture: c.big_picture.length, chinaCentric: cn, numbersChecked } };
+}
+
+/** 단위 하나의 rules.ts 규칙 (데일리와 같은 함수) */
+function periodicSemanticIssues(u: Unit, ctx: PeriodicValidationContext, groundText: string): { rule: string; detail: string }[] {
+  const out: { rule: string; detail: string }[] = [];
+  const leak = leakedInstruction(u.text);
+  if (leak) out.push(leak);
+  if (u.path === "money") {
+    const mr = moneyRankIssue(u.text);
+    if (mr) out.push(mr);
+  }
+  if (!ctx.docs) return out;
+  const docs = u.refs.flatMap((r) => ctx.docs!.get(r) ?? []);
+  // 지표 값 문자열도 근거 문장으로 넣는다 (금액·최상급 근거)
+  const metricDoc: SourceDoc = { title_kr: "", title_cn: "", summary_kr: u.metrics.map((k) => ctx.facts[k] ?? "").join(". "), insight_kr: "" };
+  const all = [...docs, metricDoc];
+  out.push(...claimIssues(u.text, all, { skip: RANK_PHRASE_RE }));
+  out.push(...moneyIssues(u.text, all, groundText));
+  if (!u.headline) {
+    out.push(...entityNotInOriginal(u.text, docs));
+    const oc = outletClaimIssue(u.text, u.refs.flatMap((r) => ctx.outlets?.get(r) ?? []));
+    if (oc) out.push(oc);
+  }
+  return out;
 }
 
 function dedupe(list: ValidationIssue[]): ValidationIssue[] {
@@ -306,14 +479,17 @@ function dedupe(list: ValidationIssue[]): ValidationIssue[] {
   });
 }
 
-/** 수리 호출이 필요한가: 치명, 방향 충돌, 제목 길이, 한자 */
+/** 수리 대상 경고 (치명은 모두 수리 대상) */
+const REPAIR_WARN = ["metric_relevance", "top_event_missing"];
+
+/** 수리 호출이 필요한가: 치명(방향 충돌·제목 길이·한자 포함), 또는 수리 대상 경고 */
 export function needsRepair(r: PeriodicValidationReport): boolean {
-  return r.fatal.length > 0 || r.warn.some((w) => ["direction_conflict", "headline_length", "han_in_ko"].includes(w.rule));
+  return r.fatal.length > 0 || r.warn.some((w) => REPAIR_WARN.includes(w.rule));
 }
 
 /** 수리에 넘길 문제 목록 (치명 + 수리 대상 경고) */
 export function repairProblems(r: PeriodicValidationReport): ValidationIssue[] {
-  return [...r.fatal, ...r.warn.filter((w) => ["direction_conflict", "headline_length", "han_in_ko", "metric_relevance"].includes(w.rule))];
+  return [...r.fatal, ...r.warn.filter((w) => REPAIR_WARN.includes(w.rule))];
 }
 
 /** 문장 위치 → 삭제 단위 */
