@@ -128,18 +128,19 @@ test('상세(ko/zh/en): 요지 5문장 이하, 6번째 문장은 HTML·RSC·API 
 
 test('모달(가로채기): 요지 5문장 이하, 6번째 문장은 DOM·RSC 응답에 없다', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  // 홈 첫 로드 전부터 듣는다 — 카드 링크 prefetch 로 받은 가로채기 RSC 도 놓치지 않게
+  const rscBodies: Promise<string>[] = [];
+  const apiBodies: Promise<string>[] = [];
+  page.on('response', (res) => {
+    const req = res.request();
+    if (req.headers()['rsc'] === '1' || res.url().includes('_rsc=')) rscBodies.push(res.text().catch(() => ''));
+    else if (res.url().includes('/api/news/')) apiBodies.push(res.text().catch(() => ''));
+  });
+
   const ids = await homeCardIds(page);
   const fx = await pickFixture(ids);
   test.skip(!fx, '홈 카드 중 6문장 이상인 기사가 없다');
   const { id, needle } = fx!;
-
-  const bodies: Promise<string>[] = [];
-  page.on('response', (res) => {
-    const req = res.request();
-    if (req.headers()['rsc'] === '1' || res.url().includes('_rsc=') || res.url().includes('/api/news/')) {
-      bodies.push(res.text().catch(() => ''));
-    }
-  });
 
   await page.locator(`main a[href*="/news/${id}"]`).first().click();
   const dialog = page.getByRole('dialog');
@@ -157,7 +158,14 @@ test('모달(가로채기): 요지 5문장 이하, 6번째 문장은 DOM·RSC �
   expect(Math.abs(h2 - h1)).toBeLessThanOrEqual(200); // 관련 기사 목록이 늦게 붙는 것만 허용
 
   expect(await page.content()).not.toContain(needle);
-  const all = await Promise.all(bodies);
-  expect(all.length).toBeGreaterThan(0);
-  for (const b of all) expect(b).not.toContain(needle);
+  const rsc = await Promise.all(rscBodies);
+  const api = await Promise.all(apiBodies);
+  // 양성 대조: 모달 기사의 요지를 실은 RSC 응답이 실제로 잡혔다
+  const withGist = rsc.filter((b) => b.includes(id) && b.includes('"gist"'));
+  console.log(`modal RSC responses ${rsc.length} (gist ${withGist.length}), api ${api.length}; 6th-sentence hits ${[...rsc, ...api].filter((b) => b.includes(needle)).length}`);
+  expect(withGist.length).toBeGreaterThan(0);
+  for (const b of [...rsc, ...api]) {
+    expect(b).not.toContain(needle);
+    expect(b).not.toContain('"content_kr"');
+  }
 });
