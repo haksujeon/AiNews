@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Search, Loader2, AlertTriangle, RotateCw } from "lucide-react";
 import type { NewsDay, NewsDaysPage } from "@/lib/news-types";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { NewsFilter } from "./news-filter";
 import { NewsContainerSkeleton } from "./news-skeleton";
 import { NewsDayGroup } from "./news-day-group";
+import { DayBriefingDialog } from "./day-briefing-dialog";
 
 interface NewsContainerProps {
   /** 서버가 렌더한 첫 페이지 (최근 NEWS_DAYS_PER_PAGE 일, 날마다 주요 4건) */
@@ -29,6 +30,7 @@ interface NewsContainerProps {
 //
 // 기사 상세는 카드/리스트 항목의 링크(/news/[id])로 연다.
 // 소프트 이동이면 @modal/(.)news/[id] 가 모달로 가로채고, 직접 접속이면 전체 페이지가 뜬다.
+// 날짜 옆 "그날 브리핑" 은 ?briefing=YYYY-MM-DD 대화상자(DayBriefingDialog)로 연다 — 첫 화면과 무한 스크롤로 받은 날 모두 같은 링크.
 export function NewsContainer({ initialPage, facets, isLoading = false }: NewsContainerProps) {
   const locale = useLocale();
   const t = useTranslations("list");
@@ -288,6 +290,10 @@ export function NewsContainer({ initialPage, facets, isLoading = false }: NewsCo
           </Button>
         </div>
       )}
+      {/* useSearchParams 를 쓰므로 Suspense 경계 안에 둔다 */}
+      <Suspense fallback={null}>
+        <DayBriefingDialog />
+      </Suspense>
       {!hasMore && !listError && days.length > NEWS_DAYS_PER_PAGE && (
         <p className="text-center text-xs text-ink-3 py-4">
           {t("allDaysLoaded", { total })}

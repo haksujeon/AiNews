@@ -12,7 +12,8 @@
     "sourcesLabel": "来源",
     "briefing": "简报",
     "aiImageLabel": "AI 生成图片",
-    "aiImageLabelShort": "AI 生成"
+    "aiImageLabelShort": "AI 生成",
+    "close": "关闭"
   },
   "filter": {
     "searchPlaceholder": "按标题或内容搜索...",
@@ -186,7 +187,12 @@
     "expandLoading": "正在加载当天文章...",
     "expandError": "无法加载当天文章。",
     "outlets": "{count} 家媒体报道",
-    "allDaysLoaded": "已加载全部日期（共 {total} 篇）"
+    "allDaysLoaded": "已加载全部日期（共 {total} 篇）",
+    "dayBriefing": "当日简报",
+    "dayBriefingWeekend": "周末合刊简报",
+    "dayBriefingPending": "简报待发布",
+    "dayBriefingAria": "打开{date}简报：{headline}",
+    "dayBriefingWeekendAria": "打开{range}周末合刊简报：{headline}"
   },
   "briefing": {
     "kicker": "今日中国AI简报",
@@ -248,7 +254,14 @@
     "dataNoticeTitle": "数据提示",
     "dataNoticePartial": "{date}仅采集到部分文章（{count}篇，同类日中位数{median}篇）。",
     "dataNoticeReduced": "{date}为后来补采的数据，设有各媒体每日上限（{count}篇）。",
-    "dataNoticeTail": "本期文章数低于实际报道量，请勿据此判断趋势。"
+    "dataNoticeTail": "本期文章数低于实际报道量，请勿据此判断趋势。",
+    "compactReadFull": "阅读完整简报",
+    "weekendRange": "{start}至{end} · 周末合刊",
+    "withdrawnInModal": "该简报已更正或撤回。",
+    "withdrawnLink": "查看更正记录",
+    "compactLoading": "正在加载简报...",
+    "compactError": "无法加载简报。",
+    "compactNotFound": "该日期没有已发布的简报。"
   },
   "briefingAdmin": {
     "nav": "简报审核",

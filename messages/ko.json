@@ -12,7 +12,8 @@
     "sourcesLabel": "출처",
     "briefing": "브리핑",
     "aiImageLabel": "AI 생성 이미지",
-    "aiImageLabelShort": "AI 생성"
+    "aiImageLabelShort": "AI 생성",
+    "close": "닫기"
   },
   "filter": {
     "searchPlaceholder": "기사 제목, 내용으로 검색...",
@@ -186,7 +187,12 @@
     "expandLoading": "이날 기사를 불러오는 중...",
     "expandError": "이날 기사를 불러오지 못했습니다.",
     "outlets": "{count}개 매체 보도",
-    "allDaysLoaded": "모든 날짜를 불러왔습니다 (총 {total}건)"
+    "allDaysLoaded": "모든 날짜를 불러왔습니다 (총 {total}건)",
+    "dayBriefing": "그날 브리핑",
+    "dayBriefingWeekend": "주말 합본 브리핑",
+    "dayBriefingPending": "브리핑 발행 예정",
+    "dayBriefingAria": "{date} 브리핑 열기: {headline}",
+    "dayBriefingWeekendAria": "{range} 주말 합본 브리핑 열기: {headline}"
   },
   "briefing": {
     "kicker": "오늘의 중국 AI 브리핑",
@@ -248,7 +254,14 @@
     "dataNoticeTitle": "데이터 알림",
     "dataNoticePartial": "{date}은 수집이 일부만 됐습니다(기사 {count}건, 같은 요일군 중앙값 {median}건).",
     "dataNoticeReduced": "{date}은 나중에 보충 수집한 날이라 매체별 하루 상한이 걸려 있습니다(기사 {count}건).",
-    "dataNoticeTail": "이 판의 기사 수는 실제 보도량보다 적게 잡혔으니 물량으로 흐름을 읽지 마십시오."
+    "dataNoticeTail": "이 판의 기사 수는 실제 보도량보다 적게 잡혔으니 물량으로 흐름을 읽지 마십시오.",
+    "compactReadFull": "전체 브리핑 읽기",
+    "weekendRange": "{start}~{end} · 주말 합본",
+    "withdrawnInModal": "이 브리핑은 정정·철회되었습니다.",
+    "withdrawnLink": "정정 기록 보기",
+    "compactLoading": "브리핑을 불러오는 중...",
+    "compactError": "브리핑을 불러오지 못했습니다.",
+    "compactNotFound": "이 날짜에 발행된 브리핑이 없습니다."
   },
   "briefingAdmin": {
     "nav": "브리핑 검토",

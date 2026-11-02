@@ -12,7 +12,8 @@
     "sourcesLabel": "Sources",
     "briefing": "Briefing",
     "aiImageLabel": "AI-generated image",
-    "aiImageLabelShort": "AI-generated"
+    "aiImageLabelShort": "AI-generated",
+    "close": "Close"
   },
   "filter": {
     "searchPlaceholder": "Search by title or content...",
@@ -186,7 +187,12 @@
     "expandLoading": "Loading this day's articles...",
     "expandError": "Couldn't load this day's articles.",
     "outlets": "Reported by {count} outlets",
-    "allDaysLoaded": "All dates loaded ({total} articles in total)"
+    "allDaysLoaded": "All dates loaded ({total} articles in total)",
+    "dayBriefing": "Day's briefing",
+    "dayBriefingWeekend": "Weekend briefing",
+    "dayBriefingPending": "Briefing coming",
+    "dayBriefingAria": "Open the {date} briefing: {headline}",
+    "dayBriefingWeekendAria": "Open the {range} weekend briefing: {headline}"
   },
   "briefing": {
     "kicker": "Today's China AI Briefing",
@@ -248,7 +254,14 @@
     "dataNoticeTitle": "Data note",
     "dataNoticePartial": "{date} was only partially collected ({count} articles; same-weekday-group median {median}).",
     "dataNoticeReduced": "{date} was backfilled later with per-outlet daily caps ({count} articles).",
-    "dataNoticeTail": "Article counts in this edition understate actual coverage, so don't read trends from volume."
+    "dataNoticeTail": "Article counts in this edition understate actual coverage, so don't read trends from volume.",
+    "compactReadFull": "Read the full briefing",
+    "weekendRange": "{start}–{end} · Weekend edition",
+    "withdrawnInModal": "This briefing has been corrected or withdrawn.",
+    "withdrawnLink": "See the corrections log",
+    "compactLoading": "Loading the briefing...",
+    "compactError": "Couldn't load the briefing.",
+    "compactNotFound": "No briefing was published for this date."
   },
   "briefingAdmin": {
     "nav": "Briefing review",

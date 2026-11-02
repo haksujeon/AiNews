@@ -2,13 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useLocale } from "next-intl";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { RouteModalShell } from "@/components/layout/route-modal-shell";
 import type { PublicNewsItem } from "@/lib/news-gist";
 import { EMPTY_RELATED, type RelatedSections } from "@/lib/related-types";
 import { fetchRelatedNewsClient } from "@/lib/supabase-client";
@@ -30,6 +25,7 @@ interface NewsDetailModalProps {
 // 본문 렌더링은 전체 페이지와 같은 컴포넌트(ArticleByline/ArticleBody/KeyTerms)를 쓴다.
 // 본문(요약·인사이트·요지·핵심 용어)은 서버가 넘긴 news 로 바로 그린다. 예전에는 /api/news/[id] 를
 // 다시 불러 그동안 로딩 표시 → 본문으로 바뀌며 높이가 튀었다(Gate 3). 이제 관련 기사만 따로 불러온다.
+// 팝업 틀(크기·휴대폰 바닥 시트·닫기·포커스 되돌리기)은 홈 날짜 브리핑 팝업과 같은 RouteModalShell (Gate 2).
 export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalProps) {
   const locale = useLocale();
   const [relatedNews, setRelatedNews] = useState<RelatedSections>(EMPTY_RELATED);
@@ -61,9 +57,7 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
   const title = getTitle(fullItem, locale);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* grid(기본값) 대신 flex-col: grid 에서는 aspect-ratio 이미지 행이 0px 로 접혀 본문과 겹친다 */}
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-y-auto rounded-md border-rule bg-background p-0 shadow-xl sm:max-h-[88vh] sm:max-w-[760px]">
+    <RouteModalShell open={open} onOpenChange={onOpenChange} data-testid="news-modal">
         <NewsThumbnail
           src={getImageUrl(fullItem)}
           alt={title}
@@ -91,7 +85,6 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
               위 내용이 밀리지 않는다(Gate 3) */}
           <RelatedSectionsView sections={relatedNews} locale={locale} variant="modal" headingTag="h3" />
         </div>
-      </DialogContent>
-    </Dialog>
+    </RouteModalShell>
   );
 }

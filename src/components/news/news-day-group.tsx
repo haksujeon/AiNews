@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NewsCard } from "./news-card";
 import { NewsListItem } from "./news-list-item";
+import { DayBriefingLink, dayBriefingState } from "./day-briefing-link";
 
 /** 그리드 보기의 칸 배치. 주요 4건과 펼친 나머지가 같은 칸 규칙을 써서 펼쳐도 기존 카드가 움직이지 않는다. */
 const GRID_CLASS = "grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
@@ -27,7 +28,8 @@ interface NewsDayGroupProps {
 type PendingFocus = "first-new" | "toggle" | null;
 
 /**
- * 날짜 하나: 제목 줄 + 주요 기사(공용 순위 상위 4건) + "이날 기사 N건 더 보기" 펼치기.
+ * 날짜 하나: 제목 줄(날짜 · 그날 브리핑 링크 | 건수) + 주요 기사(공용 순위 상위 4건) + "이날 기사 N건 더 보기" 펼치기.
+ * 제목 줄 높이: 데스크톱 44px(링크의 누를 수 있는 높이), 휴대폰은 두 줄(1줄 날짜·건수, 2줄 링크).
  * 그리드·리스트 보기가 같은 컴포넌트·같은 펼치기 로직을 쓴다 (Gate 2). 보기를 바꿔도 펼침 상태는 유지된다.
  *
  *  - 처음 펼칠 때만 서버에서 나머지를 받고, 접었다 다시 펼치면 받은 것을 그대로 쓴다.
@@ -123,12 +125,24 @@ export function NewsDayGroup({ day, heading, viewMode, filters, locale }: NewsDa
     );
 
   return (
-    <section aria-labelledby={headingId} data-testid="news-day" data-date={day.date} data-total={day.total}>
-      <div className="mb-2 flex items-baseline justify-between gap-4 border-b-2 border-rule-strong pb-2">
-        <h3 id={headingId} className="text-[15px] font-bold text-ink">
-          {heading}
-        </h3>
-        <span className="shrink-0 text-xs text-ink-3" data-testid="news-day-count">
+    <section
+      aria-labelledby={headingId}
+      data-testid="news-day"
+      data-date={day.date}
+      data-total={day.total}
+      data-briefing-state={dayBriefingState(day)}
+    >
+      <div
+        className="mb-2 flex min-h-11 items-center justify-between gap-4 border-b-2 border-rule-strong pb-1 max-sm:flex-wrap max-sm:items-baseline max-sm:gap-y-0 max-sm:pb-0.5"
+        data-testid="news-day-head"
+      >
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3.5 max-sm:contents">
+          <h3 id={headingId} className="text-[15px] font-bold text-ink max-sm:order-1 max-sm:flex-1 max-sm:pt-[5.5px]">
+            {heading}
+          </h3>
+          <DayBriefingLink day={day} locale={locale} />
+        </div>
+        <span className="shrink-0 text-xs text-ink-3 max-sm:order-2" data-testid="news-day-count">
           {day.total > day.top.length
             ? t("dayTopTotal", { top: day.top.length, total: day.total })
             : t("groupCount", { count: day.total })}

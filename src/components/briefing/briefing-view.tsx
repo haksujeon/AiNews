@@ -124,10 +124,13 @@ export function TopStoryItem({
   story: s,
   briefing,
   variant = "page",
+  titleTag: Title = "h3",
 }: {
   story: TopStory;
   briefing: PublicBriefing;
   variant?: "page" | "compact";
+  /** 팝업은 DialogTitle(h2) 아래 "주요 기사"(h3) 밑이라 h4 */
+  titleTag?: "h3" | "h4";
 }) {
   const t = useTranslations("briefing");
   const outlets = outletsOf(s.refs, briefing.articles).length;
@@ -149,7 +152,7 @@ export function TopStoryItem({
           <span className="font-semibold text-jade">{sectionLabel(t, s.section)}</span>
           {outlets >= 2 && <span>{t("outlets", { count: outlets })}</span>}
         </p>
-        <h3
+        <Title
           className={
             compact
               ? "text-[18px] font-bold leading-[1.4] tracking-[-0.02em] text-ink sm:text-[19px]"
@@ -157,7 +160,7 @@ export function TopStoryItem({
           }
         >
           {s.title}
-        </h3>
+        </Title>
         <p className={compact ? "mt-2 text-[15.5px] leading-[1.75] text-ink-2" : "mt-2.5 max-w-[40rem] text-base leading-[1.8] text-ink-2 sm:text-[17px]"}>
           {s.what}
         </p>
