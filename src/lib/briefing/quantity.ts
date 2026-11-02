@@ -29,7 +29,7 @@ export interface Quantity {
   scaled: boolean;
   /** 소수점 표기 ("8.0", "27.3") — 버전 번호처럼 작은 수도 비교 대상 */
   decimal: boolean;
-  /** 라틴 낱말 바로 뒤의 수 ("Genie 4", "GPT-5", "iOS 27") — 이름의 일부라 작은 수도 비교 대상 */
+  /** 라틴 낱말 바로 뒤의 수 ("Genie 4", "GPT-5", "iOS 27") — 이름의 일부라 작은 수도 비교 대상 (원문 ko 쪽에서만 쓴다) */
   named: boolean;
 }
 
@@ -109,7 +109,8 @@ export function parseQuantities(text: string): Quantity[] {
       prev.percent = Boolean(g.pct);
       continue;
     }
-    const before = src.slice(Math.max(0, start - 2), start);
+    const before = src.slice(Math.max(0, start - 12), start);
+    const after = src.charAt(end);
     out.push({
       value: base * mult,
       currency: cur,
@@ -120,7 +121,8 @@ export function parseQuantities(text: string): Quantity[] {
       base,
       scaled: mult > 1,
       decimal: /\./.test(g.num ?? ""),
-      named: /[A-Za-z][\s\-]?$/.test(before) && !g.pre,
+      // 이름에 붙은 수: 라틴 2자 이상 낱말 바로 뒤(공백·하이픈 하나 허용), 한국어 단위(개·명·대 …)가 바로 붙지 않음 ("GPU 2개" 는 개수)
+      named: /[A-Za-z]{2,}[\s\-]?$/.test(before) && !/(?:January|February|March|April|May|June|July|August|September|October|November|December|Q|H)\s?$/.test(before) && !/[개명곳대종건배위번차년월일점분]/.test(after) && !g.pre,
     });
   }
   return out;

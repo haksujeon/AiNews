@@ -405,7 +405,7 @@ function fallbackOutcome(
 ): KoOutcome {
   validation.fallback_reason = reason;
   const edits = (validation.edits as ContentEdit[] | undefined) ?? [];
-  const sf = shortFallback(cur.content, cur.report, ctx, editionDate);
+  const sf = shortFallback(cur.content, cur.report, ctx);
   if (sf) {
     edits.push({ action: "repair", path: "headline", reason: `대체 짧은 판: ${reason}`, before: cur.content.headline, after: sf.content.headline, round: "fallback" });
     validation.edits = edits;

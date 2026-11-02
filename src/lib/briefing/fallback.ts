@@ -10,7 +10,7 @@
  */
 import type { BriefingContent, CandidateGroup, TopStory, ValidationReport } from "./types";
 import { HEADLINE_MAX, dropFatalItems, itemOf, validateKo, type ValidationContext } from "./validate";
-import { isChinaCandidate } from "./rules";
+import { isChinaCandidate, isChinaSubject } from "./rules";
 import { findEntities } from "./entities";
 
 const md = (d: string) => `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일`;
@@ -54,13 +54,15 @@ export function shortFallback(
   content: BriefingContent,
   report: ValidationReport,
   ctx: ValidationContext,
-  editionDate: string,
   minTop = 3
 ): { content: BriefingContent; report: ValidationReport } | null {
   const shortCtx: ValidationContext = { ...ctx, mode: "short" };
   // 헤드라인·리드·중국 중심(판 전체) 치명은 대체 문장으로 갈음하므로 삭제 대상에서 뺀다
   const droppable = report.fatal.filter((f) => !["headline", "lede", "top_stories"].includes(itemOf(f.path)));
   let c = dropFatalItems(content, droppable).content;
+  // 짧은 판은 중국 중심 규칙을 보지 않으므로 중국 주체 기사를 앞으로 (같은 무리 안에서는 원래 순서) — 헤드라인 = 1위 기사
+  const cn = (s: BriefingContent["top_stories"][number]) => isChinaSubject(s, s.refs.map((r) => ctx.docs?.get(r) ?? []));
+  c = { ...c, top_stories: [...c.top_stories.filter(cn), ...c.top_stories.filter((s) => !cn(s))].map((s, i) => ({ ...s, rank: i + 1 })) };
   for (let pass = 0; pass < 2; pass++) {
     if (c.top_stories.length < minTop) return null;
     const lede = fallbackLede(c);

@@ -131,6 +131,27 @@ test("09-16 zh '飞书10.0'(ko '페이수 8.0') — 10 이하 소수점 표기�
   assert.deepEqual([...numericValues("후보 3개")], [...numericValues("three candidates")]);
 });
 
+test("round 2 재생성(10-28) 번역 오탐 회귀: 'Q3'·'score is 44, up 3 points'·'00-born'·'约六万名' 은 숫자 위반이 아니다", () => {
+  const cases: [string, string, "en" | "zh"][] = [
+    ["우수커지, 상장 후 첫 실적에서 매출은 55.71% 늘었으나 3분기 순이익은 감소", "Unitree's first results since listing: revenue up 55.71%, but Q3 net profit declined", "en"],
+    [
+      "앤트그룹 바이링 대모델이 10월 28일 Ling-3.1-flash-1019를 오픈소스로 공개했다. 지능 지수는 44점으로 이전 버전보다 3점 올랐다.",
+      "Ant Group's Bailing model released Ling-3.1-flash-1019 as open source on October 28. Its intelligence index score is 44, up 3 points from the previous version.",
+      "en",
+    ],
+    ["칭화대 00후 창업자 기업들, 잇따라 투자 유치 (장셴 과학기술 1년 내 누적 10억 위안 이상)", "Tsinghua 00-born founders' companies raise funding (Zhangxian Technology accumulates over 1 billion yuan in one year)", "en"],
+    ["마이크로소프트, 약 6만 명 대상 자발적 퇴사 프로그램 실시", "微软向约六万名员工推出自愿离职计划", "zh"],
+  ];
+  for (const [ko, tr, target] of cases) {
+    const base = { ...emptyContent(), headline: ko, lede: "l" };
+    const got = checkTranslation(base, { ...base, headline: tr, lede: "l" }, target).filter((p) => p.startsWith("headline"));
+    assert.deepEqual(got.filter((p) => /number|digits/.test(p)), [], `${tr}\n${got.join("\n")}`);
+  }
+  // 이름에 붙은 수는 여전히 본다: Genie 4 → Genie 3
+  const base = { ...emptyContent(), headline: "구글 Genie 4 공개", lede: "l" };
+  assert.ok(checkTranslation(base, { ...base, headline: "Google unveils Genie 3" }, "en").some((p) => /number set differs/.test(p)));
+});
+
 test("10-29 en 'Tianhai 300'(ko 천가오300 = 天垓300 → Tiangai) / 07-15 en 'Zhiyi Power'(ko 지지동력 = LimX Dynamics) → 이름표 위반", () => {
   const ko = ED<TopStory>("d1029_ko_top3");
   const en = ED<TopStory>("d1029_en_top3");
@@ -214,11 +235,11 @@ test("대체 판: 짧은 판(검증 통과 주요 기사 ≥ 3, 결정적 헤드
   const tops = arts.map((a, i) => top(i + 1, "", a.title_kr.slice(0, 38), a.title_kr, [a.id]));
   const c = { ...emptyContent(), headline: "아주 긴 헤드라인이 상한을 넘어서 치명 위반이 되는 경우를 만든다", lede: "근거 없는 리드", lede_refs: [arts[0].id], top_stories: tops };
   const r = validateKo(c, ctx).report;
-  const sf = shortFallback(c, r, ctx, "2026-10-31");
+  const sf = shortFallback(c, r, ctx);
   assert.ok(sf, JSON.stringify(r.fatal));
   assert.deepEqual(sf!.report.fatal, []);
   assert.ok(sf!.content.headline.length <= 32);
-  assert.equal(shortFallback({ ...c, top_stories: tops.slice(0, 2) }, r, ctx, "2026-10-31"), null);
+  assert.equal(shortFallback({ ...c, top_stories: tops.slice(0, 2) }, r, ctx), null);
   const groups: CandidateGroup[] = arts.map((a, i) => ({ shortId: `A0${i + 1}`, primary: a, siblings: [], sources: [a.source_name], score: 10 - i, scoreDetail: {} }));
   const hl = headlinesEdition(groups, "2026-10-31");
   assert.equal(hl.headline, "10월 31일 중국 AI 주요 기사");

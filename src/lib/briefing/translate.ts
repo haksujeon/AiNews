@@ -34,12 +34,33 @@ export { expandRanges };
  * 범위("7~10%", "7-10%", "7%至10%")는 양쪽 수에 단위를 붙여 같은 값으로 본다.
  */
 export function numericValues(raw: string): Set<string> {
-  const out: string[] = [];
-  for (const q of parseQuantities(expandRanges(raw))) {
-    const significant = q.scaled || q.percent || q.decimal || q.named || !Number.isInteger(q.base) || q.base > 12;
-    if (significant) out.push(canonicalValue(q.value));
+  return valueSets(raw).sig;
+}
+
+/** 중국어 숫자 한 글자 + 큰 단위 ("六万" → "6万", "两亿" → "2亿") — zh 번역이 "约六万名" 처럼 써도 같은 값으로 본다 */
+const CN_DIGIT: Record<string, string> = { 一: "1", 二: "2", 两: "2", 三: "3", 四: "4", 五: "5", 六: "6", 七: "7", 八: "8", 九: "9", 十: "10" };
+export function cnNumerals(text: string): string {
+  return text.replace(/(?<![一二两三四五六七八九十百千\d])([一二两三四五六七八九十])(?=[万亿千])/g, (d) => CN_DIGIT[d]);
+}
+
+/**
+ * 수치 집합 세 가지 (parseQuantities 하나로):
+ *  - sig: 비교 대상 (단위·%·소수점·이름에 붙은 수·12 넘는 수) — 원문 ko 에서 빠지면 안 되는 값
+ *  - plain: sig 에서 "이름에 붙은 수" 를 뺀 것 — 번역문에서 덧붙이면 안 되는 값 (영어 문장의 "Q3"·"up 3 points" 는 이름이 아니다)
+ *  - all: 모든 수 — 원문의 작은 수가 번역문에 있는지 볼 때
+ */
+export function valueSets(raw: string): { sig: Set<string>; plain: Set<string>; all: Set<string> } {
+  const sig = new Set<string>();
+  const plain = new Set<string>();
+  const all = new Set<string>();
+  for (const q of parseQuantities(expandRanges(cnNumerals(raw)))) {
+    const v = canonicalValue(q.value);
+    all.add(v);
+    const base = q.scaled || q.percent || q.decimal || !Number.isInteger(q.base) || q.base > 12;
+    if (base) plain.add(v);
+    if (base || q.named) sig.add(v);
   }
-  return new Set(out);
+  return { sig, plain, all };
 }
 
 // ───────────────────────── 필드 대응
@@ -169,10 +190,11 @@ export function checkTranslation(ko: BriefingContent, tr: BriefingContent, targe
     if (K_SUFFIX_RE.test(out) && !K_SUFFIX_RE.test(src))
       problems.push(`${f.path}: do not abbreviate numbers with "k" — Korean: "${src}" / yours: "${out}"`);
     for (const n of nameIssues(src, out, target)) problems.push(`${f.path}: ${n}`);
-    const a = numericValues(src);
-    const b = numericValues(out);
-    const missing = [...a].filter((x) => !b.has(x));
-    const extra = [...b].filter((x) => !a.has(x));
+    // 빠진 값 = ko 의 비교 대상이 번역문에 없음, 덧붙인 값 = 번역문의 비교 대상(이름에 붙은 수 제외)이 ko 에 없음
+    const a = valueSets(src);
+    const b = valueSets(out);
+    const missing = [...a.sig].filter((x) => !b.all.has(x));
+    const extra = [...b.plain].filter((x) => !a.all.has(x));
     // 정규화 값(2300000000 등)을 보여 주면 모델이 그 숫자를 그대로 베껴 쓰므로 원문 문장을 보여 준다
     if (missing.length || extra.length) {
       // 덧붙인 숫자(연도 등)는 원문 표기 그대로 짚어 준다 — "2026" 을 지우라고 말해야 수리가 된다
