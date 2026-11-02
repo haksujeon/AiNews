@@ -75,6 +75,8 @@ export default async function CorrectionsPage({ params }: Props) {
               <h2 className="mt-1.5 text-[18px] font-bold leading-snug tracking-[-0.015em] text-ink sm:text-[19px]">
                 {c.edition_type === "weekly"
                   ? t("editionWeekly", { week: c.edition_label })
+                  : c.edition_type === "monthly"
+                    ? t("editionMonthly", { month: c.edition_label })
                   : t("editionDaily", { date: formatDateGroup(c.edition_date, locale) })}
               </h2>
               <p className="mt-1.5 text-[15px] leading-relaxed text-ink-2">

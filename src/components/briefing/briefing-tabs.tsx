@@ -4,16 +4,21 @@ import { cn } from "@/lib/utils";
 import { BRIEFING_PATH } from "@/lib/briefing/view";
 
 /*
- * 브리핑 아래 판 종류 탭: 데일리 / 주간. (월간 탭은 v2 에서 월간 리포트를 낼 때 연다)
+ * 브리핑 아래 판 종류 탭: 데일리 / 주간 / 월간.
  * 높이 44px 이상, 현재 탭에 aria-current. 넘치면 탭 줄 안에서만 가로 스크롤.
  */
 export const WEEKLY_PATH = `${BRIEFING_PATH}/weekly`;
+export const MONTHLY_PATH = `${BRIEFING_PATH}/monthly`;
+/** 주간·월간 공개 경로 (sitemap·RSS·정정 기록·페이지가 같은 값을 쓴다) */
+export const PERIODIC_PATH = { weekly: WEEKLY_PATH, monthly: MONTHLY_PATH } as const;
+export const periodicPath = (kind: "weekly" | "monthly", key: string) => `${PERIODIC_PATH[kind]}/${key}`;
 
-export function BriefingTabs({ current }: { current: "daily" | "weekly" }) {
+export function BriefingTabs({ current }: { current: "daily" | "weekly" | "monthly" }) {
   const t = useTranslations("briefing");
   const tabs = [
     { key: "daily", href: BRIEFING_PATH, label: t("tabDaily") },
     { key: "weekly", href: WEEKLY_PATH, label: t("tabWeekly") },
+    { key: "monthly", href: MONTHLY_PATH, label: t("tabMonthly") },
   ] as const;
   return (
     <nav aria-label={t("tabsLabel")} className="mt-3.5 flex gap-1 overflow-x-auto border-b border-rule text-sm [scrollbar-width:none]" data-testid="briefing-tabs">

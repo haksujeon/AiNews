@@ -8,7 +8,7 @@ import { isoWeekOf } from "@/lib/metrics/period";
 import { cn } from "@/lib/utils";
 
 // 관리자 브리핑 목록 (미들웨어가 /admin/* 를 세션으로 보호한다). 항상 최신 상태를 읽는다.
-// ?type=daily|weekly 로 판 유형을 거른다 (없으면 전체). 맨 위 SLA 띠는 데일리 발행 일정(sla.ts) 기준.
+// ?type=daily|weekly|monthly 로 판 유형을 거른다 (없으면 전체). 맨 위 SLA 띠는 데일리 발행 일정(sla.ts) 기준.
 export const dynamic = "force-dynamic";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -17,7 +17,7 @@ const STATUS_STYLE: Record<string, string> = {
   failed: "font-semibold text-destructive",
 };
 
-const TYPES = ["all", "daily", "weekly"] as const;
+const TYPES = ["all", "daily", "weekly", "monthly"] as const;
 type TypeFilter = (typeof TYPES)[number];
 
 export default async function AdminBriefingsPage({
@@ -84,7 +84,9 @@ export default async function AdminBriefingsPage({
                   <tr key={r.id} className="border-b border-rule align-top" data-edition-type={r.edition_type}>
                     <td className="whitespace-nowrap py-2 pr-3">
                       <Link href={`/admin/briefings/${r.id}`} className="font-medium text-ink underline decoration-rule underline-offset-4 hover:decoration-ink">
-                        {r.edition_type === "daily" ? r.edition_date : isoWeekOf(r.edition_date)}
+                        {r.edition_type === "daily"
+                          ? r.edition_date
+                          : (r.period_key ?? (r.edition_type === "weekly" ? isoWeekOf(r.edition_date) : r.edition_date.slice(0, 7)))}
                       </Link>
                       {r.edition_type !== "daily" && (
                         <span className="block text-xs text-ink-3">

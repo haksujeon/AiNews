@@ -2,7 +2,7 @@
  * JSON-LD(schema.org) 만들기 (P0-3). 순수 함수만 둔다 — DB·fs·next-intl/server·next/og 를 부르지 않는다.
  *
  * 발행자(Organization)는 organizationLd 하나로 만든다. 레이아웃(Organization·WebSite), 기사 상세(NewsArticle),
- * 데일리 브리핑·주간 리포트(briefingJsonLd·weeklyJsonLd)가 모두 이 함수를 쓴다 (Gate 2).
+ * 데일리 브리핑·주간·월간 리포트(briefingJsonLd·periodicJsonLd)가 모두 이 함수를 쓴다 (Gate 2).
  */
 import { LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
 import { absoluteUrl, rootUrl } from "@/lib/site";

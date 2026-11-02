@@ -15,11 +15,11 @@ async function noHorizontalScroll(page: Page) {
   expect(scrollWidth, `scrollWidth ${scrollWidth} > ${clientWidth}`).toBeLessThanOrEqual(clientWidth);
 }
 
-test('공개 /briefing/weekly: 200, 데일리·주간 탭(주간이 현재), 발행본이 없으면 noindex', async ({ page }) => {
+test('공개 /briefing/weekly: 200, 데일리·주간·월간 탭(주간이 현재), 발행본이 없으면 noindex', async ({ page }) => {
   const res = await page.goto(`${BASE_URL}/ko/briefing/weekly`);
   expect(res?.status()).toBe(200);
   const tabs = page.getByTestId('briefing-tabs');
-  await expect(tabs.getByRole('link')).toHaveCount(2);
+  await expect(tabs.getByRole('link')).toHaveCount(3);
   await expect(tabs.locator('[aria-current="page"]')).toHaveAttribute('href', /\/briefing\/weekly$/);
   await expect(page.locator('h1')).toHaveCount(1);
   const published = (await page.getByTestId('weekly').count()) > 0;

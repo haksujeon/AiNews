@@ -7,52 +7,50 @@ import { isLocale, LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { PeriodicView } from "@/components/briefing/periodic-view";
-import { BriefingTabs, WEEKLY_PATH } from "@/components/briefing/briefing-tabs";
+import { BriefingTabs, periodicPath } from "@/components/briefing/briefing-tabs";
 import { absoluteUrl, publishedLanguageAlternates } from "@/lib/site";
-import { isoWeekRange } from "@/lib/metrics/period";
-import { beijingToday } from "@/lib/briefing/generate";
-import { getPublishedWeekly, getPublishedWeeklyLocales, type PublicWeekly } from "@/lib/briefing/periodic/public";
+import { beijingDate, isoWeekRange, monthRange } from "@/lib/metrics/period";
+import { getPublishedPeriodic, getPublishedPeriodicLocales, type PublicPeriodic } from "@/lib/briefing/periodic/public";
+import type { PeriodicKind } from "@/lib/briefing/periodic/types";
 import { BRIEFING_PATH, safeJsonLd } from "@/lib/briefing/view";
 import { organizationLd } from "@/lib/seo/jsonld";
 import type { BriefingLocale } from "@/lib/briefing/types";
 
 /*
- * /[locale]/briefing/weekly (최신 발행 주) 와 /[locale]/briefing/weekly/[week] 가 함께 쓰는 서버 렌더러·메타데이터.
+ * /[locale]/briefing/weekly[/2026-W44] 와 /[locale]/briefing/monthly[/2026-10] 이 함께 쓰는 서버 렌더러·메타데이터 (Gate 2).
  * 공개는 발행본만. 리포트 문장은 MVP 에서 한국어판만 있으므로 en/zh 는 데일리와 같은 "언어판 없음" 안내로 간다.
- * canonical 은 언제나 주 URL(/briefing/weekly/2026-W44).
+ * canonical 은 언제나 기간 URL(/briefing/weekly/2026-W44, /briefing/monthly/2026-10).
+ * 화면 틀 문구는 messages 의 "weekly" / "monthly" 이름공간 (월간 이름공간은 주간과 다른 문구만 둔다).
  */
 
-export const weeklyPath = (week: string) => `${WEEKLY_PATH}/${week}`;
+export const weeklyPath = (week: string) => periodicPath("weekly", week);
 
 type Resolved =
-  | { kind: "ok"; weekly: PublicWeekly }
-  | { kind: "locale_missing"; week: string; locales: BriefingLocale[] }
+  | { kind: "ok"; report: PublicPeriodic }
+  | { kind: "locale_missing"; key: string; locales: BriefingLocale[] }
   | { kind: "empty" }
   | { kind: "not_found" };
 
-/** 형식이 맞고 이미 끝난 주인가 (미래·진행 중인 주는 404) */
-export function isPublicWeek(week: string): boolean {
-  const r = isoWeekRange(week);
-  return !!r && r.end < beijingToday();
+/** 형식이 맞고 이미 끝난 기간인가 (미래·진행 중인 기간은 404) */
+export function isPublicPeriod(kind: PeriodicKind, key: string, today = beijingDate()): boolean {
+  const r = kind === "weekly" ? isoWeekRange(key) : monthRange(key);
+  return !!r && r.end < today;
 }
+export const isPublicWeek = (week: string) => isPublicPeriod("weekly", week);
 
-const resolve = cache(async function resolve(locale: string, week?: string): Promise<Resolved> {
+const resolve = cache(async function resolve(kind: PeriodicKind, locale: string, key?: string): Promise<Resolved> {
   if (!isLocale(locale)) return { kind: "not_found" };
-  if (week !== undefined && !isPublicWeek(week)) return { kind: "not_found" };
-  const weekly = await getPublishedWeekly(locale, week);
-  if (weekly) return { kind: "ok", weekly };
-  const other = await getPublishedWeeklyLocales(week);
-  if (other && other.locales.length) return { kind: "locale_missing", week: other.week, locales: other.locales };
-  return week ? { kind: "not_found" } : { kind: "empty" };
+  if (key !== undefined && !isPublicPeriod(kind, key)) return { kind: "not_found" };
+  const report = await getPublishedPeriodic(kind, locale, key);
+  if (report) return { kind: "ok", report };
+  const other = await getPublishedPeriodicLocales(kind, key);
+  if (other && other.locales.length) return { kind: "locale_missing", key: other.key, locales: other.locales };
+  return key ? { kind: "not_found" } : { kind: "empty" };
 });
 
-function alternates(week: string, locales: BriefingLocale[]): Record<string, string> {
-  return publishedLanguageAlternates(weeklyPath(week), locales);
-}
-
 /** NewsArticle: isBasedOn 인용 기사 상위 10건, creditText "AI 작성·편집자 검토" */
-export function weeklyJsonLd(w: PublicWeekly, opts: { brand: string; title: string; credit: string }) {
-  const url = absoluteUrl(w.locale, weeklyPath(w.iso_week));
+export function periodicJsonLd(w: PublicPeriodic, opts: { brand: string; title: string; credit: string }) {
+  const url = absoluteUrl(w.locale, periodicPath(w.edition_type, w.period_key));
   // 발행자는 레이아웃·기사 상세·데일리와 같은 organizationLd (Gate 2)
   const org = organizationLd(w.locale, opts.brand);
   return {
@@ -75,19 +73,24 @@ export function weeklyJsonLd(w: PublicWeekly, opts: { brand: string; title: stri
       .map((id) => absoluteUrl(w.locale, `/news/${id}`)),
   };
 }
+export const weeklyJsonLd = periodicJsonLd;
 
-export async function weeklyMetadata(locale: string, week?: string): Promise<Metadata> {
-  const r = await resolve(locale, week);
+const TITLE_KEY = { weekly: "weeklyTitle", monthly: "monthlyTitle" } as const;
+const LATEST_KEY = { weekly: "weeklyLatestTitle", monthly: "monthlyLatestTitle" } as const;
+const DESC_KEY = { weekly: "weeklyDescription", monthly: "monthlyDescription" } as const;
+
+export async function periodicMetadata(kind: PeriodicKind, locale: string, key?: string): Promise<Metadata> {
+  const r = await resolve(kind, locale, key);
   const loc = isLocale(locale) ? locale : "ko";
   const t = await getTranslations({ locale: loc, namespace: "meta" });
   if (r.kind === "ok") {
-    const w = r.weekly;
-    const title = t("weeklyTitle", { week: w.iso_week, headline: w.content.headline });
-    const url = absoluteUrl(w.locale, weeklyPath(w.iso_week));
+    const w = r.report;
+    const title = t(TITLE_KEY[kind], { week: w.period_key, month: w.period_key, headline: w.content.headline });
+    const url = absoluteUrl(w.locale, periodicPath(kind, w.period_key));
     return {
       title: { absolute: title },
       description: w.content.dek,
-      alternates: { canonical: url, languages: alternates(w.iso_week, w.available_locales) },
+      alternates: { canonical: url, languages: publishedLanguageAlternates(periodicPath(kind, w.period_key), w.available_locales) },
       openGraph: { type: "article", title, description: w.content.dek, url, publishedTime: w.published_at || undefined },
       twitter: { card: "summary", title, description: w.content.dek },
     };
@@ -96,36 +99,43 @@ export async function weeklyMetadata(locale: string, week?: string): Promise<Met
     const tn = await getTranslations({ locale: loc, namespace: "notFound" });
     return { title: tn("title"), robots: { index: false } };
   }
-  return { title: t("weeklyLatestTitle"), description: t("weeklyDescription"), robots: { index: false, follow: true } };
+  return { title: t(LATEST_KEY[kind]), description: t(DESC_KEY[kind]), robots: { index: false, follow: true } };
 }
+export const weeklyMetadata = (locale: string, week?: string) => periodicMetadata("weekly", locale, week);
 
-export async function WeeklyPageContent({ locale, week }: { locale: string; week?: string }) {
-  const r = await resolve(locale, week);
+export async function PeriodicPageContent({ kind, locale, periodKey }: { kind: PeriodicKind; locale: string; periodKey?: string }) {
+  const r = await resolve(kind, locale, periodKey);
   if (r.kind === "not_found") notFound();
-  const t = await getTranslations({ locale, namespace: "weekly" });
+  // 월간 이름공간은 주간과 같은 키 이름을 쓴다 (문구만 다름)
+  const t = await getTranslations({ locale, namespace: kind as "weekly" });
+  const tw = await getTranslations({ locale, namespace: "weekly" });
   const tb = await getTranslations({ locale, namespace: "briefing" });
   const tm = await getTranslations({ locale, namespace: "meta" });
 
   let body: React.ReactNode;
   if (r.kind === "ok") {
-    const w = r.weekly;
-    const jsonLd = weeklyJsonLd(w, { brand: tm("brand"), title: tm("weeklyTitle", { week: w.iso_week, headline: w.content.headline }), credit: t("aiLabel") });
+    const w = r.report;
+    const jsonLd = periodicJsonLd(w, {
+      brand: tm("brand"),
+      title: tm(TITLE_KEY[kind], { week: w.period_key, month: w.period_key, headline: w.content.headline }),
+      credit: tw("aiLabel"),
+    });
     body = (
       <>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
-        <PeriodicView weekly={w} />
+        <PeriodicView report={w} />
       </>
     );
   } else if (r.kind === "locale_missing") {
     body = (
       <section className="max-w-xl py-16" data-testid="weekly-locale-missing">
         <h1 className="text-2xl font-bold text-ink">{t("localeMissingTitle")}</h1>
-        <p className="mt-3 text-ink-2">{t("localeMissingBody", { week: r.week })}</p>
+        <p className="mt-3 text-ink-2">{t("localeMissingBody", { week: r.key, month: r.key })}</p>
         <ul className="mt-4 flex flex-wrap gap-4">
           {r.locales.map((l) => (
             <li key={l}>
               <Link
-                href={weeklyPath(r.week)}
+                href={periodicPath(kind, r.key)}
                 locale={l}
                 className="rounded-sm font-medium text-ink underline decoration-1 underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
@@ -142,7 +152,7 @@ export async function WeeklyPageContent({ locale, week }: { locale: string; week
         <h1 className="text-2xl font-bold text-ink">{t("emptyTitle")}</h1>
         <p className="mt-3 text-ink-2">{t("emptyBody")}</p>
         <Link href={BRIEFING_PATH} className="mt-4 inline-block font-medium text-ink underline underline-offset-4">
-          {t("backDaily")}
+          {tw("backDaily")}
         </Link>
       </section>
     );
@@ -152,7 +162,7 @@ export async function WeeklyPageContent({ locale, week }: { locale: string; week
     <div className="flex min-h-screen flex-col">
       <Header />
       <main id="main" className="container mx-auto flex-1 px-4">
-        <BriefingTabs current="weekly" />
+        <BriefingTabs current={kind} />
         {body}
       </main>
       <Footer />

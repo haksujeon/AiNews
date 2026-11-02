@@ -1,15 +1,15 @@
 /**
  * sitemap 항목 만들기 (서버 전용, P0-2).
- *  - 파일 0: 정적 페이지(신뢰 페이지 포함) + 발행된 데일리 브리핑·주간 리포트 (발행된 언어판만, hreflang 은 화면과 같은 함수)
+ *  - 파일 0: 정적 페이지(신뢰 페이지 포함) + 발행된 데일리 브리핑·주간·월간 리포트 (발행된 언어판만, hreflang 은 화면과 같은 함수)
  *  - 파일 1..N: 공개 기사(PUBLIC_NEWS_WHERE) SITEMAP_ARTICLES_PER_FILE 건씩, 언어 3개 URL + hreflang(x-default 포함)
  * /sitemap.xml 은 이 파일들을 가리키는 sitemapindex (src/app/sitemap.xml/route.ts). 직렬화는 sitemap-xml.ts.
  */
 import { routing } from "@/i18n/routing";
 import { absoluteUrl, languageAlternates, publishedLanguageAlternates, rootUrl } from "@/lib/site";
 import { listPublishedEditions } from "@/lib/briefing/public";
-import { listPublishedWeeklies } from "@/lib/briefing/periodic/public";
+import { listPublishedPeriodics } from "@/lib/briefing/periodic/public";
 import { BRIEFING_PATH, briefingDatePath } from "@/lib/briefing/view";
-import { WEEKLY_PATH } from "@/components/briefing/briefing-tabs";
+import { PERIODIC_PATH, periodicPath } from "@/components/briefing/briefing-tabs";
 import { countPublicNews, listSitemapNews, SITEMAP_ARTICLES_PER_FILE } from "@/lib/seo/data";
 import { TRUST_PAGES } from "@/lib/trust/pages";
 import type { SitemapEntry as Entry } from "@/lib/seo/sitemap-xml";
@@ -45,13 +45,20 @@ async function pageEntries(): Promise<Entry[]> {
   }
   const dailyLocales = routing.locales.filter((l) => [...daily.values()].some((ls) => ls.includes(l)));
 
-  const weekly = new Map<string, { locales: string[]; lastmod: string | null }>();
-  for (const w of await listPublishedWeeklies()) {
-    const cur = weekly.get(w.iso_week) ?? { locales: [], lastmod: w.published_at };
-    cur.locales.push(w.locale);
-    weekly.set(w.iso_week, cur);
+  // 주간·월간: 기간 키 → 발행 언어 (같은 목록 함수, Gate 2)
+  const periodic: Entry[] = [];
+  for (const kind of ["weekly", "monthly"] as const) {
+    const byKey = new Map<string, { locales: string[]; lastmod: string | null }>();
+    for (const w of await listPublishedPeriodics(kind)) {
+      const cur = byKey.get(w.key) ?? { locales: [], lastmod: w.published_at };
+      cur.locales.push(w.locale);
+      byKey.set(w.key, cur);
+    }
+    const kindLocales = routing.locales.filter((l) => [...byKey.values()].some((w) => w.locales.includes(l)));
+    if (kindLocales.length) periodic.push(...someLocales(PERIODIC_PATH[kind], kindLocales, { changeFrequency: kind, priority: 0.6 }));
+    for (const [key, w] of byKey)
+      periodic.push(...someLocales(periodicPath(kind, key), w.locales, { ...(w.lastmod ? { lastModified: w.lastmod } : {}), changeFrequency: "monthly", priority: 0.6 }));
   }
-  const weeklyLocales = routing.locales.filter((l) => [...weekly.values()].some((w) => w.locales.includes(l)));
 
   return [
     ...allLocales("/", { changeFrequency: "hourly", priority: 1 }),
@@ -61,13 +68,10 @@ async function pageEntries(): Promise<Entry[]> {
     // 브리핑 첫 화면·지난 판 목록은 발행본이 없으면 noindex 라 넣지 않는다
     ...(dailyLocales.length ? someLocales(BRIEFING_PATH, dailyLocales, { changeFrequency: "daily", priority: 0.8 }) : []),
     ...(dailyLocales.length ? someLocales(`${BRIEFING_PATH}/archive`, dailyLocales, { changeFrequency: "daily", priority: 0.4 }) : []),
-    ...(weeklyLocales.length ? someLocales(WEEKLY_PATH, weeklyLocales, { changeFrequency: "weekly", priority: 0.6 }) : []),
     ...[...daily.entries()].flatMap(([date, locales]) =>
       someLocales(briefingDatePath(date), locales, { lastModified: date, changeFrequency: "monthly", priority: 0.7 })
     ),
-    ...[...weekly.entries()].flatMap(([week, w]) =>
-      someLocales(`${WEEKLY_PATH}/${week}`, w.locales, { ...(w.lastmod ? { lastModified: w.lastmod } : {}), changeFrequency: "monthly", priority: 0.6 })
-    ),
+    ...periodic,
   ];
 }
 
