@@ -434,5 +434,19 @@
     "emptyTitle": "No weekly report has been published yet",
     "emptyBody": "Weekly reports are published every Monday for the previous week. Meanwhile, read the daily briefing.",
     "backDaily": "Read the daily briefing"
+  },
+  "seo": {
+    "feedAllTitle": "AI NEWS — Latest",
+    "feedAllDescription": "Headlines and summaries of AI news from China and beyond. Read the full story at the original outlet.",
+    "feedBriefingTitle": "AI NEWS — China AI Briefing",
+    "feedBriefingDescription": "The daily China AI briefing and the weekly report.",
+    "feedCategoryTitle": "AI NEWS — {category}",
+    "feedCategoryDescription": "Headlines and summaries of the latest {category} stories.",
+    "weeklyItemTitle": "Weekly report {week}: {headline}",
+    "rssLinkTitle": "AI NEWS latest stories RSS",
+    "breadcrumbHome": "Home",
+    "ogBriefingKicker": "China AI Briefing",
+    "ogBriefingFallback": "The day in China AI, in one edition",
+    "ogAlt": "AI NEWS share card"
   }
 }

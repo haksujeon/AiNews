@@ -434,5 +434,19 @@
     "emptyTitle": "아직 발행된 주간 리포트가 없습니다",
     "emptyBody": "주간 리포트는 매주 월요일에 지난주를 정리해 발행합니다. 그동안 데일리 브리핑을 확인해 보세요.",
     "backDaily": "데일리 브리핑 보기"
+  },
+  "seo": {
+    "feedAllTitle": "AI NEWS — 최신 기사",
+    "feedAllDescription": "중국을 비롯한 세계 AI 뉴스의 제목과 요약. 전문은 원문 매체에서 읽을 수 있습니다.",
+    "feedBriefingTitle": "AI NEWS — 중국 AI 브리핑",
+    "feedBriefingDescription": "날마다 발행하는 중국 AI 브리핑과 주간 리포트.",
+    "feedCategoryTitle": "AI NEWS — {category}",
+    "feedCategoryDescription": "{category} 분야 최신 기사의 제목과 요약.",
+    "weeklyItemTitle": "{week} 주간 리포트: {headline}",
+    "rssLinkTitle": "AI NEWS 최신 기사 RSS",
+    "breadcrumbHome": "홈",
+    "ogBriefingKicker": "중국 AI 브리핑",
+    "ogBriefingFallback": "그날의 중국 AI 소식을 한 판으로",
+    "ogAlt": "AI NEWS 공유 카드"
   }
 }
