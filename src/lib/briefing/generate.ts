@@ -6,6 +6,8 @@
  *     → 주요 기사가 최소 건수 이상이면 draft, 아니면 failed
  *  3. ko 가 draft 면 en / zh 값만 번역 + 재검증 (각 언어판은 독립적으로 draft/failed)
  *  4. 토큰·비용·지연·LiteLLM request id 를 행마다 기록. 1회 실행 비용 상한(BRIEFING_MAX_COST_USD, 기본 $0.10)
+ *  5. 주말 합본(결정 D7, 규칙은 sla.ts): 토요일 판 = 토·일 기사, period_start~period_end 에 기록.
+ *     일요일 날짜는 force 가 없으면 생성하지 않는다(토요일 합본에 들어감).
  */
 import type {
   BriefingContent,
@@ -25,6 +27,7 @@ import { computeInputHash, editionModeFor, selectCandidates } from "./select";
 import { HEADLINE_MAX, citedRefs, contextFromGroups, dropFatalItems, normalizeContent, validateKo } from "./validate";
 import { translateBriefing } from "./translate";
 import { finishGenerating, insertBriefing, latestBriefing, loadCandidateArticles, withDateLock } from "./repository";
+import { editionPeriod, weekday } from "./sla";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_COST = Number(process.env.BRIEFING_MAX_COST_USD || "0.10");
@@ -106,7 +109,7 @@ interface KoOutcome {
   error?: string;
 }
 
-async function generateKo(date: string, mode: EditionMode, groups: CandidateGroup[], cost: CostTracker): Promise<KoOutcome> {
+async function generateKo(dateLabel: string, mode: EditionMode, groups: CandidateGroup[], cost: CostTracker): Promise<KoOutcome> {
   const usages: LlmUsage[] = [];
   const track = (u: LlmUsage) => {
     usages.push(u);
@@ -114,7 +117,7 @@ async function generateKo(date: string, mode: EditionMode, groups: CandidateGrou
   };
   const ctx = contextFromGroups(groups, mode);
   const system = buildSystemPrompt(mode);
-  const user = buildUserPrompt(date, groups);
+  const user = buildUserPrompt(dateLabel, groups);
   const minTop = mode === "normal" ? 3 : 1;
   const validation: Record<string, unknown> = { prompt_version: PROMPT_VERSION };
 
@@ -193,8 +196,18 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
     return { date, outcome: "failed", mode: null, candidateCount: 0, inputHash: null, locales: [], totalCostUsd: 0, message: "날짜 형식이 틀렸거나 미래 날짜입니다" };
   }
 
+  if (weekday(date) === 0 && !opts.force) {
+    return {
+      date, outcome: "skipped_weekend", mode: null, candidateCount: 0, inputHash: null, locales: [], totalCostUsd: 0,
+      message: "일요일 기사는 토요일 판(토·일 합본)에 들어갑니다",
+    };
+  }
+  const period = editionPeriod(date);
+  const periodCols = { periodStart: period.periodStart, periodEnd: period.periodEnd };
+  const dateLabel = period.weekend ? `${period.periodStart}~${period.periodEnd} (토·일 주말 합본)` : date;
+
   const result = await withDateLock(date, async (): Promise<GenerateResult> => {
-    const articles = await loadCandidateArticles(date);
+    const articles = await loadCandidateArticles(period.periodStart, period.periodEnd);
     const sel = selectCandidates(articles);
     const mode = editionModeFor(sel.totalGroups);
     const inputHash = computeInputHash(sel.groups, `${PROMPT_VERSION}|${TRANSLATE_PROMPT_VERSION}|${mode}`, BRIEFING_MODEL);
@@ -226,7 +239,7 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
 
     if (mode === "skipped") {
       const row = await insertBriefing({
-        date, locale: "ko", status: "skipped", mode, content: { meta: { ...metaBase, locale: "ko", cited_count: 0, china_centric_count: 0 } },
+        ...periodCols, date, locale: "ko", status: "skipped", mode, content: { meta: { ...metaBase, locale: "ko", cited_count: 0, china_centric_count: 0 } },
         articleIds: [], inputArticleIds, candidateCount: articles.length, inputHash, promptVersion: PROMPT_VERSION,
       });
       return {
@@ -240,14 +253,14 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
 
     const cost = new CostTracker();
     const koRow = await insertBriefing({
-      date, locale: "ko", status: "generating", mode, content: {}, articleIds: [], inputArticleIds,
+      ...periodCols, date, locale: "ko", status: "generating", mode, content: {}, articleIds: [], inputArticleIds,
       candidateCount: articles.length, inputHash, model: BRIEFING_MODEL, promptVersion: PROMPT_VERSION,
     });
     const locales: LocaleOutcome[] = [];
 
     let ko: KoOutcome;
     try {
-      ko = await generateKo(date, mode, sel.groups, cost);
+      ko = await generateKo(dateLabel, mode, sel.groups, cost);
     } catch (e) {
       const msg = e instanceof LlmError || e instanceof BudgetExceeded ? e.message : `예상치 못한 오류: ${(e as Error).message}`;
       const u = sumUsage(cost.usages);
@@ -290,7 +303,7 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
         const st = shown ? toStored(shown, sel.groups, target, { ...metaBase, china_centric_count: china }) : null;
         const error = ok ? null : tr.error ?? `번역 재검증 실패 (${tr.problems.length}건)`;
         const row = await insertBriefing({
-          date, locale: target, status: ok ? "draft" : "failed", mode,
+          ...periodCols, date, locale: target, status: ok ? "draft" : "failed", mode,
           content: st?.content ?? {}, articleIds: st?.articleIds ?? stored?.articleIds ?? [], inputArticleIds,
           candidateCount: articles.length, inputHash,
           validation: { prompt_version: TRANSLATE_PROMPT_VERSION, repaired: tr.repaired, problems: tr.problems },

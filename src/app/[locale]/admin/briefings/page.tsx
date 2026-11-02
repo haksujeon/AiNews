@@ -1,12 +1,14 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { BriefingSlaStrip } from "@/components/admin/briefing-sla-strip";
 import { listBriefingsForAdmin } from "@/lib/briefing/admin";
+import { briefingSlaStatus } from "@/lib/briefing/sla";
 import { isoWeekOf } from "@/lib/metrics/period";
 import { cn } from "@/lib/utils";
 
 // 관리자 브리핑 목록 (미들웨어가 /admin/* 를 세션으로 보호한다). 항상 최신 상태를 읽는다.
-// ?type=daily|weekly 로 판 유형을 거른다 (없으면 전체).
+// ?type=daily|weekly 로 판 유형을 거른다 (없으면 전체). 맨 위 SLA 띠는 데일리 발행 일정(sla.ts) 기준.
 export const dynamic = "force-dynamic";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -29,13 +31,20 @@ export default async function AdminBriefingsPage({
   const { type } = await searchParams;
   const filter: TypeFilter = TYPES.includes(type as TypeFilter) ? (type as TypeFilter) : "all";
   const t = await getTranslations({ locale, namespace: "briefingAdmin" });
-  const rows = await listBriefingsForAdmin(150, filter === "all" ? undefined : filter);
+  const [rows, sla] = await Promise.all([
+    listBriefingsForAdmin(150, filter === "all" ? undefined : filter),
+    briefingSlaStatus(new Date()).catch((e) => {
+      console.error("[admin/briefings] sla", e);
+      return null;
+    }),
+  ]);
 
   return (
     <AdminShell>
       <div className="mx-auto max-w-6xl">
         <h1 className="text-xl font-bold text-ink">{t("listTitle")}</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink-2">{t("listHint")}</p>
+        {sla && <BriefingSlaStrip status={sla} locale={locale} />}
         <nav aria-label={t("typeFilter")} className="mt-4 flex gap-1 border-b border-rule text-sm" data-testid="admin-type-filter">
           {TYPES.map((k) => (
             <Link

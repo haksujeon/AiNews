@@ -62,8 +62,8 @@ export const ROW_COLUMNS = `id, edition_type, to_char(edition_date, 'YYYY-MM-DD'
   model, prompt_version, llm_request_ids, input_tokens, output_tokens, cost_usd, latency_ms, error, needs_review,
   edited_by, created_at, updated_at, published_at`;
 
-/** 그날(베이징 news_date) 공개 AI 기사 */
-export async function loadCandidateArticles(date: string): Promise<CandidateArticle[]> {
+/** 그날(베이징 news_date) 공개 AI 기사. endDate 를 주면 date~endDate (주말 합본) */
+export async function loadCandidateArticles(date: string, endDate: string = date): Promise<CandidateArticle[]> {
   const { rows } = await pool.query(
     `SELECT id, source_name, source_url, category,
             COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr,
@@ -73,9 +73,9 @@ export async function loadCandidateArticles(date: string): Promise<CandidateArti
       WHERE ${PUBLIC_NEWS_WHERE}
         AND category LIKE 'ai-%'
         AND news_date >= ($1::date)::timestamp AT TIME ZONE 'UTC'
-        AND news_date <  ($1::date + 1)::timestamp AT TIME ZONE 'UTC'
+        AND news_date <  ($2::date + 1)::timestamp AT TIME ZONE 'UTC'
       ORDER BY id`,
-    [date]
+    [date, endDate]
   );
   return rows.map((r) => ({ ...r, key_terms: Array.isArray(r.key_terms) ? r.key_terms : [] })) as CandidateArticle[];
 }

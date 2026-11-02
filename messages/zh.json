@@ -228,7 +228,10 @@
     "section_industry": "产业",
     "tabsLabel": "简报类型",
     "tabDaily": "每日",
-    "tabWeekly": "每周"
+    "tabWeekly": "每周",
+    "bannerLabelLatest": "最新中国AI简报",
+    "bannerDated": "{date}版",
+    "bannerAriaDated": "阅读{date}中国AI简报：{headline}"
   },
   "briefingAdmin": {
     "nav": "简报审核",
@@ -300,7 +303,27 @@
     "confirmPublishWeekly": "发布{week}周报韩文v{version}？该周现有版本将被替换。",
     "confirmWithdrawWeekly": "撤回已发布的{week}周报？",
     "confirmRegenerateWeekly": "重新生成{week}周报？将调用LLM（约$0.003–0.008，10–40秒）并生成新版本草稿。",
-    "previewWeekly": "预览（与公开周报页面相同的组件）"
+    "previewWeekly": "预览（与公开周报页面相同的组件）",
+    "slaTitle": "发布 SLA",
+    "slaEdition": "当前一期",
+    "slaWeekend": "周六日合刊",
+    "slaDue": "截止 {due}",
+    "slaState_published": "已发布",
+    "slaState_overdue": "已超时 — 未发布",
+    "slaState_review": "待审核（已有草稿）",
+    "slaState_failed": "生成失败 — 需重新生成",
+    "slaState_pending": "尚未生成",
+    "slaState_skipped": "数量不足已跳过",
+    "slaLastPublished": "最近发布 {date}",
+    "slaNeverPublished": "尚无发布",
+    "slaRate": "近14天发布率",
+    "slaRateValue": "{published}/{eligible}期（{pct}%）",
+    "slaRateNone": "无应发期次",
+    "slaOnTime": "按时 {onTime}期",
+    "slaRule": "工作日简报须在次日 09:00 KST 前发布，周六日合刊（周六日期）须在周一 09:00 KST 前发布。09:30 仍未发布将发送 Telegram 提醒。",
+    "withdrawReason": "撤回原因（必填，公开于更正记录）",
+    "withdrawReasonPlaceholder": "例：因引用文章数字错误而撤回。",
+    "withdrawReasonHint": "撤回后此原因将公开记录在更正记录中。至少2个字。"
   },
   "weekly": {
     "kicker": "周报",

@@ -228,7 +228,10 @@
     "section_industry": "Industry",
     "tabsLabel": "Briefing type",
     "tabDaily": "Daily",
-    "tabWeekly": "Weekly"
+    "tabWeekly": "Weekly",
+    "bannerLabelLatest": "Latest China AI Briefing",
+    "bannerDated": "{date} edition",
+    "bannerAriaDated": "Read the {date} China AI briefing: {headline}"
   },
   "briefingAdmin": {
     "nav": "Briefing review",
@@ -300,7 +303,27 @@
     "confirmPublishWeekly": "Publish the {week} weekly report ko v{version}? The week's current edition will be replaced.",
     "confirmWithdrawWeekly": "Withdraw the published {week} weekly report?",
     "confirmRegenerateWeekly": "Regenerate the {week} weekly report? This calls the LLM (about $0.003–0.008, 10–40 s) and creates a new draft version.",
-    "previewWeekly": "Preview (same component as the public weekly page)"
+    "previewWeekly": "Preview (same component as the public weekly page)",
+    "slaTitle": "Publishing SLA",
+    "slaEdition": "Current edition",
+    "slaWeekend": "Sat–Sun combined",
+    "slaDue": "Due {due}",
+    "slaState_published": "Published",
+    "slaState_overdue": "Overdue — not published",
+    "slaState_review": "Awaiting review (draft ready)",
+    "slaState_failed": "Generation failed — regenerate",
+    "slaState_pending": "Not generated yet",
+    "slaState_skipped": "Skipped (low volume)",
+    "slaLastPublished": "Last published {date}",
+    "slaNeverPublished": "Never published",
+    "slaRate": "14-day publish rate",
+    "slaRateValue": "{published}/{eligible} editions ({pct}%)",
+    "slaRateNone": "No editions due",
+    "slaOnTime": "{onTime} on time",
+    "slaRule": "Weekday editions are due at 09:00 KST the next day; the Sat–Sun combined edition (dated Saturday) is due Monday 09:00 KST. A Telegram alert goes out at 09:30 if unpublished.",
+    "withdrawReason": "Withdrawal reason (required, shown in the public corrections log)",
+    "withdrawReasonPlaceholder": "e.g. Withdrawn due to a figure error in a cited article.",
+    "withdrawReasonHint": "This reason is published in the corrections log. At least 2 characters."
   },
   "weekly": {
     "kicker": "Weekly report",

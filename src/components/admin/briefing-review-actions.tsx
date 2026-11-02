@@ -62,6 +62,9 @@ export function BriefingReviewActions({
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string; issues?: Issue[] } | null>(null);
   const [form, setForm] = useState(edit);
   const [ack, setAck] = useState(false);
+  // 철회 사유 (필수, 공개 정정 기록 public_note 로 저장된다)
+  const [reason, setReason] = useState("");
+  const reasonOk = reason.trim().length >= 2;
   const weekly = editionType === "weekly";
   const needsAck = weekly && dataQualityDays.length > 0;
 
@@ -111,11 +114,12 @@ export function BriefingReviewActions({
     const r = await call(
       "withdraw",
       "/api/admin/briefing/publish",
-      { date, action: "withdraw", edition_type: editionType },
+      { date, action: "withdraw", edition_type: editionType, reason: reason.trim() },
       weekly ? t("confirmWithdrawWeekly", { week: week ?? date }) : t("confirmWithdraw", { date })
     );
     if (r) {
       setMessage({ kind: "ok", text: t("done") });
+      setReason("");
       router.refresh();
     }
   }
@@ -181,7 +185,7 @@ export function BriefingReviewActions({
               {t("publish")}
             </Button>
           )}
-          <Button variant="outline" onClick={withdraw} disabled={!canWithdraw || busy !== null} data-testid="admin-withdraw">
+          <Button variant="outline" onClick={withdraw} disabled={!canWithdraw || !reasonOk || busy !== null} data-testid="admin-withdraw">
             {busy === "withdraw" && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />}
             {t("withdraw")}
           </Button>
@@ -190,6 +194,28 @@ export function BriefingReviewActions({
             {t("regenerate")}
           </Button>
         </div>
+        {canWithdraw && (
+          <div className="mt-3 max-w-xl">
+            <label htmlFor="withdraw-reason" className={label}>
+              <span>{t("withdrawReason")}</span>
+              <span>{t("charCount", { count: reason.length, max: 500 })}</span>
+            </label>
+            <textarea
+              id="withdraw-reason"
+              rows={2}
+              maxLength={500}
+              className={field}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={t("withdrawReasonPlaceholder")}
+              aria-describedby="withdraw-reason-hint"
+              data-testid="admin-withdraw-reason"
+            />
+            <p id="withdraw-reason-hint" className="mt-1 text-xs text-ink-3">
+              {t("withdrawReasonHint")}
+            </p>
+          </div>
+        )}
         {busy && <p className="mt-2 text-sm text-ink-2">{t("working")}</p>}
         {message && (
           <div role={message.kind === "error" ? "alert" : "status"} className={message.kind === "error" ? "mt-2 text-sm text-destructive" : "mt-2 text-sm text-jade"}>

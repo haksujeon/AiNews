@@ -3,7 +3,8 @@
  *
  *   npx tsx scripts/briefing-generate.ts [--date 2026-10-13] [--force] [--dry-run]
  *   npx tsx scripts/briefing-generate.ts publish --date 2026-10-13 [--version 2]
- *   npx tsx scripts/briefing-generate.ts withdraw --date 2026-10-13 [--locale en]
+ *   npx tsx scripts/briefing-generate.ts withdraw --date 2026-10-13 --reason "공개 철회 사유" [--locale en]
+ *   npx tsx scripts/briefing-generate.ts                    (날짜 없음 = 베이징 오늘. 일요일 날짜는 --force 없으면 건너뜀 — 토요일 판이 토·일 합본)
  *   npx tsx scripts/briefing-generate.ts weekly [--week 2026-W44] [--force] [--dry-run]
  *     (주간 리포트 초안. --week 없으면 베이징 기준 지난주. 수집 미완 날짜가 있으면 --force 가 있어야 만든다.
  *      발행은 관리자 화면에서 데이터 알림을 확인한 뒤 한다)
@@ -35,8 +36,10 @@ async function main() {
       console.log(JSON.stringify(await publishBriefing({ date, version: v ? Number(v) : undefined, editedBy: "cli" }), null, 2));
     } else if (cmd === "withdraw") {
       if (!date) throw new Error("--date 필요");
+      const reason = arg("reason");
+      if (!reason) throw new Error("--reason 필요 (공개 정정 기록에 남는 철회 사유)");
       const locale = arg("locale") as "ko" | "en" | "zh" | undefined;
-      console.log(JSON.stringify({ withdrawn: await withdrawBriefing({ date, locale, editedBy: "cli" }) }));
+      console.log(JSON.stringify({ withdrawn: await withdrawBriefing({ date, reason, locale, editedBy: "cli" }) }));
     } else if (cmd === "weekly") {
       const result = await generateWeekly({ isoWeek: arg("week"), force: flag("force"), dryRun: flag("dry-run") });
       console.log(JSON.stringify(result, null, 2));

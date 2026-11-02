@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAuth } from "@/lib/admin-auth";
-import { PublishError, publishBriefing, withdrawBriefing } from "@/lib/briefing/publish";
+import { PublishError, normalizeWithdrawReason, publishBriefing, withdrawBriefing } from "@/lib/briefing/publish";
 import { isValidEditionDate } from "@/lib/briefing/generate";
 import { BRIEFING_LOCALES, type BriefingLocale } from "@/lib/briefing/types";
 import { isEditionType } from "@/lib/briefing/repository";
@@ -8,10 +8,11 @@ import { isEditionType } from "@/lib/briefing/repository";
 // POST /api/admin/briefing/publish  (관리자 세션 쿠키 필요)
 // body: { date: 'YYYY-MM-DD', version?: number, action?: 'publish' | 'withdraw', locale?: 'ko'|'en'|'zh',
 //         edition_type?: 'daily'|'weekly'|'monthly' (기본 daily, 주간·월간은 date = period_start),
-//         acknowledgeDataQuality?: boolean (주간·월간: 수집 미완 날짜가 있는 판은 true 여야 발행) }
+//         acknowledgeDataQuality?: boolean (주간·월간: 수집 미완 날짜가 있는 판은 true 여야 발행),
+//         reason?: string (withdraw 에 필수 — 공개 정정 메모 public_note 로 저장, 최대 500자) }
 //  - publish: 그 날짜 ko 초안(version 미지정 시 최신 draft)과 거기서 번역된 en/zh 초안을 발행.
 //             기존 발행본은 superseded 로 바뀐다.
-//  - withdraw: 발행본 철회 (locale 미지정 시 모든 언어판)
+//  - withdraw: 발행본 철회 (locale 미지정 시 모든 언어판). 사유가 없으면 400
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
@@ -34,7 +35,9 @@ export async function POST(request: NextRequest) {
 
   try {
     if (action === "withdraw") {
-      const withdrawn = await withdrawBriefing({ date, locale, editedBy: "admin", editionType });
+      const reason = normalizeWithdrawReason(b.reason);
+      if (!reason) return NextResponse.json({ error: { message: "withdraw requires a reason (2-500 chars)" } }, { status: 400 });
+      const withdrawn = await withdrawBriefing({ date, reason, locale, editedBy: "admin", editionType });
       return NextResponse.json({ data: { date, withdrawn } });
     }
     const result = await publishBriefing({

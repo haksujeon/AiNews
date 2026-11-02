@@ -7,6 +7,8 @@
  *  - 검증 치명 위반이 남은 판은 발행하지 않는다.
  *  - 주간·월간: 기간에 결손일(수집 미완)이 있으면 관리자가 데이터 알림을 확인(acknowledgeDataQuality)해야 발행한다.
  *  - 데일리·주간·월간이 같은 함수를 쓴다 (editionType, 기본 'daily').
+ *  - 철회는 공개 사유(reason)가 필수이고 public_note 에 남는다 (정정 기록, P0-6).
+ *  - status_changed_at 은 DB 트리거(scripts/2026-11-02-briefing-corrections.sql)가 상태가 바뀔 때마다 채운다.
  */
 import pool from "@/lib/db";
 import type { BriefingLocale } from "./types";
@@ -76,17 +78,31 @@ export async function publishBriefing(opts: {
   }
 }
 
-/** 발행본 철회. locale 을 주지 않으면 그 날짜의 모든 언어판 */
+/** 철회 사유 최대 길이 (공개 정정 기록에 그대로 나간다) */
+export const WITHDRAW_REASON_MAX = 500;
+
+/** 철회 사유 정리: 공백을 접고 자른다. 비어 있으면 null (호출 쪽이 4xx 로 거절) */
+export function normalizeWithdrawReason(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const r = v.replace(/\s+/g, " ").trim().slice(0, WITHDRAW_REASON_MAX);
+  return r.length >= 2 ? r : null;
+}
+
+/** 발행본 철회. locale 을 주지 않으면 그 날짜의 모든 언어판. 사유는 필수이며 public_note 에 저장한다 */
 export async function withdrawBriefing(opts: {
   date: string;
+  reason: string;
   locale?: BriefingLocale;
   editedBy?: string;
   editionType?: EditionType;
 }): Promise<number> {
+  const reason = normalizeWithdrawReason(opts.reason);
+  if (!reason) throw new PublishError("철회 사유가 필요합니다", 400);
   const { rowCount } = await pool.query(
-    `UPDATE daily_briefings SET status = 'withdrawn', updated_at = now(), edited_by = COALESCE($4, edited_by)
+    `UPDATE daily_briefings
+        SET status = 'withdrawn', updated_at = now(), edited_by = COALESCE($4, edited_by), public_note = $5
       WHERE edition_type = $1 AND edition_date = $2::date AND status = 'published' AND ($3::text IS NULL OR locale = $3)`,
-    [opts.editionType ?? EDITION_TYPE, opts.date, opts.locale ?? null, opts.editedBy ?? null]
+    [opts.editionType ?? EDITION_TYPE, opts.date, opts.locale ?? null, opts.editedBy ?? null, reason]
   );
   return rowCount ?? 0;
 }

@@ -228,7 +228,10 @@
     "section_industry": "산업",
     "tabsLabel": "브리핑 종류",
     "tabDaily": "데일리",
-    "tabWeekly": "주간"
+    "tabWeekly": "주간",
+    "bannerLabelLatest": "최신 중국 AI 브리핑",
+    "bannerDated": "{date} 판",
+    "bannerAriaDated": "{date} 중국 AI 브리핑 읽기: {headline}"
   },
   "briefingAdmin": {
     "nav": "브리핑 검토",
@@ -300,7 +303,27 @@
     "confirmPublishWeekly": "{week} 주간 리포트 ko v{version} 을 발행할까요? 같은 주의 기존 발행본은 교체됩니다.",
     "confirmWithdrawWeekly": "{week} 주간 리포트 발행본을 철회할까요?",
     "confirmRegenerateWeekly": "{week} 주간 리포트를 다시 생성할까요? LLM 을 호출하며(약 $0.003~0.008, 10~40초) 새 버전 초안이 생깁니다.",
-    "previewWeekly": "미리보기 (공개 주간 페이지와 같은 컴포넌트)"
+    "previewWeekly": "미리보기 (공개 주간 페이지와 같은 컴포넌트)",
+    "slaTitle": "발행 SLA",
+    "slaEdition": "현재 판",
+    "slaWeekend": "토·일 합본",
+    "slaDue": "마감 {due}",
+    "slaState_published": "발행됨",
+    "slaState_overdue": "마감 초과 — 미발행",
+    "slaState_review": "검토 대기 (초안 있음)",
+    "slaState_failed": "생성 실패 — 다시 생성 필요",
+    "slaState_pending": "생성 전",
+    "slaState_skipped": "물량 부족으로 생략",
+    "slaLastPublished": "최근 발행 {date}",
+    "slaNeverPublished": "발행본 없음",
+    "slaRate": "최근 14일 발행률",
+    "slaRateValue": "{published}/{eligible}판 ({pct}%)",
+    "slaRateNone": "대상 판 없음",
+    "slaOnTime": "마감 안 {onTime}판",
+    "slaRule": "평일판은 다음 날 09:00 KST, 토·일 합본(토요일 판)은 월요일 09:00 KST 까지 발행합니다. 09:30 에 미발행이면 텔레그램 알림.",
+    "withdrawReason": "철회 사유 (필수, 정정 기록에 공개)",
+    "withdrawReasonPlaceholder": "예: 인용 기사의 수치 오류로 철회합니다.",
+    "withdrawReasonHint": "철회하면 이 사유가 공개 정정 기록에 남습니다. 2자 이상."
   },
   "weekly": {
     "kicker": "주간 리포트",

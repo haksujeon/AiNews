@@ -199,7 +199,7 @@ export interface LocaleOutcome {
 
 export interface GenerateResult {
   date: string;
-  outcome: "generated" | "skipped_same_input" | "skipped_low_volume" | "locked" | "failed" | "dry_run";
+  outcome: "generated" | "skipped_same_input" | "skipped_low_volume" | "skipped_weekend" | "locked" | "failed" | "dry_run";
   mode: EditionMode | null;
   candidateCount: number;
   inputHash: string | null;

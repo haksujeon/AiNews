@@ -79,6 +79,31 @@ test('아카이브: 200, 판 목록 링크', async ({ page }) => {
   await expect(page.locator('main a[href*="/briefing/20"]').first()).toBeVisible();
 });
 
+// 홈 배너 대체 규칙 (sla.ts bannerState). 판정 경계는 tests/briefing/sla.test.ts 가 시각 고정으로 검사하고,
+// 여기서는 DB 상태 그대로: 발행본이 없으면 띠가 없고, 있으면 그 판의 헤드라인과 (오래된 판이면) 날짜 칩이 보인다.
+test('홈 배너: 발행본이 없으면 숨김, 있으면 최신 발행본 + 오래된 판이면 날짜 칩', async ({ page, request }) => {
+  for (const locale of ['ko', 'en', 'zh']) {
+    const api = await request.get(`${BASE_URL}/api/briefing?locale=${locale}`);
+    await page.goto(`${BASE_URL}/${locale}`);
+    const banner = page.getByTestId('briefing-banner');
+    if (api.status() === 404) {
+      await expect(banner, `${locale}: 발행본이 없으면 띠가 없다`).toHaveCount(0);
+      continue;
+    }
+    expect(api.status()).toBe(200);
+    const { data } = await api.json();
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText(data.content.headline);
+    const dated = (await banner.getAttribute('data-dated')) === 'true';
+    await expect(page.getByTestId('briefing-banner-date')).toHaveCount(dated ? 1 : 0);
+  }
+});
+
+test('내부 상태 API 는 토큰 없이 401', async ({ request }) => {
+  const res = await request.get(`${BASE_URL}/api/internal/briefing/status`);
+  expect(res.status()).toBe(401);
+});
+
 test('관리자 API 는 세션 없이 401', async ({ request }) => {
   for (const path of ['publish', 'regenerate', 'edit']) {
     const res = await request.post(`${BASE_URL}/api/admin/briefing/${path}`, { data: { date: '2026-10-13' } });
