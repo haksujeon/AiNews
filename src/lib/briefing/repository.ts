@@ -10,6 +10,7 @@ import type { PoolClient } from "pg";
 import pool from "@/lib/db";
 import { PUBLIC_NEWS_WHERE } from "@/lib/news-query";
 import { scopeCategorySql } from "@/lib/categories";
+import { SOURCE_ARTICLE_COLUMNS } from "./columns";
 import type { BriefingLocale, BriefingStatus, CandidateArticle, EditionMode } from "./types";
 
 /** 판 유형. 데일리·주간·월간이 같은 테이블·상태 기계·관리자 화면을 쓴다 (Gate 2) */
@@ -63,14 +64,11 @@ export const ROW_COLUMNS = `id, edition_type, to_char(edition_date, 'YYYY-MM-DD'
   model, prompt_version, llm_request_ids, input_tokens, output_tokens, cost_usd, latency_ms, error, needs_review,
   edited_by, created_at, updated_at, published_at`;
 
-/** 그날(베이징 news_date) 공개 범위 내(AI) 기사 — 분류 목록은 categories.ts. endDate 를 주면 date~endDate (주말 합본) */
+/** 그날(베이징 news_date) 공개 범위 내(AI) 기사 — 분류 목록은 categories.ts. endDate 를 주면 date~endDate (주말 합본).
+ *  열 목록은 columns.ts (대상 지역 subject_region·region_tags 포함 — 중국 중심 규칙이 쓴다) */
 export async function loadCandidateArticles(date: string, endDate: string = date): Promise<CandidateArticle[]> {
   const { rows } = await pool.query(
-    `SELECT id, source_name, source_url, category,
-            COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr,
-            COALESCE(summary_kr, '') AS summary_kr, COALESCE(ai_insights_kr, '') AS ai_insights_kr,
-            COALESCE(key_terms, '[]'::jsonb) AS key_terms,
-            COALESCE(summary_cn, '') AS summary_cn, to_char((news_date AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS news_date
+    `SELECT ${SOURCE_ARTICLE_COLUMNS}
        FROM ai_news_ex
       WHERE ${PUBLIC_NEWS_WHERE}
         AND ${scopeCategorySql()}

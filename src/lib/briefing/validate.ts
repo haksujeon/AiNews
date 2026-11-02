@@ -11,9 +11,12 @@
  * | number_unit_not_in_source: 숫자+단위("2위") | 치명 |
  * | term: 용어가 ref 기사 key_terms 에 있고 병음 일치 | 치명 |
  * | refs_relevance: 고유명사가 각 ref 기사에 나옴 | 경고 (무관한 ref 는 떼어냄, 마지막 1개는 남김) |
+ * | refs_all_irrelevant: 항목의 고유명사가 남은 근거 기사 어디에도 없음 | 치명 (2026-11-02 재검증: 근거가 구글 기사뿐인 '바이두' 항목) |
+ * | subject_not_in_refs: 주요 기사 subject 가 근거 기사 어디에도 없음 | 치명 (중국 할당을 채우려 만든 주체) |
  * | han_in_ko: 한국어 본문에 한자 (괄호 병기 포함) | 치명 (2026-11-02 QA: 수리 뒤에도 남은 채 draft 가 됐다) |
  * | length: 글자 수 상한 초과 (여유 없음)     | 치명 (예전 15% 여유 삭제) |
- * | china_centric: 상위 5건 중 중국 주체 ≥ 3 | 치명 (수리 호출 대상. 수리 뒤에도 미달이면 판 전체 failed) |
+ * | china_centric: 상위 5건 중 중국 주체 ≥ 3 | 치명 (수리 호출 대상. 수리 뒤에도 미달이면 판 전체 failed).
+ *   중국 주체 = 근거 기사 subject_region(CN, 대만·홍콩 포함) 다수 + subject_is_chinese 표시 (rules.ts isChinaSubject) |
  * | cluster_topic: 묶음 기사 전부에 공통 주체 | 경고 (주제 묶음은 clusters 에서 뺌) |
  * | term_pinyin_spacing: 병음 띄어쓰기만 다름 | 경고 (DB 표기로 교정) |
  * | headline_length: 헤드라인 32자 초과 (여유 없음) | 치명 (수리 호출 대상, 자동 자르기 없음) |
@@ -26,6 +29,13 @@
  * | outlet_count: "두 매체" 인데 근거 매체 수가 적음 | 치명 |
  * | unsupported_entity: headline/lede 의 고유명사가 근거 기사에 없음 | 치명 |
  * | china_attribution: "중국 내" 문장에 해외 실체·지명의 사실 | 치명 |
+ * | duplicate_story / shared_ref: 같은 사건을 두 항목에, 같은 기사를 두 주요 기사 근거로 | 치명 (결정적 병합 mergeDuplicateItems) |
+ * | time_marker_wrong: 판과 같은 달을 "지난 N월" 로 (rules.ts pastMarkerIssues) | 치명 (결정적 수선: "지난 " 삭제) |
+ * | dropped_key_story: 여러 매체가 다룬 사건의 유일한 주요 기사가 검증으로 빠짐 | 경고 (generate.ts, 리뷰어용) |
+ *
+ * 숫자 검사는 근거에 같은 값으로 나온 금액·큰 수를 표기가 달라도 통과시킨다 (quantity.ts — "162억 8,600만" = "162.86억").
+ * 삭제 전 결정적 수선(2026-11-02 재감사 round 2): glossKoHan(한자 사전·괄호 안 한자), fitSentenceLengths(문장·절 자르기),
+ * localFixes(문제 문장만 삭제). 고친 기록은 ContentEdit 로 남긴다 (generate.ts validation.edits).
  *
  * refs 관련성 정리를 숫자 검사보다 먼저 한다 — 저장되는 refs 가 곧 검증한 refs 가 되도록.
  */
@@ -39,7 +49,10 @@ import type {
   ValidationReport,
 } from "./types";
 import { entityMentioned, findEntities, properNouns } from "./entities";
-import { hanResidue } from "../text/han";
+import { applyHanGlossary, dropHanInsideParens, hanResidue } from "../text/han";
+import { HAN_GLOSSARY } from "../text/han-glossary";
+import { maskGroundedQuantities } from "./quantity";
+import { sameEvent } from "../news-rank";
 import {
   claimIssues,
   entityNotInOriginal,
@@ -66,6 +79,10 @@ export interface ValidationContext {
   outlets?: Map<string, string[]>;
   /** 판 날짜 (주말 합본은 시작일) — 예전 사건 검사 기준 */
   editionDate?: string;
+  /** 짧은 id → 사건 키 (같은 사건을 다룬 다른 묶음은 같은 키, news-rank sameEvent). 중복 이야기 검사 (없으면 id 자체) */
+  events?: Map<string, string>;
+  /** 짧은 id → 같은 사건을 다룬 매체 수 (eventSources ?? sources). 핵심 기사 삭제 경고 (dropped_key_story) */
+  eventOutlets?: Map<string, number>;
 }
 
 export function toSourceDoc(a: CandidateArticle): SourceDoc {
@@ -100,6 +117,7 @@ export function contextFromGroups(
   const keyTerms = new Map<string, KeyTerm[]>();
   const docs = new Map<string, SourceDoc[]>();
   const outlets = new Map<string, string[]>();
+  const eventOutlets = new Map<string, number>();
   for (const g of groups) {
     const members = [g.primary, ...g.siblings];
     sourceText.set(g.shortId, members.map(articleText).join(" "));
@@ -107,8 +125,32 @@ export function contextFromGroups(
     keyTerms.set(g.shortId, members.flatMap((a) => a.key_terms ?? []));
     docs.set(g.shortId, members.map(toSourceDoc));
     outlets.set(g.shortId, g.sources);
+    eventOutlets.set(g.shortId, (g.eventSources?.length ? g.eventSources : g.sources).length);
   }
-  return { sourceText, titleText, keyTerms, hidden, mode, docs, outlets, editionDate };
+  return { sourceText, titleText, keyTerms, hidden, mode, docs, outlets, editionDate, events: groupEvents(groups), eventOutlets };
+}
+
+/**
+ * 후보 묶음 → 사건 키 (union-find, news-rank sameEvent — 데일리 점수·주간 2단계 묶기와 같은 판정, Gate 2).
+ * "Gemini 4 Carbon 발표" 와 "Gemini 4 Carbon 뒤 알파벳 주가" 처럼 제목이 다른 같은 사건 묶음이 같은 키를 받는다.
+ */
+export function groupEvents(groups: CandidateGroup[]): Map<string, string> {
+  const feats = groups.map((g) => {
+    const members = [g.primary, ...g.siblings];
+    return {
+      title_kr: g.primary.title_kr ?? "",
+      title_cn: g.primary.title_cn ?? "",
+      days: [...new Set(members.map((m) => m.news_date ?? "1970-01-01"))],
+      entities: findEntities(members.map((m) => `${m.title_kr ?? ""} ${m.title_cn ?? ""}`).join(" ")).map((e) => e.key),
+    };
+  });
+  const parent = groups.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < groups.length; i++) {
+    if (!feats[i].entities.length) continue;
+    for (let j = i + 1; j < groups.length; j++) if (feats[j].entities.length && sameEvent(feats[i], feats[j])) parent[find(j)] = find(i);
+  }
+  return new Map(groups.map((g, i) => [g.shortId, groups[find(i)].shortId]));
 }
 
 /**
@@ -145,23 +187,96 @@ const SENTENCE_END = /(?<=[.!?。])\s+/;
  * QA 감사 수정안("마지막 문장 삭제")과 같은 처리 — 길이 2자 초과 때문에 중국 주체 주요 기사가 통째로 빠져
  * 판 전체가 중국 중심 미달로 실패하는 것을 막는다. 반환: 고친 판과 손댄 위치
  */
-export function fitSentenceLengths(content: BriefingContent): { content: BriefingContent; trimmed: string[] } {
+export function fitSentenceLengths(content: BriefingContent): { content: BriefingContent; trimmed: string[]; edits: ContentEdit[] } {
   const c = structuredClone(content);
   const trimmed: string[] = [];
-  const fit = (path: string, text: string, max: number): string => {
-    if (text.length <= max) return text;
-    const parts = text.split(SENTENCE_END);
-    while (parts.length > 1 && parts.join(" ").length > max) parts.pop();
-    const out = parts.join(" ");
-    if (out !== text) trimmed.push(path);
+  const edits: ContentEdit[] = [];
+  const fit = (path: string, text: string, max: number, clause = false): string => {
+    const out = fitText(text, max, clause);
+    if (out !== text) {
+      trimmed.push(path);
+      edits.push({ action: "trim", path, reason: `length ${text.length}/${max}자`, before: text, after: out });
+    }
     return out;
   };
   c.lede = fit("lede", c.lede, 200);
   c.top_stories.forEach((st, i) => {
+    // 제목 41/40자로 주요 기사가 통째로 빠졌다 (round 2 재생성 10-31) — 제목도 절 경계("…", ",")에서 자른다
+    st.title = fit(`top_stories[${i}].title`, st.title, 40, true);
     st.what = fit(`top_stories[${i}].what`, st.what, 160);
     st.why = fit(`top_stories[${i}].why`, st.why, 120);
   });
-  return { content: c, trimmed };
+  c.sections.forEach((sec, j) => sec.items.forEach((it, k) => (it.text = fit(`sections[${j}].items[${k}]`, it.text, 70, true))));
+  c.companies_to_watch.forEach((co, i) => (co.why = fit(`companies_to_watch[${i}].why`, co.why, 40, true)));
+  return { content: c, trimmed, edits };
+}
+
+/**
+ * 상한을 넘은 텍스트를 끝 문장부터 뺀다 (첫 문장은 남김). clause 면 한 문장짜리도 절 경계에서 자른다.
+ * 데일리 fitSentenceLengths 와 주간·월간 생성(periodic/generate.ts)이 같은 함수를 쓴다 (Gate 2).
+ */
+export function fitText(text: string, max: number, clause = false): string {
+  if (text.length <= max) return text;
+  const parts = text.split(SENTENCE_END);
+  while (parts.length > 1 && parts.join(" ").length > max) parts.pop();
+  let out = parts.join(" ");
+  // 한 문장짜리 짧은 칸(섹션 한 줄·주목 기업)은 절 경계(쉼표·말줄임·줄표)에서 자른다 — 2026-11-02 재감사 10-27: 76/70자 때문에 항목이 통째로 빠짐
+  if (clause && out.length > max) out = trimAtClause(out, max) ?? out;
+  return out;
+}
+
+/** 절 경계(", " "… " " — " "·")에서 상한 안으로 자른 문장. 남는 길이가 상한의 절반 미만이면 null (뜻이 빠짐) */
+export function trimAtClause(text: string, max: number): string | null {
+  const cuts = [...text.matchAll(/,\s|…\s?|\s[—–-]\s|·|;\s/g)].map((m) => m.index ?? 0).filter((i) => i > 0 && i <= max);
+  if (!cuts.length) return null;
+  const out = text.slice(0, Math.max(...cuts)).replace(/[\s,…·;—–-]+$/, "").trim();
+  return out.length >= max * 0.5 ? out : null;
+}
+
+/** 생성 단계에서 결정적으로 고친 기록 (감사 기록, validation.edits[]) */
+export interface ContentEdit {
+  action: "trim" | "gloss" | "sentence_delete" | "merge" | "ref_strip" | "repair" | "drop" | "time_marker";
+  path: string;
+  reason: string;
+  before: unknown;
+  after: unknown;
+  /** 어느 회차의 결과에 한 일인가 (initial / repair / repair2 / final) */
+  round?: string;
+}
+
+/**
+ * 한국어 본문 한자를 결정적으로 고친다 (치명 삭제 전에): 사전(han-glossary)의 4자 이하 이름은 한국어 표기로(괄호 안 포함),
+ * 한글이 섞인 괄호 안의 한자는 지운다("캡컷(剪映 국제판)" → "캡컷(국제판)"). 사전에 없는 한자는 그대로 둔다(수리 대상).
+ * 주간·월간 glossPeriodicHan 도 같은 applyHanGlossary·dropHanInsideParens 를 쓴다 (Gate 2).
+ */
+export function glossHanText(t: string): string {
+  if (!/[\u3400-\u9fff\uf900-\ufaff]/.test(t)) return t;
+  // 라틴 글자가 붙은 이름 (한자 덩어리만으로는 뜻이 정해지지 않아 사전에 넣지 않는다): B站 = 빌리빌리 (09-16 헤드라인)
+  const named = t.replace(/B站/g, "빌리빌리");
+  return applyHanGlossary(dropHanInsideParens(named), HAN_GLOSSARY, { insideParens: true }).text;
+}
+
+export function glossKoHan(content: BriefingContent): { content: BriefingContent; edits: ContentEdit[] } {
+  const c = structuredClone(content);
+  const edits: ContentEdit[] = [];
+  const f = (path: string, t: string) => {
+    const out = glossHanText(t);
+    if (out !== t) edits.push({ action: "gloss", path, reason: "han_in_ko (사전 치환·괄호 안 한자 삭제)", before: t, after: out });
+    return out;
+  };
+  c.headline = f("headline", c.headline);
+  c.lede = f("lede", c.lede);
+  c.top_stories.forEach((st, i) => {
+    st.title = f(`top_stories[${i}].title`, st.title);
+    st.what = f(`top_stories[${i}].what`, st.what);
+    st.why = f(`top_stories[${i}].why`, st.why);
+    // subject 는 검증 대상 문장이 아니지만 헤드라인 = 1위 기사 판정에 쓰여 같은 표기로 맞춘다 (B站 → 빌리빌리)
+    st.subject = glossHanText(st.subject);
+  });
+  c.sections.forEach((sec, j) => sec.items.forEach((it, k) => (it.text = f(`sections[${j}].items[${k}]`, it.text))));
+  c.key_numbers.forEach((k, i) => (k.label = f(`key_numbers[${i}]`, k.label)));
+  c.companies_to_watch.forEach((co, i) => (co.why = f(`companies_to_watch[${i}].why`, co.why)));
+  return { content: c, edits };
 }
 
 const PAREN_HAN_RE = /\s?[(（]\s*[\u3400-\u9fff\uf900-\ufaff·、，,\s]+\s*[)）]/g;
@@ -332,9 +447,10 @@ export const LIMITS: [RegExp, number][] = [
 export function pruneIrrelevantRefs(
   content: BriefingContent,
   ctx: ValidationContext
-): { content: BriefingContent; warn: ValidationIssue[]; dropped: { path: string; ref: string }[] } {
+): { content: BriefingContent; warn: ValidationIssue[]; fatal: ValidationIssue[]; dropped: { path: string; ref: string }[] } {
   const c: BriefingContent = structuredClone(content);
   const warn: ValidationIssue[] = [];
+  const fatal: ValidationIssue[] = [];
   const dropped: { path: string; ref: string }[] = [];
 
   const check = (path: string, text: string, refs: string[]): string[] => {
@@ -348,7 +464,8 @@ export function pruneIrrelevantRefs(
     let keep = refs.filter((r) => !irrelevant.includes(r));
     if (!keep.length) {
       keep = refs.slice(0, 1);
-      warn.push({ level: "warn", rule: "refs_relevance", path, detail: `유일한 근거 ${refs[0]} 에 ${nouns.map((n) => n.label).join("/")} 가 없음` });
+      // 2026-11-02 재검증: 근거 기사가 모두 무관하면 경고가 아니라 치명 (항목 삭제 대상) — 근거 없는 항목이 중국 할당을 채우지 않게
+      fatal.push({ level: "fatal", rule: "refs_all_irrelevant", path, detail: `근거 기사(${refs.join(",")}) 어디에도 ${nouns.map((n) => n.label).join("/")} 가 없음` });
     }
     for (const r of irrelevant.filter((x) => !keep.includes(x))) {
       dropped.push({ path, ref: r });
@@ -373,7 +490,28 @@ export function pruneIrrelevantRefs(
   c.key_numbers.forEach((k, i) => {
     check(`key_numbers[${i}]`, k.label, k.ref ? [k.ref] : []);
   });
-  return { content: c, warn, dropped };
+  return { content: c, warn, fatal, dropped };
+}
+
+/**
+ * 주요 기사의 subject(주체)가 근거 기사 어디에도 나오지 않는가. 고유명사(이름표·라틴 토큰)가 있으면 그것으로,
+ * 없으면 한국어 이름 토큰(2자 이상, 조사 제거)이 근거 텍스트에 그대로 있는지 본다. subject 가 비었으면 판단하지 않는다.
+ */
+export function subjectMissingFromRefs(subject: string, refs: string[], ctx: Pick<ValidationContext, "sourceText">): boolean {
+  const subj = (subject ?? "").trim();
+  if (!subj) return false;
+  const srcs = refs.map((r) => ctx.sourceText.get(r)).filter((x): x is string => x !== undefined);
+  if (!srcs.length) return false;
+  const nouns = properNouns(subj);
+  if (nouns.length) return !nouns.some((n) => srcs.some((t) => n.matches(t)));
+  const toks = subj
+    .split(/[\s,，·・/]+/)
+    .map((t) => t.replace(/[은는이가의]$/, ""))
+    .filter((t) => t.length >= 2);
+  if (!toks.length) return false;
+  // 결정적 한자 정리(glossKoHan)가 subject 를 바꿨을 수 있어 정리한 근거 텍스트도 본다 ("B站" → "빌리빌리")
+  const hay = srcs.map((s) => `${s} ${glossHanText(s)}`).join(" ").replace(/\s/g, "");
+  return !toks.some((t) => hay.includes(t));
 }
 
 // ───────────────────────── 근거 없는 실체 (headline·lede)
@@ -436,9 +574,9 @@ export function chinaAttributionIssues(text: string, refs: string[], ctx: Valida
 
 // ───────────────────────── 중국 중심
 
-/** 상위 5건 중 중국 주체 수 (판정은 rules.ts isChinaSubject 하나 — subject_region 이 들어오면 그 함수만 바꾼다) */
+/** 상위 5건 중 중국 주체 수 (판정은 rules.ts isChinaSubject 하나 — ref 별 근거 기사 묶음의 subject_region 으로 투표) */
 export function chinaCentricCount(c: BriefingContent, ctx?: Pick<ValidationContext, "docs">): number {
-  return c.top_stories.slice(0, 5).filter((s) => isChinaSubject(s, s.refs.flatMap((r) => ctx?.docs?.get(r) ?? []))).length;
+  return c.top_stories.slice(0, 5).filter((s) => isChinaSubject(s, s.refs.map((r) => ctx?.docs?.get(r) ?? []))).length;
 }
 
 export function chinaCentricRequired(mode: EditionMode, topCount: number): number {
@@ -452,8 +590,8 @@ export function validateKo(
   ctx: ValidationContext,
   preIssues: ValidationIssue[] = []
 ): { content: BriefingContent; report: ValidationReport } {
-  const { content, warn: relWarn, dropped } = pruneIrrelevantRefs(input, ctx);
-  const fatal: ValidationIssue[] = preIssues.filter((i) => i.level === "fatal");
+  const { content, warn: relWarn, fatal: relFatal, dropped } = pruneIrrelevantRefs(input, ctx);
+  const fatal: ValidationIssue[] = [...preIssues.filter((i) => i.level === "fatal"), ...relFatal];
   const warn: ValidationIssue[] = [...preIssues.filter((i) => i.level === "warn"), ...relWarn];
   const excludedIds = new Set(content.excluded.map((e) => e.id));
   const units = collectUnits(content);
@@ -466,13 +604,16 @@ export function validateKo(
       else if (ctx.hidden.has(r) || excludedIds.has(r))
         fatal.push({ level: "fatal", rule: "excluded_or_hidden_ref", path: u.path, detail: `${r} 는 ${ctx.hidden.has(r) ? "숨긴" : "제외한"} 기사` });
     }
-    const cited = norm((u.numberRefs ?? u.refs).map((r) => ctx.sourceText.get(r) ?? "").join(" "));
-    for (const m of u.text.match(NUM_RE) ?? []) {
+    const citedRaw = (u.numberRefs ?? u.refs).map((r) => ctx.sourceText.get(r) ?? "").join(" ");
+    const cited = norm(citedRaw);
+    // 근거에 같은 값으로 나온 금액·큰 수는 표기가 달라도 통과 ("162억 8,600만 달러" = "162.86억 달러", quantity.ts)
+    const numText = maskGroundedQuantities(u.text, citedRaw).text;
+    for (const m of numText.match(NUM_RE) ?? []) {
       numbersChecked++;
       const n = norm(m).replace(/[.]+$/, "");
       if (n && !cited.includes(n)) fatal.push({ level: "fatal", rule: "number_not_in_source", path: u.path, detail: `"${m}" 가 근거 기사에 없음` });
     }
-    for (const m of u.text.match(NUM_UNIT_RE) ?? []) {
+    for (const m of numText.match(NUM_UNIT_RE) ?? []) {
       const n = norm(m);
       if (!cited.includes(n)) fatal.push({ level: "fatal", rule: "number_unit_not_in_source", path: u.path, detail: `"${m.trim()}" (숫자+단위) 가 근거 기사에 없음` });
     }
@@ -487,6 +628,11 @@ export function validateKo(
       fatal.push({ level: "fatal", rule: "china_attribution", path: u.path, detail: d });
     for (const i of semanticIssues(u, ctx)) fatal.push({ level: "fatal", rule: i.rule, path: u.path, detail: i.detail });
   }
+  // 주요 기사의 주체가 근거 기사에 있어야 한다 (중국 할당을 채우려 근거 없는 주체를 만들지 않게)
+  content.top_stories.forEach((s, i) => {
+    if (subjectMissingFromRefs(s.subject, s.refs, ctx))
+      fatal.push({ level: "fatal", rule: "subject_not_in_refs", path: `top_stories[${i}]`, detail: `주체 "${s.subject}" 가 근거 기사(${s.refs.join(",")}) 어디에도 없음` });
+  });
   // 회사 why 길이 (단위 텍스트는 name 을 붙여 검사하므로 따로 본다)
   content.companies_to_watch.forEach((co, i) => {
     if (co.why.length > 40) fatal.push({ level: "fatal", rule: "length", path: `companies_to_watch[${i}].why`, detail: `${co.why.length}/40자` });
@@ -532,6 +678,9 @@ export function validateKo(
     else cl.ids = ids;
     return ok;
   });
+
+  // 같은 사건을 두 항목에 쓰지 않는다 / 같은 기사가 두 주요 기사의 근거가 되지 않는다 (2026-11-02 재감사 10-29 Gemini 4 Carbon)
+  fatal.push(...duplicateStoryIssues(content, ctx));
 
   const china = chinaCentricCount(content, ctx);
   const need = chinaCentricRequired(ctx.mode, content.top_stories.length);
@@ -610,9 +759,19 @@ export function itemOf(path: string): string {
 export function dropFatalItems(
   content: BriefingContent,
   fatal: ValidationIssue[]
-): { content: BriefingContent; dropped: string[]; unrecoverable: string[] } {
+): { content: BriefingContent; dropped: string[]; unrecoverable: string[]; edits: ContentEdit[] } {
   const items = new Set(fatal.map((f) => itemOf(f.path)));
   const unrecoverable: string[] = [...items].filter((i) => i === "headline" || i === "lede" || i === "top_stories");
+  // 감사 기록: 지우기 전 원문 항목과 사유 (2026-11-02 재감사: 무엇을 지웠는지 알 수 없었다)
+  const edits: ContentEdit[] = [...items]
+    .filter((i) => !unrecoverable.includes(i))
+    .map((i) => ({
+      action: "drop" as const,
+      path: i,
+      reason: fatal.filter((f) => itemOf(f.path) === i).map((f) => `${f.rule}: ${f.detail}`).join(" / "),
+      before: itemValue(content, i),
+      after: null,
+    }));
   const c: BriefingContent = structuredClone(content);
   c.top_stories = c.top_stories.filter((_, i) => !items.has(`top_stories[${i}]`)).map((s, i) => ({ ...s, rank: i + 1 }));
   c.sections = c.sections
@@ -621,5 +780,241 @@ export function dropFatalItems(
   c.key_numbers = c.key_numbers.filter((_, i) => !items.has(`key_numbers[${i}]`));
   c.companies_to_watch = c.companies_to_watch.filter((_, i) => !items.has(`companies_to_watch[${i}]`));
   if (items.has("term_of_the_day")) c.term_of_the_day = null;
-  return { content: c, dropped: [...items].filter((i) => !unrecoverable.includes(i)), unrecoverable };
+  return { content: c, dropped: [...items].filter((i) => !unrecoverable.includes(i)), unrecoverable, edits };
+}
+
+/** 항목 위치의 값 (감사 기록용 복사본) */
+function itemValue(c: BriefingContent, item: string): unknown {
+  let m = item.match(/^top_stories\[(\d+)\]$/);
+  if (m) return structuredClone(c.top_stories[Number(m[1])] ?? null);
+  m = item.match(/^sections\[(\d+)\]\.items\[(\d+)\]$/);
+  if (m) return structuredClone(c.sections[Number(m[1])]?.items[Number(m[2])] ?? null);
+  m = item.match(/^key_numbers\[(\d+)\]$/);
+  if (m) return structuredClone(c.key_numbers[Number(m[1])] ?? null);
+  m = item.match(/^companies_to_watch\[(\d+)\]$/);
+  if (m) return structuredClone(c.companies_to_watch[Number(m[1])] ?? null);
+  if (item === "term_of_the_day") return structuredClone(c.term_of_the_day);
+  return null;
+}
+
+// ───────────────────────── 중복 이야기 (같은 사건 = 한 항목)
+
+const eventOf = (ctx: Pick<ValidationContext, "events">, r: string) => ctx.events?.get(r) ?? r;
+
+interface ItemRefs {
+  path: string;
+  /** 주 근거 (주요 기사 primary_ref, 섹션 첫 ref) */
+  main: string;
+  refs: string[];
+}
+
+function storyItems(c: BriefingContent): { tops: ItemRefs[]; secs: ItemRefs[] } {
+  return {
+    tops: c.top_stories.map((s, i) => ({ path: `top_stories[${i}]`, main: s.primary_ref || s.refs[0] || "", refs: s.refs })),
+    secs: c.sections.flatMap((sec, j) => sec.items.map((it, k) => ({ path: `sections[${j}].items[${k}]`, main: it.refs[0] ?? "", refs: it.refs }))),
+  };
+}
+
+/**
+ * 중복 규칙 (치명 — 결정적 병합 mergeDuplicateItems 의 대상):
+ *  - duplicate_story: 같은 사건(주 근거의 사건 키가 같음)을 주요 기사 두 칸에, 또는 주요 기사와 섹션 한 줄에 다시 씀
+ *  - shared_ref: 같은 기사가 두 주요 기사의 근거 (한 기사는 주요 기사 하나만 뒷받침)
+ * 주목 기업·숫자 칸은 본문 항목을 짚는 칸이라 보지 않는다.
+ */
+export function duplicateStoryIssues(c: BriefingContent, ctx: Pick<ValidationContext, "events">): ValidationIssue[] {
+  const out: ValidationIssue[] = [];
+  const { tops, secs } = storyItems(c);
+  tops.forEach((b, j) => {
+    for (const a of tops.slice(0, j)) {
+      if (a.main && eventOf(ctx, a.main) === eventOf(ctx, b.main)) {
+        out.push({ level: "fatal", rule: "duplicate_story", path: b.path, detail: `${a.path} 와 같은 사건 (${b.main})` });
+        return;
+      }
+      const shared = b.refs.filter((r) => a.refs.includes(r));
+      if (shared.length) out.push({ level: "fatal", rule: "shared_ref", path: b.path, detail: `${shared.join(",")} 가 ${a.path} 의 근거이기도 함` });
+    }
+  });
+  secs.forEach((b, j) => {
+    if (!b.main) return;
+    const top = tops.find((a) => a.refs.some((r) => eventOf(ctx, r) === eventOf(ctx, b.main)));
+    const sec = secs.slice(0, j).find((a) => a.main && eventOf(ctx, a.main) === eventOf(ctx, b.main));
+    const dup = top ?? sec;
+    if (dup) out.push({ level: "fatal", rule: "duplicate_story", path: b.path, detail: `${dup.path} 와 같은 사건 (${b.main})` });
+  });
+  return out;
+}
+
+/**
+ * 중복 결정적 정리: 같은 사건이면 아래 항목을 위 항목에 합친다 (근거 refs 를 위 항목으로 옮기고 아래 항목 삭제).
+ * 다른 사건이 보조 기사 하나를 함께 인용하면(07-15 처럼 무해한 공유) 아래 항목에서 그 ref 만 뗀다 (남는 ref 가 있을 때).
+ */
+export function mergeDuplicateItems(content: BriefingContent, ctx: Pick<ValidationContext, "events">): { content: BriefingContent; edits: ContentEdit[] } {
+  const c = structuredClone(content);
+  const edits: ContentEdit[] = [];
+  const mainOf = (s: { primary_ref: string; refs: string[] }) => s.primary_ref || s.refs[0] || "";
+  for (let j = 1; j < c.top_stories.length; j++) {
+    const b = c.top_stories[j];
+    const i = c.top_stories.slice(0, j).findIndex((a) => mainOf(a) && eventOf(ctx, mainOf(a)) === eventOf(ctx, mainOf(b)));
+    if (i >= 0) {
+      const a = c.top_stories[i];
+      edits.push({ action: "merge", path: `top_stories[${j}]`, reason: `duplicate_story → top_stories[${i}] 에 합침`, before: structuredClone(b), after: null });
+      a.refs = [...new Set([...a.refs, ...b.refs])];
+      c.top_stories.splice(j, 1);
+      j--;
+      continue;
+    }
+    for (const a of c.top_stories.slice(0, j)) {
+      const shared = b.refs.filter((r) => a.refs.includes(r));
+      const left = b.refs.filter((r) => !shared.includes(r));
+      if (shared.length && left.length) {
+        edits.push({ action: "ref_strip", path: `top_stories[${j}]`, reason: `shared_ref ${shared.join(",")}`, before: [...b.refs], after: left });
+        b.refs = left;
+        if (!b.refs.includes(b.primary_ref)) b.primary_ref = b.refs[0];
+      }
+    }
+  }
+  c.top_stories = c.top_stories.map((s, i) => ({ ...s, rank: i + 1 }));
+  // 섹션 한 줄이 주요 기사(또는 앞 섹션 줄)와 같은 사건이면 합친다
+  const seen: { refs: string[]; target: { refs: string[] } | null; path: string }[] = c.top_stories.map((s, i) => ({ refs: s.refs, target: s, path: `top_stories[${i}]` }));
+  c.sections.forEach((sec, j) => {
+    sec.items = sec.items.filter((it, k) => {
+      const main = it.refs[0];
+      const dup = main ? seen.find((x) => x.refs.some((r) => eventOf(ctx, r) === eventOf(ctx, main))) : undefined;
+      if (dup) {
+        edits.push({ action: "merge", path: `sections[${j}].items[${k}]`, reason: `duplicate_story → ${dup.path} 에 합침`, before: structuredClone(it), after: null });
+        if (dup.target) dup.target.refs = [...new Set([...dup.target.refs, ...it.refs.filter((r) => eventOf(ctx, r) === eventOf(ctx, main))])];
+        return false;
+      }
+      seen.push({ refs: it.refs, target: null, path: `sections[${j}].items[${k}]` });
+      return true;
+    });
+  });
+  c.sections = c.sections.filter((sec) => sec.items.length > 0);
+  return { content: c, edits };
+}
+
+// ───────────────────────── 필드 접근 (부분 수리·감사 기록)
+
+/** 문장 위치(path)의 텍스트. companies_to_watch[i] 는 why */
+export function getField(c: BriefingContent, path: string): string | undefined {
+  if (path === "headline") return c.headline;
+  if (path === "lede") return c.lede;
+  let m = path.match(/^top_stories\[(\d+)\]\.(title|what|why)$/);
+  if (m) return c.top_stories[Number(m[1])]?.[m[2] as "title" | "what" | "why"];
+  m = path.match(/^sections\[(\d+)\]\.items\[(\d+)\]$/);
+  if (m) return c.sections[Number(m[1])]?.items[Number(m[2])]?.text;
+  m = path.match(/^key_numbers\[(\d+)\]$/);
+  if (m) return c.key_numbers[Number(m[1])]?.label;
+  m = path.match(/^companies_to_watch\[(\d+)\](?:\.why)?$/);
+  if (m) return c.companies_to_watch[Number(m[1])]?.why;
+  return undefined;
+}
+
+export function setField(c: BriefingContent, path: string, v: string): boolean {
+  if (path === "headline") {
+    c.headline = v;
+    return true;
+  }
+  if (path === "lede") {
+    c.lede = v;
+    return true;
+  }
+  let m = path.match(/^top_stories\[(\d+)\]\.(title|what|why)$/);
+  const top = m ? c.top_stories[Number(m[1])] : undefined;
+  if (m && top) {
+    top[m[2] as "title" | "what" | "why"] = v;
+    return true;
+  }
+  m = path.match(/^sections\[(\d+)\]\.items\[(\d+)\]$/);
+  const it = m ? c.sections[Number(m[1])]?.items[Number(m[2])] : undefined;
+  if (it) {
+    it.text = v;
+    return true;
+  }
+  m = path.match(/^key_numbers\[(\d+)\]$/);
+  const kn = m ? c.key_numbers[Number(m[1])] : undefined;
+  if (kn) {
+    kn.label = v;
+    return true;
+  }
+  m = path.match(/^companies_to_watch\[(\d+)\](?:\.why)?$/);
+  const co = m ? c.companies_to_watch[Number(m[1])] : undefined;
+  if (co) {
+    co.why = v;
+    return true;
+  }
+  return false;
+}
+
+// ───────────────────────── 삭제 전 결정적 수선 (문장 하나만 문제면 그 문장만 뺀다)
+
+/** 문제 표현을 짚을 수 있는 규칙: detail 의 첫 "…" 가 문장 속 표현 (han_in_ko 는 한자 덩어리) */
+const LOCAL_RULES = new Set([
+  "superlative_unsupported",
+  "trend_unsupported",
+  "qualifier_dropped",
+  "number_not_in_source",
+  "number_unit_not_in_source",
+  "han_in_ko",
+  "amount_not_in_source",
+  "money_not_deal",
+  "currency_mismatch",
+]);
+
+function issueToken(f: ValidationIssue): string | null {
+  if (f.rule === "han_in_ko") return f.detail.match(/[㐀-鿿豈-﫿]+/)?.[0] ?? null;
+  return f.detail.match(/^"([^"]+)"/)?.[1] ?? null;
+}
+
+/**
+ * 치명 위반이 여러 문장 칸(lede·what·why)의 한 문장에만 있으면 그 문장만 지운다 (항목 통째 삭제 전에).
+ * 2026-11-02 재감사 10-30: why 의 '판도' 한 단어 때문에 OpenAI Pro 한도 주요 기사가 통째로 빠졌다.
+ * "지난 N월"(판과 같은 달)은 "지난 " 만 지운다. 반환: 고친 판과 기록.
+ */
+export function localFixes(content: BriefingContent, fatal: ValidationIssue[]): { content: BriefingContent; edits: ContentEdit[] } {
+  const c = structuredClone(content);
+  const edits: ContentEdit[] = [];
+  for (const f of fatal) {
+    const text = getField(c, f.path);
+    if (text === undefined) continue;
+    if (f.rule === "time_marker_wrong") {
+      const out = text.replace(/지난\s?(\d{1,2}월)/g, "$1");
+      if (out !== text && setField(c, f.path, out)) edits.push({ action: "time_marker", path: f.path, reason: `${f.rule}: ${f.detail}`, before: text, after: out });
+      continue;
+    }
+    if (!LOCAL_RULES.has(f.rule) || !/^(lede|top_stories\[\d+\]\.(what|why))$/.test(f.path)) continue;
+    const tok = issueToken(f);
+    if (!tok) continue;
+    const sents = text.split(SENTENCE_END);
+    if (sents.length < 2) continue;
+    const keep = sents.filter((x) => !x.includes(tok));
+    if (!keep.length || keep.length === sents.length) continue;
+    const out = keep.join(" ");
+    if (setField(c, f.path, out)) edits.push({ action: "sentence_delete", path: f.path, reason: `${f.rule}: ${f.detail}`, before: text, after: out });
+  }
+  return { content: c, edits };
+}
+
+// ───────────────────────── 핵심 기사 삭제 경고
+
+/**
+ * 삭제로 사라진 주요 기사 중 여러 매체가 다룬 사건(같은 사건 매체 ≥ 2)이고, 남은 판 어디에도 그 사건이 없는 것 → dropped_key_story 경고.
+ * 리뷰어(사람·AI 검토)가 "핵심 기사가 검증 때문에 빠졌다" 를 알 수 있게 한다.
+ */
+export function droppedKeyStories(
+  before: BriefingContent,
+  after: BriefingContent,
+  ctx: Pick<ValidationContext, "events" | "eventOutlets">
+): ValidationIssue[] {
+  const remaining = new Set(citedRefs(after).map((r) => eventOf(ctx, r)));
+  const keptMains = new Set(after.top_stories.map((s) => s.primary_ref));
+  const out: ValidationIssue[] = [];
+  before.top_stories.forEach((s, i) => {
+    if (keptMains.has(s.primary_ref)) return;
+    const outlets = Math.max(0, ...s.refs.map((r) => ctx.eventOutlets?.get(r) ?? 0));
+    if (outlets < 2) return;
+    if (s.refs.some((r) => remaining.has(eventOf(ctx, r)))) return;
+    out.push({ level: "warn", rule: "dropped_key_story", path: `top_stories[${i}]`, detail: `"${s.title}" (매체 ${outlets}곳) 이 검증으로 빠짐 — 판에 이 사건이 없음` });
+  });
+  return out;
 }

@@ -27,7 +27,7 @@
  * | metric_relevance (신규)        | 경고 → 수리 호출 대상 | 인용 지표의 대상(기업·매체)이 문장에 없음 |
  * | headline_length               | 치명 → 수리, 그래도 넘으면 결정적 제목 | 제목 상한 초과 (여유 없이 엄격) |
  * | han_in_ko / length            | 치명 (여유 없음) | |
- * | china_centric                 | 치명 | 흐름 4개 중 2개 이상 중국 주체 (rules.ts isChinaSubject). 수리 뒤에도 미달이면 failed |
+ * | china_centric                 | 치명 | 흐름 4개 중 2개 이상 중국 주체 (rules.ts isChinaSubject: 근거 사건의 subject_region 투표). 수리 뒤에도 미달이면 failed |
  * | top_event_missing             | 경고 → 수리 호출 대상 | 매체 수 1·2위 사건이 본문 어디에도 없음 |
  *
  * 이 파일은 DB 를 import 하지 않는다.
@@ -35,6 +35,7 @@
 import type { ValidationIssue } from "../types";
 import { ENTITIES, entityMentioned, findEntities, properNouns } from "../entities";
 import { HAN_RE, NUM_RE, norm } from "../validate";
+import { maskGroundedQuantities } from "../quantity";
 import {
   claimIssues,
   entityNotInOriginal,
@@ -69,6 +70,9 @@ export interface PeriodicValidationContext {
   /** 매체 수 상위 사건(1·2위)의 기사 id, S id → 기사 id (top_event_missing 경고) */
   topEvents?: string[][];
   poolIds?: Map<string, string[]>;
+  /** (월간) 주 키 → 기간, S id → 사건 날짜들. month_arc 의 refs 는 그 주의 사건만 (arc_week_mismatch) */
+  weekRanges?: Map<string, { start: string; end: string }>;
+  sidDays?: Map<string, string[]>;
 }
 
 /** 지표 용어(중국어) → 본문에 쓰는 한국어 표기. 방향 검사·순위 검사가 "에이전트 언급이 늘었다" 를 智能体 로 읽게 한다 */
@@ -191,7 +195,9 @@ const WOW_RE = /지난주|전주|지난 주|지난달|전월|지난 달/;
 const VOLUME_RE = /기사 수|보도량|물량|기사가 (늘|줄)/;
 /** 지난주(지난달) 대비 기사 수 비교인데 보정 지표(같은 요일 vol.lfl* / 결손일 뺀 평균 vol.prev_avg_complete_day)를 인용하지 않음 */
 export function volumeWowUnadjusted(text: string, metrics: string[]): boolean {
-  return WOW_RE.test(text) && VOLUME_RE.test(text) && !metrics.some((k) => k.startsWith("vol.lfl") || k === "vol.prev_avg_complete_day");
+  // 비중(%) 비교를 이번 값·지난 값 쌍(region.cn + region.cn.prev)으로 하면 물량 비교가 아니다 (W44 round 2 china_lens)
+  const sharePair = /%/.test(text) && metrics.some((k) => k.endsWith(".prev") && metrics.includes(k.slice(0, -5)));
+  return WOW_RE.test(text) && VOLUME_RE.test(text) && !sharePair && !metrics.some((k) => k.startsWith("vol.lfl") || k === "vol.prev_avg_complete_day");
 }
 
 /** (월간) 주별 원 건수 비교: 주 길이·결손이 달라 평일 평균 지표를 써야 함 */
@@ -203,14 +209,55 @@ export function volumeWeekUnadjusted(text: string, metrics: string[]): boolean {
   );
 }
 
-const CHANGE_RE = /크게 늘|늘었다|증가했|급증|줄었다|감소했|급감/;
+// 2026-11-02 재감사: W42 헤드라인 '열풍', W41 '확산·몰리는' 이 증감 지표 없이 통과했다 → 증감·쏠림 표현을 넓힌다.
+// 수량 증감(늘었다·줄었다)은 기사 숫자로 뒷받침되면 기사 사실로 보지만, 추세 표현(열풍·붐·쏠림·확산·몰리)은 언제나 증감 지표가 있어야 한다
+const QUANTITY_CHANGE_RE = /크게 늘|늘었다|증가했|급증|줄었다|감소했|급감/;
+const TREND_CHANGE_RE = /열풍|(?<![가-힣])붐(?![가-힣])|붐을|쏠림|쏠리|확산(?!\s?(?:방지|억제))|몰리|몰려|몰린/;
 const CHANGE_METRIC_RE = /\.(rise|fall|chg)$|^week\.|^vol\.lfl/;
-/** 증감 주장인데 증감 지표가 없음 */
-export function changeUnbacked(text: string, metrics: string[]): boolean {
-  return CHANGE_RE.test(text) && !metrics.some((k) => CHANGE_METRIC_RE.test(k));
+/**
+ * 증감 주장인데 증감 지표가 없음. 이번 값과 지난 값(k 와 k.prev)을 함께 인용하면 증감 근거로 본다 (방향은 prevPairConflicts).
+ * 언급 수 이야기가 아니고 증감을 근거 기사의 숫자로 말한 문장("재산이 6,700억 위안으로 늘었다")은 기사 사실이라 지표가 필요 없다 (sourcedChange, ground 가 있을 때).
+ */
+export function changeUnbacked(text: string, metrics: string[], ground = ""): boolean {
+  const paired = metrics.some((k) => k.endsWith(".prev") && metrics.includes(k.slice(0, -5)));
+  if (paired || metrics.some((k) => CHANGE_METRIC_RE.test(k))) return false;
+  return splitSentences(text).some((s) => TREND_CHANGE_RE.test(s) || (QUANTITY_CHANGE_RE.test(s) && !sourcedChange(s, ground)));
+}
+
+/** 지표 대상이 나오는 문장 (region.cn → 중국, region.us → 미국; 그 밖은 metricTargetIn) */
+function pairTargetIn(k: string, sentence: string): boolean {
+  if (k === "region.cn") return /중국/.test(sentence);
+  if (k === "region.us") return /미국/.test(sentence);
+  return metricTargetIn(k, sentence) === true;
+}
+
+/**
+ * k 와 k.prev 를 함께 인용한 증감의 방향: 이번 값 > 지난 값인데 "줄었다"(또는 반대) 면 충돌.
+ * W44 round 2: china_lens "중국 기사 비중은 42.2%로, 지난주 46.8%에서 줄었다" — 맞는 방향인데 증감 지표가 없다고 칸째 빠졌다.
+ */
+export function prevPairConflicts(text: string, metrics: string[], facts: Record<string, string>): string[] {
+  const out: string[] = [];
+  const num = (v: string | undefined) => Number((v ?? "").match(/-?\d+(?:\.\d+)?/)?.[0] ?? NaN);
+  for (const kp of metrics.filter((k) => k.endsWith(".prev"))) {
+    const k = kp.slice(0, -5);
+    if (!metrics.includes(k)) continue;
+    const cur = num(facts[k]);
+    const prev = num(facts[kp]);
+    if (!Number.isFinite(cur) || !Number.isFinite(prev) || cur === prev) continue;
+    for (const s of splitSentences(text).filter((x) => pairTargetIn(k, x))) {
+      const d = directionOf(s);
+      if ((cur > prev && d < 0) || (cur < prev && d > 0)) out.push(`${k}=${facts[k]} / ${kp}=${facts[kp]} 인데 ${d > 0 ? "상승" : "하락"} 표현`);
+    }
+  }
+  return out;
 }
 
 const RANK_RE = /가장 큰|최대 규모|가장 많은/;
+/** 금액 합산 표현 ("시총 3,000억 달러" 의 시가총액은 합산이 아니다) */
+export function summedAmount(text: string): boolean {
+  return /합계|(?<![시가])총\s?\d|모두 합쳐|합산/.test(text);
+}
+
 /** 위안과 달러 금액을 한 문장에서 서열로 비교 */
 export function crossCurrencyRank(text: string): boolean {
   return RANK_RE.test(text) && /위안/.test(text) && /달러/.test(text);
@@ -237,16 +284,18 @@ function metricTargetIn(k: string, sentence: string): boolean | null {
  * 인용 지표의 방향과 문장 표현의 방향이 반대. 지표 대상이 나오는 문장만 보고,
  * 대상이 어느 문장에도 없으면(예: 智能体 를 인용하고 "개인 에이전트 열풍" 이라고만 씀) 항목 전체를 본다.
  */
-export function directionConflicts(text: string, metrics: string[], facts: Record<string, string>): string[] {
+export function directionConflicts(text: string, metrics: string[], facts: Record<string, string>, ground = ""): string[] {
   const out: string[] = [];
-  const sentences = splitSentences(text);
+  // 언급 수 이야기가 아니고, 증감을 근거 기사의 숫자("호출량 +801%")로 말한 문장은 지표(언급 수)와 다른 사실이다 —
+  // 2026-11-02 재감사 W44: '딥시크 호출량 급증'(사실)을 ent.deepseek.chg(언급 −18%)와 충돌로 잡아 수리가 사실을 뒤집었다
+  const sentences = splitSentences(text).filter((s) => TREND_CHANGE_RE.test(s) || !sourcedChange(s, ground));
   for (const k of metrics) {
     const v = facts[k] ?? "";
     const neg = k.endsWith(".fall") || (k.endsWith(".chg") && /-\d/.test(v));
     const pos = k.endsWith(".rise") || (k.endsWith(".chg") && /\+\d/.test(v));
     if (!neg && !pos) continue;
     const hit = sentences.filter((s) => metricTargetIn(k, s) === true);
-    const scope = hit.length ? hit.join(" ") : text;
+    const scope = hit.length ? hit.join(" ") : sentences.join(" ");
     if (neg && UP_RE.test(scope)) out.push(`${k}=${v} 인데 상승 표현`);
     if (pos && DOWN_RE.test(scope)) out.push(`${k}=${v} 인데 하락 표현`);
   }
@@ -254,17 +303,28 @@ export function directionConflicts(text: string, metrics: string[], facts: Recor
 }
 
 const MENTION_RE = /언급|기사|보도|다뤄|다룬|등장/;
+
+/** 문장의 증감이 근거 기사의 숫자로 뒷받침되나 (언급 이야기가 아니고, 증감 숫자 — %·배 — 가 근거 텍스트에 있음) */
+export function sourcedChange(sentence: string, ground: string): boolean {
+  // 언급 수 이야기("언급이 늘었다·기사 수·보도량")만 뺀다 — "늘었다는 보도가 이어졌다" 는 기사 사실을 전한 말
+  if (!ground || /언급|기사\s?수|보도량|다뤄|다룬|등장/.test(sentence)) return false;
+  const nums = sentence.match(/\d[\d,.]*\s?(?:%|배|(?:조|억|만)?\s?(?:위안|달러))/g) ?? [];
+  const g = norm(ground);
+  return nums.some((n) => g.includes(norm(n)));
+}
 const CLAUSE_SPLIT = /,|，|(?<=[가-힣](?:고|며|지만|으나|는데|반면))\s/;
 
 /**
  * 인용하지 않은 증감 지표와 반대 방향 (2026-11-02 W44 dek "구현형 AI와 에이전트 용어의 언급이 함께 늘었다" — 智能体 84→55).
  * 언급·기사·보도 이야기를 하는 문장에서, 용어(한국어 표기 포함)·기업이 나오는 절의 방향(없으면 다음 절)을 지표와 맞춘다.
  */
-export function uncitedDirectionConflicts(text: string, facts: Record<string, string>, cited: string[] = []): string[] {
+export function uncitedDirectionConflicts(text: string, facts: Record<string, string>, cited: string[] = [], ground = ""): string[] {
   const out: string[] = [];
   const keys = Object.keys(facts).filter((k) => /^(term|ent)\..+\.(rise|fall|chg)$/.test(k) && !cited.includes(k));
   for (const s of splitSentences(text)) {
     if (!MENTION_RE.test(s)) continue;
+    // 기사 숫자로 말한 수량 증감("801% 증가했다고 보도됐다")은 언급 지표와 다른 사실 (round 2 재생성 W44 v11)
+    if (!TREND_CHANGE_RE.test(s) && sourcedChange(s, ground)) continue;
     const clauses = s.split(CLAUSE_SPLIT).filter((c) => c.trim());
     for (const k of keys) {
       const v = facts[k] ?? "";
@@ -362,9 +422,9 @@ export function irrelevantMetrics(text: string, metrics: string[], entityNames: 
   return out;
 }
 
-/** 중국 주체 흐름 수 (데일리와 같은 rules.ts isChinaSubject) */
+/** 중국 주체 흐름 수 (데일리와 같은 rules.ts isChinaSubject — S id(사건) 별 근거 기사 subject_region 투표, 미판정이면 실체 규칙) */
 export function chinaCentricCount(c: WeeklyContent, ctx?: Pick<PeriodicValidationContext, "docs">): number {
-  return c.big_picture.filter((b) => isChinaSubject({ title: b.title, text: b.text }, b.refs.flatMap((r) => ctx?.docs?.get(r) ?? []))).length;
+  return c.big_picture.filter((b) => isChinaSubject({ title: b.title, text: b.text }, b.refs.map((r) => ctx?.docs?.get(r) ?? []))).length;
 }
 
 // ───────────────────────── 본 검증
@@ -389,7 +449,8 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
 
     const groundText = [...u.refs.map((r) => ctx.sourceText.get(r) ?? ""), ...u.metrics.map((k) => F[k] ?? "")].join(" ");
     const pool = norm(groundText);
-    for (const m of stripPeriodLabels(u.text).match(NUM_RE) ?? []) {
+    // 같은 값의 금액·큰 수는 표기가 달라도 통과 (quantity.ts — 데일리와 같은 파서)
+    for (const m of maskGroundedQuantities(stripPeriodLabels(u.text), groundText).text.match(NUM_RE) ?? []) {
       numbersChecked++;
       const n = norm(m).replace(/[.]+$/, "");
       if (n && !pool.includes(n)) push("fatal", "number_not_in_source", u.path, `"${m}" 가 인용 기사·지표에 없음`);
@@ -400,15 +461,20 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
     if (ctx.kind === "monthly" && volumeWeekUnadjusted(u.text, u.metrics))
       push("fatal", "volume_week_unadjusted", u.path, "주 길이·수집 미완이 다른 주별 원 건수 비교");
     if (crossCurrencyRank(u.text)) push("fatal", "cross_currency_rank", u.path, "통화가 다른 금액의 서열 표현");
-    if (changeUnbacked(u.text, u.metrics)) push("fatal", "change_unbacked", u.path, "증감 주장에 증감 지표 없음");
-    if (/합계|총\s?\d|모두 합쳐|합산/.test(u.text)) push("fatal", "summed_amount", u.path, "금액 합산 표현");
+    if (changeUnbacked(u.text, u.metrics, u.refs.map((r) => ctx.sourceText.get(r) ?? "").join(" ")))
+      push("fatal", "change_unbacked", u.path, "증감 주장에 증감 지표 없음");
+    for (const d of prevPairConflicts(u.text, u.metrics, F)) push("fatal", "direction_conflict", u.path, d);
+    // "시총 3,000억 달러"(시가총액)는 합산이 아니다 (round 2 재생성 W44 v10 movers 오탐)
+    if (summedAmount(u.text)) push("fatal", "summed_amount", u.path, "금액 합산 표현");
 
     if (!u.headline) {
-      for (const d of directionConflicts(u.text, u.metrics, F)) push("fatal", "direction_conflict", u.path, d);
+      const refGround = u.refs.map((r) => ctx.sourceText.get(r) ?? "").join(" ");
+      for (const d of directionConflicts(u.text, u.metrics, F, refGround)) push("fatal", "direction_conflict", u.path, d);
       for (const k of irrelevantMetrics(u.text, u.metrics, ctx.entityNames, u.subject)) push("warn", "metric_relevance", u.path, `${k} 대상이 문장에 없음`);
     }
     // 인용하지 않은 지표와도 방향이 맞아야 한다 (dek·term·china_lens 포함)
-    for (const d of uncitedDirectionConflicts(u.text, F, u.metrics)) push("fatal", "direction_conflict", u.path, d);
+    for (const d of uncitedDirectionConflicts(u.text, F, u.metrics, u.refs.map((r) => ctx.sourceText.get(r) ?? "").join(" ")))
+      push("fatal", "direction_conflict", u.path, d);
     for (const i of rankIssues(u.text, ctx, u.path === "term" ? c.term?.term : undefined, u.subject)) push("fatal", i.rule, u.path, i.detail);
     for (const i of periodicSemanticIssues(u, ctx, groundText)) push("fatal", i.rule, u.path, i.detail);
     if (u.path === "china_lens") {
@@ -430,6 +496,11 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
     (c.month_arc ?? []).forEach((b, i) => {
       if (!ctx.weekKeys!.has(b.week)) push("fatal", "unknown_week", `month_arc[${i}]`, b.week || "(없음)");
     });
+  // 월간 month_arc: 그 주의 사건만 근거로 (2026-11-02 재감사: W43 문장 근거 16건 중 15건이 W44 S-1 기사)
+  (c.month_arc ?? []).forEach((b, i) => {
+    const off = arcOffWeekRefs(b, ctx);
+    if (off.length) push("fatal", "arc_week_mismatch", `month_arc[${i}]`, `${off.join(",")} 는 ${b.week} 밖의 사건`);
+  });
   const cn = chinaCentricCount(c, ctx);
   if (cn < Math.min(2, c.big_picture.length))
     push("fatal", "china_centric", "big_picture", `중국 주체 흐름 ${cn}개 (흐름 ${c.big_picture.length}개 중 2개 이상 필요)`);
@@ -443,6 +514,179 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
   }
 
   return { fatal: dedupe(fatal), warn: dedupe(warn), stats: { bigPicture: c.big_picture.length, chinaCentric: cn, numbersChecked } };
+}
+
+/** month_arc 한 칸의 refs 중 그 주에 날짜가 하나도 없는 사건 (주 기간·사건 날짜를 모르면 빈 배열) */
+export function arcOffWeekRefs(b: { week: string; refs: string[] }, ctx: Pick<PeriodicValidationContext, "weekRanges" | "sidDays">): string[] {
+  const w = ctx.weekRanges?.get(b.week);
+  if (!w || !ctx.sidDays) return [];
+  return b.refs.filter((r) => {
+    const days = ctx.sidDays!.get(r);
+    return days !== undefined && !days.some((d) => d >= w.start && d <= w.end);
+  });
+}
+
+/** 주간·월간 생성 감사 기록 (데일리 validate.ts ContentEdit 와 같은 모양) */
+export interface PeriodicEdit {
+  action: "trim" | "gloss" | "sentence_delete" | "ref_strip" | "repair" | "drop" | "fallback" | "flip_rejected";
+  path: string;
+  reason: string;
+  before: unknown;
+  after: unknown;
+  round?: string;
+}
+
+/** month_arc 의 주 밖 refs 를 결정적으로 뗀다 (남는 ref 가 없으면 그대로 — 검증이 치명으로 잡아 그 칸을 뺀다) */
+export function pruneArcRefs(c: WeeklyContent, ctx: Pick<PeriodicValidationContext, "weekRanges" | "sidDays">): { content: WeeklyContent; edits: PeriodicEdit[] } {
+  const out = structuredClone(c);
+  const edits: PeriodicEdit[] = [];
+  out.month_arc = (out.month_arc ?? []).map((b, i) => {
+    const off = arcOffWeekRefs(b, ctx);
+    const keep = b.refs.filter((r) => !off.includes(r));
+    if (!off.length || !keep.length) return b;
+    edits.push({ action: "ref_strip", path: `month_arc[${i}]`, reason: `arc_week_mismatch: ${off.join(",")} 는 ${b.week} 밖`, before: b.refs, after: keep });
+    return { ...b, refs: keep };
+  });
+  return { content: out, edits };
+}
+
+// ───────────────────────── 방향 충돌: 사실을 뒤집지 않는다
+
+/** 증감 방향 (+1 상승 / −1 하락 / 0 없음·둘 다) */
+function directionOf(s: string): number {
+  const up = UP_RE.test(s);
+  const down = DOWN_RE.test(s);
+  return up === down ? 0 : up ? 1 : -1;
+}
+
+/** 칸(항목 위치)의 본문 텍스트 */
+export function periodicText(c: WeeklyContent, item: string): string | undefined {
+  const m = item.match(/^(big_picture|movers|watch_next|month_arc)\[(\d+)\]$/);
+  if (m) return (c[m[1] as "big_picture" | "movers" | "watch_next" | "month_arc"] ?? [])[Number(m[2])]?.text;
+  if (item === "money") return c.money?.text;
+  if (item === "china_lens") return c.china_lens?.text;
+  if (item === "term") return c.term?.why;
+  if (item === "dek") return c.dek;
+  return undefined;
+}
+
+/** 칸(항목 위치)의 refs */
+function periodicRefs(c: WeeklyContent, item: string): string[] | undefined {
+  const m = item.match(/^(big_picture|movers|watch_next|month_arc)\[(\d+)\]$/);
+  if (m) return (c[m[1] as "big_picture" | "movers" | "watch_next" | "month_arc"] ?? [])[Number(m[2])]?.refs;
+  if (item === "money") return c.money?.refs;
+  if (item === "china_lens") return c.china_lens?.refs;
+  if (item === "dek") return c.dek_refs;
+  return undefined;
+}
+
+function setPeriodicText(c: WeeklyContent, item: string, v: string): boolean {
+  const m = item.match(/^(big_picture|movers|watch_next|month_arc)\[(\d+)\]$/);
+  if (m) {
+    const x = (c[m[1] as "big_picture" | "movers" | "watch_next" | "month_arc"] ?? [])[Number(m[2])];
+    if (!x) return false;
+    x.text = v;
+    return true;
+  }
+  if (item === "money" && c.money) c.money.text = v;
+  else if (item === "china_lens" && c.china_lens) c.china_lens.text = v;
+  else if (item === "term" && c.term) c.term.why = v;
+  else if (item === "dek") c.dek = v;
+  else return false;
+  return true;
+}
+
+/**
+ * 방향 충돌(direction_conflict)이 난 칸에서 충돌 문장만 지운다 (수리 호출 전, 결정적).
+ * 수리에 맡기면 "호출량 급증" 을 "크게 줄었다" 로 뒤집었다 (W44) — 방향을 고쳐 쓰지 않고 그 문장을 뺀다. 문장이 하나뿐이면 그대로 둔다.
+ */
+export function dropConflictSentences(
+  c: WeeklyContent,
+  fatal: ValidationIssue[],
+  facts: Record<string, string>,
+  sourceText: Map<string, string> = new Map()
+): { content: WeeklyContent; edits: PeriodicEdit[] } {
+  const out = structuredClone(c);
+  const edits: PeriodicEdit[] = [];
+  for (const f of fatal.filter((x) => x.rule === "direction_conflict")) {
+    const item = itemOfPeriodic(f.path);
+    const text = periodicText(out, item);
+    if (!text) continue;
+    const key = f.detail.split("=")[0];
+    const sents = splitSentences(text);
+    if (sents.length < 2) continue;
+    // 검증과 같은 근거(그 칸의 refs)로 다시 본다 — 기사 숫자로 뒷받침되는 문장은 지우지 않는다
+    const ground = (periodicRefs(out, item) ?? []).map((r) => sourceText.get(r) ?? "").join(" ");
+    const bad = sents.filter((s) =>
+      [...directionConflicts(s, [key], facts, ground), ...uncitedDirectionConflicts(s, facts, [], ground)].some((d) => d.startsWith(`${key}=`))
+    );
+    const keep = sents.filter((s) => !bad.includes(s));
+    if (!bad.length || !keep.length) continue;
+    const next = keep.join(" ");
+    if (setPeriodicText(out, item, next)) edits.push({ action: "sentence_delete", path: item, reason: `direction_conflict: ${f.detail}`, before: text, after: next });
+  }
+  return { content: out, edits };
+}
+
+/**
+ * 수리본이 사실을 뒤집었나: 수리 전 문장의 증감 방향과, 같은 대상(고유명사 공유)을 말하는 수리 뒤 문장의 방향이 반대이고,
+ * 수리 뒤 문장이 지표 값(FACTS 문자열)을 그대로 인용하지 않았으면 뒤집기. 반환: 뒤집힌 칸 목록.
+ */
+export function directionFlips(before: WeeklyContent, after: WeeklyContent, facts: Record<string, string>): string[] {
+  const items = [
+    "dek",
+    "money",
+    "china_lens",
+    "term",
+    ...before.big_picture.map((_, i) => `big_picture[${i}]`),
+    ...before.movers.map((_, i) => `movers[${i}]`),
+    ...(before.month_arc ?? []).map((_, i) => `month_arc[${i}]`),
+  ];
+  const factValues = Object.values(facts).filter((v) => /\d/.test(v));
+  // 같은 대상: 고유명사 공유, 또는 같은 용어·기업 지표의 대상을 둘 다 말함 (W44 dek "구현형 AI와 에이전트 용어의 언급이 늘었다" 는 고유명사가 없다)
+  const targets = Object.keys(facts).filter((k) => /^(term|ent)\./.test(k));
+  const sameTarget = (a: string, b: string) =>
+    properNouns(b).some((n) => properNouns(a).some((m) => m.label === n.label)) || targets.some((k) => metricTargetIn(k, a) === true && metricTargetIn(k, b) === true);
+  const flipped: string[] = [];
+  for (const item of items) {
+    const a = periodicText(before, item);
+    const b = periodicText(after, item);
+    if (!a || !b || a === b) continue;
+    const bs = splitSentences(b);
+    const hit = splitSentences(a).some((sa) => {
+      const da = directionOf(sa);
+      if (!da) return false;
+      return bs.some((sb) => {
+        const db = directionOf(sb);
+        if (!db || db === da) return false;
+        return sameTarget(sa, sb) && !factValues.some((v) => sb.includes(v));
+      });
+    });
+    if (hit) flipped.push(item);
+  }
+  return flipped;
+}
+
+/** 수리본에서 뒤집힌 칸을 수리 전 문장(충돌 문장은 지운 것)으로 되돌린다 */
+export function revertFlips(
+  before: WeeklyContent,
+  after: WeeklyContent,
+  flipped: string[],
+  fatal: ValidationIssue[],
+  facts: Record<string, string>,
+  sourceText: Map<string, string> = new Map()
+): { content: WeeklyContent; edits: PeriodicEdit[] } {
+  const base = dropConflictSentences(before, fatal, facts, sourceText).content;
+  const out = structuredClone(after);
+  const edits: PeriodicEdit[] = [];
+  for (const item of flipped) {
+    const orig = periodicText(base, item);
+    const repaired = periodicText(out, item);
+    if (orig === undefined || repaired === undefined) continue;
+    setPeriodicText(out, item, orig);
+    edits.push({ action: "flip_rejected", path: item, reason: "수리본이 증감 방향을 뒤집음 (지표 값 인용 없음) — 수리 전 문장으로 되돌림", before: repaired, after: orig });
+  }
+  return { content: out, edits };
 }
 
 /** 단위 하나의 rules.ts 규칙 (데일리와 같은 함수) */

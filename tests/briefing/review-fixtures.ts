@@ -71,6 +71,7 @@ export function fakeInput(row: BriefingRow = dailyRow(), over: Partial<ReviewInp
     incompleteDays: [], meta: row.content.meta as Record<string, unknown>, fullText: new Map([[A1, full(ART1)], [A2, full(ART2)]]),
     revalidate: (c) => ({ content: c, fatal: [], warn: [] }),
     candidateArticles: new Map([[A1, ART1], [A2, ART2]]),
+    genLog: { fallback: null, fallbackReason: null, targetedRepair: false, edits: [], warns: [] },
     ...over,
   };
 }

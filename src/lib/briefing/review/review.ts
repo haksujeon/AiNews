@@ -168,6 +168,7 @@ export async function reviewBriefing(
     version: input.row.version, segments: input.segments, labelOf: input.labelOf, articles: input.articles, facts: input.facts,
     candidates: input.candidates, translations: input.translations,
     hints: buildHints(input.segments, input.fullText, input.labelOf, input.periodStart),
+    genLog: input.genLog,
     dataQualityNote: dq.incomplete_days?.length ? `수집 미완 날짜 ${dq.incomplete_days.join(", ")} (본문에 데이터 알림이 필요)` : null,
   });
 

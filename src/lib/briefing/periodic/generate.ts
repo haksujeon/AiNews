@@ -11,8 +11,10 @@
  *     content.meta.data_quality 에 결손일이 남고, 발행할 때 관리자 확인(acknowledgeDataQuality)이 필요하다.
  *  4. period_metrics 스냅숏 저장 (fingerprint 가 같으면 기존 행 재사용)
  *  5. 이야기 후보 S01.. → input_hash 가 이전 판과 같으면 건너뜀 (force 제외)
- *  6. ko 1회 생성 → 검증 → 치명·방향 충돌·제목 길이·한자가 있으면 수리 1회 → 남은 치명 항목 삭제,
- *     headline·dek 가 빠지면 결정적 문장으로 대체 → 큰 흐름 2개 미만이면 failed
+ *  6. ko 1회 생성 → 결정적 정리(한자 사전 치환, month_arc 의 주 밖 refs 떼기) → 검증
+ *     → 방향 충돌 문장은 결정적으로 지운 뒤(사실을 고쳐 쓰지 않음) 수리(최대 2회). 수리본이 증감 방향을 뒤집으면(지표 값 인용 없이) 그 칸은 되돌린다
+ *     → 남은 치명 항목 삭제, headline·dek 가 빠지면 결정적 문장으로 대체 → 큰 흐름 2개 미만이면 failed
+ *     감사 기록: validation.edits[] (회차·위치·사유·고치기 전/후 원문 — 데일리와 같은 모양)
  *  7. daily_briefings 에 edition_type='weekly'|'monthly', edition_date=period_start, status draft (발행은 관리자)
  * MVP 는 한국어판만 만든다 (번역은 v2).
  */
@@ -20,7 +22,8 @@ import { createHash } from "node:crypto";
 import pool from "@/lib/db";
 import { COMPLETE_SINCE, computePeriodMetrics, type PeriodMetrics, type PeriodStory } from "@/lib/metrics/period";
 import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "../llm";
-import { articleText, toSourceDoc } from "../validate";
+import { articleText, fitText, glossHanText, toSourceDoc } from "../validate";
+import { SOURCE_ARTICLE_COLUMNS } from "../columns";
 import type { SourceDoc } from "../rules";
 import { BudgetExceeded, CostTracker, sumUsage } from "../generate";
 import { finishGenerating, insertBriefing, latestBriefing, withDateLock } from "../repository";
@@ -42,11 +45,18 @@ import type { PeriodicKind, PeriodicMeta, PeriodicValidationReport, StoredPeriod
 import {
   TERM_KO,
   citedSids,
+  directionFlips,
+  dropConflictSentences,
   dropFatalPeriodic,
+  itemOfPeriodic,
   needsRepair,
   normalizeWeekly,
+  periodicText,
+  pruneArcRefs,
   repairProblems,
+  revertFlips,
   validateWeekly,
+  type PeriodicEdit,
   type PeriodicValidationContext,
 } from "./validate";
 
@@ -129,14 +139,14 @@ async function upsertPeriodMetrics(m: PeriodMetrics): Promise<string> {
 /**
  * S id → 근거 텍스트 (묶음 기사 전체, 데일리와 같은 articleText) + 근거 기사(중국어 원문 포함, rules.ts 의미 규칙용).
  * summary_cn 은 숫자 근거(sourceText)에 넣지 않는다 — 통화·고유명사 대조에만 쓴다.
+ * 열 목록은 데일리와 같은 columns.ts (subject_region 포함 — 중국 중심 규칙·STORIES 의 지역 표시).
  */
-async function loadSourceText(poolItems: StoryPoolItem[]): Promise<{ sourceText: Map<string, string>; docs: Map<string, SourceDoc[]> }> {
+async function loadSourceText(
+  poolItems: StoryPoolItem[]
+): Promise<{ sourceText: Map<string, string>; docs: Map<string, SourceDoc[]>; idDay: Map<string, string> }> {
   const ids = [...new Set(poolItems.flatMap((p) => p.ids))];
   const { rows } = await pool.query(
-    `SELECT id, source_name, COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr,
-            COALESCE(summary_kr, '') AS summary_kr, COALESCE(ai_insights_kr, '') AS ai_insights_kr,
-            COALESCE(summary_cn, '') AS summary_cn, to_char((news_date AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS news_date
-       FROM ai_news_ex WHERE id = ANY($1::uuid[])`,
+    `SELECT ${SOURCE_ARTICLE_COLUMNS} FROM ai_news_ex WHERE id = ANY($1::uuid[])`,
     [ids]
   );
   const arts = rows as CandidateArticle[];
@@ -144,6 +154,8 @@ async function loadSourceText(poolItems: StoryPoolItem[]): Promise<{ sourceText:
   return {
     sourceText: new Map(poolItems.map((p) => [p.sid, p.ids.map((id) => (byId.has(id) ? articleText(byId.get(id)!) : "")).join(" ")])),
     docs: new Map(poolItems.map((p) => [p.sid, p.ids.flatMap((id) => (byId.has(id) ? [toSourceDoc(byId.get(id)!)] : []))])),
+    // 기사 id → 베이징 날짜 (월간 month_arc 근거를 그 주 기사로만 저장)
+    idDay: new Map(arts.filter((a) => a.news_date).map((a) => [a.id, a.news_date!])),
   };
 }
 
@@ -173,6 +185,9 @@ export function validationContext(
     },
     topEvents: (m.stories.events_top ?? []).slice(0, 2).map((e) => e.ids),
     poolIds: new Map(poolItems.map((p) => [p.sid, p.ids])),
+    // 월간: month_arc 의 refs 는 그 주에 날짜가 있는 사건만 (arc_week_mismatch)
+    weekRanges: monthly ? new Map((m.weeks ?? []).map((w) => [w.key, { start: w.start, end: w.end }])) : undefined,
+    sidDays: new Map(poolItems.map((p) => [p.sid, p.days])),
   };
 }
 
@@ -187,10 +202,21 @@ export const computeWeeklyInputHash = (m: PeriodMetrics, poolItems: StoryPoolIte
 export function toStoredWeekly(
   c: WeeklyContent,
   poolItems: StoryPoolItem[],
-  meta: PeriodicMeta
+  meta: PeriodicMeta,
+  /** 월간: 기사 id → 날짜, 주 키 → 기간. month_arc 근거는 그 주 기사만 저장한다 (사건이 여러 주에 걸쳐도) */
+  arcScope?: { idDay: Map<string, string>; weekRanges: Map<string, { start: string; end: string }> }
 ): { content: StoredPeriodicContent; articleIds: string[] } {
   const bySid = new Map(poolItems.map((p) => [p.sid, p.ids]));
   const many = (rs: string[]) => [...new Set(rs.flatMap((r) => bySid.get(r) ?? []))];
+  const inWeek = (ids: string[], week: string) => {
+    const w = arcScope?.weekRanges.get(week);
+    if (!w) return ids;
+    const kept = ids.filter((id) => {
+      const d = arcScope!.idDay.get(id);
+      return d === undefined || (d >= w.start && d <= w.end);
+    });
+    return kept.length ? kept : ids;
+  };
   const content: StoredPeriodicContent = {
     headline: c.headline,
     dek: c.dek,
@@ -202,7 +228,7 @@ export function toStoredWeekly(
     china_lens: c.china_lens ? { ...c.china_lens, refs: many(c.china_lens.refs) } : null,
     watch_next: c.watch_next.map((w) => ({ ...w, refs: many(w.refs) })),
     term: c.term,
-    month_arc: (c.month_arc ?? []).map((b) => ({ ...b, refs: many(b.refs) })),
+    month_arc: (c.month_arc ?? []).map((b) => ({ ...b, refs: inWeek(many(b.refs), b.week) })),
     meta,
   };
   return { content, articleIds: many([...new Set(citedSids(c))]) };
@@ -214,13 +240,21 @@ export function dropPeriodic(
   report: PeriodicValidationReport,
   ctx: PeriodicValidationContext,
   m: PeriodMetrics
-): { content: WeeklyContent; report: PeriodicValidationReport; dropped: string[]; fallbacks: string[] } {
+): { content: WeeklyContent; report: PeriodicValidationReport; dropped: string[]; fallbacks: string[]; edits: PeriodicEdit[] } {
   let c = structuredClone(content);
   let r = report;
   let dropped: string[] = [];
   const fallbacks: string[] = [];
+  const edits: PeriodicEdit[] = [];
   // 항목을 빼면 headline 의 근거(본문 전체 refs·지표)도 줄어 새 치명이 생길 수 있다 → 한 번 더 뺀다 (최대 2회)
   for (let pass = 0; pass < 2 && r.fatal.length; pass++) {
+    // 감사 기록: 지우기 전 원문과 사유 (데일리 dropFatalItems 와 같은 모양)
+    const round = pass ? "final(재검증)" : "final";
+    for (const item of new Set(r.fatal.map((f) => itemOfPeriodic(f.path)))) {
+      const reason = r.fatal.filter((f) => itemOfPeriodic(f.path) === item).map((f) => `${f.rule}: ${f.detail}`).join(" / ");
+      const action = item === "headline" || item === "dek" ? ("fallback" as const) : ("drop" as const);
+      edits.push({ action, path: item, reason, before: periodicItemValue(c, item), after: null, round });
+    }
     const d = dropFatalPeriodic(c, r.fatal);
     c = d.content;
     dropped = [...new Set([...dropped, ...d.dropped])];
@@ -237,7 +271,18 @@ export function dropPeriodic(
     }
     r = validateWeekly(c, ctx);
   }
-  return { content: c, report: r, dropped, fallbacks };
+  return { content: c, report: r, dropped, fallbacks, edits };
+}
+
+/** 항목 위치의 값 (감사 기록용 복사본) */
+function periodicItemValue(c: WeeklyContent, item: string): unknown {
+  const m = item.match(/^(big_picture|movers|watch_next|month_arc)\[(\d+)\]$/);
+  if (m) return structuredClone((c[m[1] as "big_picture" | "movers" | "watch_next" | "month_arc"] ?? [])[Number(m[2])] ?? null);
+  if (item === "money") return structuredClone(c.money);
+  if (item === "china_lens") return structuredClone(c.china_lens);
+  if (item === "term") return structuredClone(c.term);
+  if (item === "headline") return c.headline;
+  return periodicText(c, item) ?? null;
 }
 
 /** 한국어 문장의 지표 용어 한자를 한국어 표기로 (term.term 은 그대로). 괄호 병기 한자는 지운다 */
@@ -251,7 +296,8 @@ export function glossPeriodicHan(c: WeeklyContent): WeeklyContent {
   const f = (t: string) => {
     let x = t.replace(/\s?[(（]\s*[\u3400-\u9fff·、，,\s]+\s*[)）]/g, "");
     for (const [zh, ko] of HAN_GLOSS) x = x.split(zh).join(ko);
-    return x;
+    // 기업·기관 이름은 데일리와 같은 한자 사전(han-glossary)으로, 한글이 섞인 괄호 안 한자는 지운다 (Gate 2 — validate.ts glossHanText)
+    return glossHanText(x);
   };
   out.headline = f(out.headline);
   out.dek = f(out.dek);
@@ -288,13 +334,46 @@ async function generateKo(
   const validation: Record<string, unknown> = { prompt_version: PROMPT_VERSION[kind], prompt_chars: system.length + user.length };
   const track = (u: LlmUsage) => cost.add(u);
 
+  const edits: PeriodicEdit[] = [];
+  // 결정적 정리: 지표 용어 한자를 한국어 표기로 (智能体 → 에이전트), 괄호 병기 한자 삭제, month_arc 의 주 밖 refs 떼기
+  const prepare = (c: WeeklyContent, round: string) => {
+    const g = glossPeriodicHan(c);
+    if (JSON.stringify(g) !== JSON.stringify(c)) edits.push({ action: "gloss", path: "*", reason: "han_in_ko (용어·이름 사전 치환)", before: null, after: null, round });
+    const a = pruneArcRefs(g, ctx);
+    edits.push(...a.edits.map((e) => ({ ...e, round })));
+    return fitPeriodic(a.content, round);
+  };
+  // 길이 초과는 삭제 전에 끝 문장을 뺀다 (데일리와 같은 fitText — W44 round 2: term.why 85/80자로 term 칸 삭제)
+  const fitPeriodic = (c: WeeklyContent, round: string): WeeklyContent => {
+    const out = structuredClone(c);
+    const fit = (path: string, text: string, max: number) => {
+      const t = fitText(text, max);
+      if (t !== text) edits.push({ action: "trim", path, reason: `length ${text.length}/${max}자`, before: text, after: t, round });
+      return t;
+    };
+    out.dek = fit("dek", out.dek, 220);
+    out.big_picture.forEach((b, i) => (b.text = fit(`big_picture[${i}]`, b.text, 264 - b.title.length - 1)));
+    out.movers.forEach((b, i) => (b.text = fit(`movers[${i}]`, b.text, 90)));
+    if (out.money) out.money.text = fit("money", out.money.text, 200);
+    if (out.china_lens) out.china_lens.text = fit("china_lens", out.china_lens.text, 200);
+    if (out.term) out.term.why = fit("term", out.term.why, 80);
+    (out.month_arc ?? []).forEach((b, i) => (b.text = fit(`month_arc[${i}]`, b.text, 90)));
+    return out;
+  };
   cost.check();
   const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 6000 }, track);
   const p1 = normalizeWeekly(parseJsonContent(first.content));
-  // 결정적 정리: 지표 용어 한자를 한국어 표기로 (智能体 → 에이전트), 괄호 병기 한자 삭제
-  let content = glossPeriodicHan(p1.content);
+  let content = prepare(p1.content, "initial");
+  const initialContent = content;
   let report = validateWeekly(content, ctx, p1.issues);
   validation.initial = report;
+  // 방향 충돌은 수리에 맡기기 전에 충돌 문장만 지운다 (W44: 수리가 '호출량 급증'을 '크게 줄었다'로 뒤집었다)
+  const dc = dropConflictSentences(content, report.fatal, ctx.facts, ctx.sourceText);
+  if (dc.edits.length) {
+    edits.push(...dc.edits.map((e) => ({ ...e, round: "initial" })));
+    content = dc.content;
+    report = validateWeekly(content, ctx, p1.issues);
+  }
   let repaired = false;
 
   // 수리 최대 2회 — 2차는 지금 판을 삭제·대체해도 살릴 수 없을 때만 (삭제 뒤 중국 중심 미달 등). 데일리와 같은 규칙
@@ -314,7 +393,16 @@ async function generateKo(
       const reply = await chat({ system, messages, maxTokens: 6000 }, track);
       messages.push({ role: "assistant", content: reply.content });
       const p2 = normalizeWeekly(parseJsonContent(reply.content));
-      const c2 = glossPeriodicHan(p2.content);
+      const label = round === 1 ? "repair" : `repair${round}`;
+      let c2 = prepare(p2.content, label);
+      // 사실 뒤집기 금지: 수리본이 지표 값을 인용하지 않고 증감 방향을 바꾼 칸은 수리 전 문장(충돌 문장은 지운 것)으로 되돌린다
+      // 충돌 문장을 지우기 전 원문(initialContent)과도 비교한다 — 지운 문장을 수리가 뒤집어 다시 넣는 경우
+      const flipped = [...new Set([...directionFlips(content, c2, ctx.facts), ...directionFlips(initialContent, c2, ctx.facts)])];
+      if (flipped.length) {
+        const rv = revertFlips(content, c2, flipped, report.fatal, ctx.facts, ctx.sourceText);
+        edits.push(...rv.edits.map((e) => ({ ...e, round: label })));
+        c2 = rv.content;
+      }
       const r2 = validateWeekly(c2, ctx, p2.issues);
       validation[round === 1 ? "repair" : `repair${round}`] = r2;
       // 수리본이 더 나쁘면(치명 증가·큰 흐름 감소) 이전 판 유지
@@ -336,6 +424,8 @@ async function generateKo(
   report = d.report;
   const dropped = d.dropped;
   const fallbacks = d.fallbacks;
+  edits.push(...d.edits);
+  validation.edits = edits;
   validation.dropped_items = dropped;
   validation.fallbacks = fallbacks;
   validation.final = report;
@@ -391,7 +481,7 @@ export async function generatePeriodic(kind: PeriodicKind, opts: PeriodicGenerat
       }
 
       const metricsId = await upsertPeriodMetrics(m);
-      const { sourceText, docs } = await loadSourceText(poolItems);
+      const { sourceText, docs, idDay } = await loadSourceText(poolItems);
       const ctx = validationContext(m, sourceText, docs, poolItems);
       const inputArticleIds = [...new Set(poolItems.flatMap((x) => x.ids))];
       const row = await insertBriefing({
@@ -417,7 +507,7 @@ export async function generatePeriodic(kind: PeriodicKind, opts: PeriodicGenerat
         data_quality: { incomplete_days: dq.incomplete_days, reduced_days: dq.reduced_days, partial_days: dq.partial_days },
         baseline: m.baseline, fallbacks: ko.fallbacks, ai_generated: true,
       };
-      const stored = ko.content ? toStoredWeekly(ko.content, poolItems, meta) : null;
+      const stored = ko.content ? toStoredWeekly(ko.content, poolItems, meta, ctx.weekRanges ? { idDay, weekRanges: ctx.weekRanges } : undefined) : null;
       const u = sumUsage(cost.usages);
       await finishGenerating(row.id, {
         status: ko.status, content: stored?.content ?? {}, articleIds: stored?.articleIds ?? [], validation: ko.validation,

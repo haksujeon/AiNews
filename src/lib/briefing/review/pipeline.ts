@@ -23,7 +23,7 @@ import type { WeeklyContent } from "../periodic/types";
 import { SITE_ORIGIN } from "@/lib/site";
 import { loadReviewInput, type ReviewInput, type TranslationRow } from "./evidence";
 import { planFixes, type FixPlan } from "./fix";
-import { decide, policyFromEnv, type Decision, type ReviewPolicy } from "./policy";
+import { decide, decideHeadlines, policyFromEnv, type Decision, type ReviewPolicy } from "./policy";
 import { corpusFor, defaultDeps as defaultReviewDeps, reviewBriefing, type ReviewDeps } from "./review";
 import { retranslate, type RetranslateResult } from "./retranslate";
 import { applySegmentEdits, isPeriodic, segmentContent, type EditOutcome } from "./segments";
@@ -267,9 +267,47 @@ async function processEdition(target: Target, o: Required<Pick<PipelineOptions, 
   const out = (final: boolean, notify: boolean, message: string, decision: Decision | null, published = false): EditionOutcome => ({
     target, final, published, notify, message, steps, decision, costUsd: Math.round(cost * 1e6) / 1e6,
   });
-  const head = `[AiNews] ${typeKo(target.editionType)} ${target.label ?? target.date}`;
-
   let input = await deps.loadInput(target.briefingId);
+  // 대체 판(생성이 끝내 실패한 날)은 outcome 이 generated 라 생성 알림이 없다 → 검토 알림에 항상 표시
+  const fb = input.genLog.fallback;
+  const head = `[AiNews] ${typeKo(target.editionType)} ${target.label ?? target.date}${fb ? ` [대체 판 ${fb === "headlines" ? "제목만" : "짧은 판"}: ${input.genLog.fallbackReason ?? ""}]` : ""}`;
+
+  // 제목만 판: LLM 문장이 없어(기사 제목·매체·링크 + 고정 안내 문장) AI 검토를 건너뛰고 결정적 조건만 본다
+  if (input.row.mode === "headlines") {
+    if (!o.dryRun && (await deps.pipelineReviews(input.row.id)).some((p) => p.final)) return out(true, false, `${head}: 이미 결정됨`, null);
+    const decision = decideHeadlines(
+      {
+        content: input.row.content,
+        deterministicFatal: storedFatal(input.row),
+        publishable: o.dryRun ? { ok: true, detail: "dry-run" } : await deps.publishable(target, input.row.version),
+      },
+      o.policy
+    );
+    const r: ReviewResult = {
+      id: null, briefingId: input.row.id, version: input.row.version, editionType: target.editionType, editionDate: input.row.edition_date, round: 0,
+      trigger: o.trigger, model: "none", promptVersion: "headlines-no-review", status: "done", verdict: null, llmVerdict: null, score: null,
+      counts: null, breakdown: [], claims: [], fixes: [], omissions: [], translation: [], structure: [], summary: "제목만 판 — LLM 문장이 없어 AI 검토 생략",
+      schemaIssues: [], costUsd: 0, latencyMs: 0, inputTokens: 0, outputTokens: 0, requestIds: [],
+    };
+    const reviewId = await deps.review.store(r, {});
+    let action: StepLog["action"] = decision.eligible ? (o.dryRun ? "would_publish" : decision.publish ? "published" : "switch_off") : "hold";
+    let detail = decision.summary;
+    let published = false;
+    if (action === "published") {
+      try {
+        const res = await deps.publish(target, input.row);
+        detail = `${decision.summary} (${res.published.map((p) => p.locale).join("·")})`;
+        published = true;
+      } catch (e) {
+        action = "hold";
+        detail = `발행 실패: ${e instanceof PublishError ? e.message : (e as Error).message}`;
+      }
+    }
+    await deps.recordDecision(reviewId, { ...decision, final: true, action });
+    steps.push({ briefingId: input.row.id, version: input.row.version, round: 0, reviewId, verdict: null, score: null, action, detail });
+    return out(true, true, `${head} v${input.row.version}${o.dryRun ? " (dry-run)" : ""}: ${detail} ${adminUrl(input.row.id)}`, decision, published);
+  }
+
   let round = o.dryRun ? 0 : ((await deps.producedByRound(target.briefingId)) ?? -1) + 1;
   let parentReviewId: string | null = null;
   let versionLabel: number | string = input.row.version;
@@ -444,7 +482,7 @@ export async function runReviewPipeline(opts: PipelineOptions = {}, deps: Pipeli
   let targets: Target[];
   if (opts.briefingId) {
     const input = await deps.loadInput(opts.briefingId);
-    const meta = input.meta as { period_key?: string; iso_week?: string; month?: string };
+    const meta = (input.meta ?? {}) as { period_key?: string; iso_week?: string; month?: string };
     targets = [{ briefingId: input.row.id, editionType: input.editionType, date: input.row.edition_date, label: meta.period_key ?? meta.iso_week ?? meta.month }];
   } else {
     targets = (await deps.findTargets()).filter((t) => (!opts.editionType || t.editionType === opts.editionType) && (!opts.date || t.date === opts.date));
@@ -483,7 +521,7 @@ export async function manualReview(briefingId: string, deps: PipelineDeps = defa
   const input = await deps.loadInput(briefingId);
   const { result } = await reviewBriefing(briefingId, { trigger: "manual", input, policy }, deps.review);
   if (result.status !== "done") return { review: result, decision: null };
-  const meta = input.meta as { period_key?: string; iso_week?: string; month?: string };
+  const meta = (input.meta ?? {}) as { period_key?: string; iso_week?: string; month?: string };
   const t: Target = { briefingId, editionType: input.editionType, date: input.row.edition_date, label: meta.period_key ?? meta.iso_week ?? meta.month };
   const decision = decide(
     {

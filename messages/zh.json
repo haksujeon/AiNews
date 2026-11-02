@@ -340,6 +340,7 @@
     "dataQualityBody": "本期包含采集不完整的日期（{days}）。2026-10-13 之前为补采数据（各媒体每日上限），文章数低于实际；其他日期为部分采集。这些日期已从同星期比较和平均中剔除，但补采完成后数值可能变化。确认后才能发布。",
     "dataQualityAck": "我已确认数据提示，按现状发布",
     "fallbacks": "已用确定性文字替换的字段：{items}",
+    "fallbackEdition": "替代版（{mode}）：{reason}",
     "weeklyEditNote": "周报暂不支持在线编辑。如需修改，请重新生成或暂不发布。",
     "confirmPublishWeekly": "发布{week}周报韩文v{version}？该周现有版本将被替换。",
     "confirmWithdrawWeekly": "撤回已发布的{week}周报？",
@@ -395,7 +396,10 @@
     "aiReviewRerun": "重新进行 AI 审核",
     "aiReviewRunning": "审核中…（1–2 分钟）",
     "aiReviewConfirm": "要对此版本重新进行 AI 审核吗？只记录审核结果和自动发布判定，不会发布。",
-    "aiReviewDone": "已审核：{verdict} {score} 分 — {decision}"
+    "aiReviewDone": "已审核：{verdict} {score} 分 — {decision}",
+    "aiReviewGenLog": "生成记录 {n} 条（自动修复·删除·警告）",
+    "aiReviewGenFallback": "替代版 {mode}：{reason}",
+    "aiReviewGenTargeted": "已进行局部修复（删除前的最后尝试）。"
   },
   "weekly": {
     "kicker": "周报",

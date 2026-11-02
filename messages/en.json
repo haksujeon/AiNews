@@ -340,6 +340,7 @@
     "dataQualityBody": "This edition's period includes days with incomplete collection ({days}). Days before 2026-10-13 were backfilled with per-outlet daily caps, so counts are below actual coverage; other days were partially collected. They are excluded from same-weekday comparisons and averages, but figures may change after backfill. It can be published only after you acknowledge this.",
     "dataQualityAck": "I have reviewed the data notice and want to publish as is",
     "fallbacks": "Fields replaced with deterministic text: {items}",
+    "fallbackEdition": "Fallback edition ({mode}): {reason}",
     "weeklyEditNote": "Inline editing isn't available for weekly reports yet. If something needs fixing, regenerate or don't publish.",
     "confirmPublishWeekly": "Publish the {week} weekly report ko v{version}? The week's current edition will be replaced.",
     "confirmWithdrawWeekly": "Withdraw the published {week} weekly report?",
@@ -395,7 +396,10 @@
     "aiReviewRerun": "Re-run AI review",
     "aiReviewRunning": "Reviewing… (1–2 min)",
     "aiReviewConfirm": "Re-run the AI review on this version? It only records the review and the auto-publish decision; nothing is published.",
-    "aiReviewDone": "Reviewed: {verdict} {score} — {decision}"
+    "aiReviewDone": "Reviewed: {verdict} {score} — {decision}",
+    "aiReviewGenLog": "Generator log: {n} entries (automatic repairs, deletions, warnings)",
+    "aiReviewGenFallback": "Fallback edition {mode}: {reason}",
+    "aiReviewGenTargeted": "A targeted repair (last attempt before deletion) was applied."
   },
   "weekly": {
     "kicker": "Weekly report",

@@ -84,6 +84,40 @@ export interface ReviewInput {
   revalidate: (content: Record<string, unknown>) => Revalidation;
   /** 재번역용: uuid → 후보 기사 (key_terms 포함) */
   candidateArticles: Map<string, CandidateArticle>;
+  /** 생성기 기록 (validation): 대체 판·부분 수리·삭제/수정 기록·경고 — 검토 입력과 관리자 패널 */
+  genLog: GenLog;
+}
+
+export interface GenLog {
+  /** short | headlines (대체 판) */
+  fallback: string | null;
+  fallbackReason: string | null;
+  /** 부분 수리(삭제 전 마지막 시도)를 했는가 */
+  targetedRepair: boolean;
+  edits: { action: string; path: string; reason: string; before: string; after: string; round: string }[];
+  /** dropped_key_story · fallback_short · headlines_mode 경고 */
+  warns: { rule: string; path: string; detail: string }[];
+}
+
+const GEN_WARN_RULES = new Set(["dropped_key_story", "fallback_short", "headlines_mode"]);
+const short = (v: unknown, n = 120) => {
+  const t = typeof v === "string" ? v : v == null ? "" : JSON.stringify(v);
+  return t.length > n ? `${t.slice(0, n)}…` : t;
+};
+
+/** row.validation → 생성기 기록 (순수) */
+export function genLogOf(validation: Record<string, unknown> | null): GenLog {
+  const v = (validation ?? {}) as Record<string, unknown> & { final?: { warn?: { rule: string; path: string; detail: string }[] } };
+  const edits = Array.isArray(v.edits) ? (v.edits as Record<string, unknown>[]) : [];
+  return {
+    fallback: typeof v.fallback === "string" ? v.fallback : null,
+    fallbackReason: typeof v.fallback_reason === "string" ? v.fallback_reason : null,
+    targetedRepair: v.targeted_repair !== undefined && v.targeted_repair !== null,
+    edits: edits.slice(0, 40).map((e) => ({
+      action: String(e.action ?? ""), path: String(e.path ?? ""), reason: short(e.reason, 80), before: short(e.before), after: short(e.after), round: String(e.round ?? ""),
+    })),
+    warns: (v.final?.warn ?? []).filter((w) => GEN_WARN_RULES.has(w.rule)).map((w) => ({ rule: w.rule, path: w.path, detail: short(w.detail, 160) })),
+  };
 }
 
 /** 프롬프트 근거 글자 예산 (기사 본문 앞부분을 이 안에서 나눈다) */
@@ -287,5 +321,6 @@ export async function loadReviewInput(briefingId: string, opts: { includeTransla
   return {
     row, editionType, periodStart, periodEnd, segments, articles, refLabels, labelOf, facts, metrics, candidates, translations,
     incompleteDays, meta, fullText, revalidate, candidateArticles: new Map(all.map((a) => [a.id, a])),
+    genLog: genLogOf(row.validation),
   };
 }

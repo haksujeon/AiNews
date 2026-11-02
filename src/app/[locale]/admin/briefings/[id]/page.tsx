@@ -5,6 +5,7 @@ import { AdminShell } from "@/components/admin/admin-shell";
 import { BriefingReviewActions } from "@/components/admin/briefing-review-actions";
 import { BriefingAiReview } from "@/components/admin/briefing-ai-review";
 import { reviewThatProduced, reviewsOf } from "@/lib/briefing/review/store";
+import { genLogOf } from "@/lib/briefing/review/evidence";
 import { BriefingView } from "@/components/briefing/briefing-view";
 import { PeriodicView } from "@/components/briefing/periodic-view";
 import { getBriefingRow, translationsOf } from "@/lib/briefing/admin";
@@ -60,6 +61,9 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
     fallbacks?: string[];
     used?: string;
     ai_review_fix?: Parameters<typeof BriefingAiReview>[0]["fixInfo"];
+    /** 생성이 끝내 실패해 내린 대체 판 (short = 검증 통과 주요 기사 짧은 판, headlines = 제목만 판) */
+    fallback?: string;
+    fallback_reason?: string;
   };
   const fatal = v.final?.fatal ?? [];
   const warn = v.final?.warn ?? [];
@@ -127,6 +131,11 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
               )}
               {v.dropped_items?.length ? <p className="mt-2 text-xs text-ink-3">{t("droppedItems", { items: v.dropped_items.join(", ") })}</p> : null}
               {v.fallbacks?.length ? <p className="mt-1 text-xs text-ink-3">{t("fallbacks", { items: v.fallbacks.join(", ") })}</p> : null}
+              {v.fallback ? (
+                <p className="mt-1 text-xs font-semibold text-destructive" data-testid="admin-briefing-fallback">
+                  {t("fallbackEdition", { mode: v.fallback, reason: v.fallback_reason ?? "" })}
+                </p>
+              ) : null}
             </section>
             {row.locale === "ko" && (
               <BriefingAiReview
@@ -135,6 +144,7 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
                 reviews={aiReviews}
                 producedBy={producedBy}
                 fixInfo={v.ai_review_fix ?? null}
+                genLog={genLogOf(row.validation)}
                 canReview={["draft", "published"].includes(row.status) && Boolean(row.content && Object.keys(row.content).length)}
               />
             )}

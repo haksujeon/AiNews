@@ -12,12 +12,17 @@
  *  - 결정적 검사기 치명 0건, 고칠 수 없는 항목 없음
  *  - 데일리: en·zh 번역본이 이 ko 버전에서 나온 draft 이고 번역 재검증 문제 0건, 검토의 번역 major 문제 0건
  *  - 주간·월간: 수집 미완 날짜가 없다 (있으면 데이터 알림 확인이 필요하므로 사람에게 넘긴다 — 자동으로 확인하지 않는다)
+ *  - 제목만 판(mode headlines, 생성이 끝내 실패한 날의 대체 판): LLM 이 쓴 문장이 없어(기사 제목·매체·링크 + "요약을 만들지 못해
+ *    제목과 원문 링크만 싣습니다" 고정 안내) AI 검토 없이 결정적 조건만 보고 자동 발행한다 — BRIEFING_AUTO_PUBLISH_HEADLINES=on|off (기본 on).
+ *    판 없는 날을 만들지 않는 것이 목적이고, 안내 문장이 곧 데이터 알림이다. 알림은 언제나 보낸다.
  */
 import type { EditionType } from "../repository";
 import type { ReviewResult } from "./types";
 
 export interface ReviewPolicy {
   autoPublish: boolean;
+  /** 제목만 판 자동 발행 (autoPublish 가 꺼지면 함께 꺼진다) */
+  autoPublishHeadlines: boolean;
   minScore: { daily: number; periodic: number };
   maxOverclaim: number;
   maxUnsupported: number;
@@ -35,6 +40,7 @@ export function policyFromEnv(env: Record<string, string | undefined> = process.
   const flag = (env.BRIEFING_AUTO_PUBLISH ?? "on").trim().toLowerCase();
   return {
     autoPublish: !["off", "0", "false", "no"].includes(flag),
+    autoPublishHeadlines: !["off", "0", "false", "no"].includes((env.BRIEFING_AUTO_PUBLISH_HEADLINES ?? "on").trim().toLowerCase()),
     minScore: { daily: num(env.BRIEFING_REVIEW_MIN_SCORE_DAILY, 9), periodic: num(env.BRIEFING_REVIEW_MIN_SCORE_PERIODIC, 7.5) },
     maxOverclaim: num(env.BRIEFING_REVIEW_MAX_OVERCLAIM, 1),
     maxUnsupported: num(env.BRIEFING_REVIEW_MAX_UNSUPPORTED, 0),
@@ -120,4 +126,32 @@ export function decide(input: DecisionInput, policy: ReviewPolicy): Decision {
       ? `자동 발행 조건 통과, 스위치 꺼짐(BRIEFING_AUTO_PUBLISH=off) — 관리자 발행 필요 (${r.verdict} ${r.score}점)`
       : `초안 유지 — ${failed.slice(0, 4).join(" / ")}`;
   return { eligible, publish, checks, policy, summary };
+}
+
+/** 제목만 판 안내 문장 (fallback.ts headlinesEdition 의 lede) — 이 안내가 있어야 독자에게 "요약 없음"이 보인다 */
+export const HEADLINES_NOTICE_RE = /제목과 원문 링크만/;
+
+/** 제목만 판 결정 (AI 검토 없음): 치명 0, 주요 기사 3건 이상, 안내 문장 있음, 발행 가능 상태 */
+export function decideHeadlines(
+  input: { content: Record<string, unknown>; deterministicFatal: number; publishable?: { ok: boolean; detail: string } },
+  policy: ReviewPolicy
+): Decision {
+  const checks: DecisionCheck[] = [];
+  const add = (rule: string, ok: boolean, detail: string) => checks.push({ rule, ok, detail });
+  const tops = Array.isArray(input.content.top_stories) ? input.content.top_stories.length : 0;
+  add("headlines_policy", policy.autoPublishHeadlines, policy.autoPublishHeadlines ? "제목만 판 자동 발행 허용" : "BRIEFING_AUTO_PUBLISH_HEADLINES=off");
+  add("deterministic", input.deterministicFatal === 0, `결정적 검사 치명 ${input.deterministicFatal}건`);
+  add("top_stories", tops >= 3, `기사 제목 ${tops}건 (≥ 3)`);
+  add("notice", HEADLINES_NOTICE_RE.test(String(input.content.lede ?? "")), "요약 없음 안내 문장");
+  if (input.publishable) add("publishable", input.publishable.ok, input.publishable.detail);
+  const eligible = checks.every((c) => c.ok);
+  const publish = eligible && policy.autoPublish;
+  const failed = checks.filter((c) => !c.ok).map((c) => c.detail);
+  return {
+    eligible,
+    publish,
+    checks,
+    policy,
+    summary: publish ? "제목만 판 자동 발행 (AI 검토 생략)" : eligible ? "제목만 판 조건 통과, 자동 발행 꺼짐 — 관리자 발행 필요" : `제목만 판 초안 유지 — ${failed.join(" / ")}`,
+  };
 }

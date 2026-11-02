@@ -9,6 +9,7 @@ import type { OmissionCandidate } from "./schema";
 import { isPeriodic, segmentContent } from "./segments";
 import type { Segment } from "./types";
 import type { Hint } from "./hints";
+import type { GenLog } from "./evidence";
 
 export const REVIEW_PROMPT_VERSION = "review-v6.1-2026-11-02";
 
@@ -112,6 +113,19 @@ export interface ReviewPromptInput {
   dataQualityNote: string | null;
   /** 결정적 점검 힌트 (hints.ts) */
   hints?: Hint[];
+  /** 생성기 기록 (대체 판·삭제·수리·경고) */
+  genLog?: GenLog;
+}
+
+function genLogLines(g: GenLog | undefined): string[] {
+  if (!g || (!g.fallback && !g.edits.length && !g.warns.length)) return [];
+  const out = [`\n## 생성기 기록 (생성 단계의 자동 수리·삭제 — 지운 핵심 기사가 그 기간의 큰 이야기면 누락으로 판단)`];
+  if (g.fallback) out.push(`대체 판: ${g.fallback} — ${g.fallbackReason ?? ""}`);
+  if (g.targetedRepair) out.push("부분 수리(삭제 전 마지막 시도)를 거침");
+  for (const w of g.warns) out.push(`경고 ${w.rule} ${w.path}: ${w.detail}`);
+  for (const e of g.edits.filter((x) => ["drop", "sentence_delete", "repair"].includes(x.action)).slice(0, 20))
+    out.push(`${e.action} ${e.path} (${e.round}): ${e.reason} | 전: ${e.before}${e.after ? ` | 후: ${e.after}` : ""}`);
+  return out;
 }
 
 /** en/zh 번역문을 ko 문장 위치별로 (같은 path 의 문장을 이어 붙여) */
@@ -153,6 +167,7 @@ export function buildReviewUserPrompt(p: ReviewPromptInput): string {
     `\n## 근거 기사 (${p.articles.length}건)`,
     ...p.articles.map(articleBlock),
   ];
+  parts.push(...genLogLines(p.genLog));
   if (p.facts) {
     parts.push(`\n## FACTS (기간 지표 — 이 값만 숫자 근거)`);
     parts.push(...Object.entries(p.facts).map(([k, v]) => `${k} = ${v}`));

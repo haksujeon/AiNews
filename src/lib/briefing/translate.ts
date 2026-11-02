@@ -16,65 +16,51 @@ import {
   buildTranslateUserPrompt,
 } from "./prompt";
 import { citedRefs, normalizeContent } from "./validate";
+import { entityMentioned, nameEntriesIn, type Entity, type NameEntry } from "./entities";
 import { HANGUL_RE, hanResidue } from "../text/han";
+import { canonicalValue, expandRanges, parseQuantities } from "./quantity";
 
 type Target = "en" | "zh";
 
 // ───────────────────────── 숫자 집합
 
-const MULT: Record<string, number> = {
-  조: 1e12, 兆: 1e12, 万亿: 1e12, trillion: 1e12,
-  천억: 1e11, 千亿: 1e11, 백억: 1e10, 百亿: 1e10, 십억: 1e9, 十亿: 1e9,
-  억: 1e8, 亿: 1e8,
-  만: 1e4, 万: 1e4,
-  천: 1e3, 千: 1e3, thousand: 1e3, k: 1e3,
-  billion: 1e9, bn: 1e9, b: 1e9,
-  million: 1e6, m: 1e6,
-};
-// 긴 단위부터 (万亿 를 万 + 亿 로 쪼개 읽지 않게)
-const NUM_TOKEN =
-  /(\d[\d,]*(?:\.\d+)?)\s*(万亿|千亿|百亿|十亿|천억|백억|십억|조|兆|억|亿|만|万|천|千|[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|bn|[kK](?![A-Za-z])|B(?![A-Za-z])|M(?![A-Za-z]))?\s*(%|퍼센트|percent)?/g;
-
-/** 범위 구분자 (~ ～ 〜 - – — 至 到 to) */
-const RANGE_RE =
-  /(\d[\d,]*(?:\.\d+)?)\s*(~|～|〜|–|—|-|至|到|to)\s*(\d[\d,]*(?:\.\d+)?)\s*(%|퍼센트|percent|万亿|千亿|百亿|十亿|천억|백억|십억|亿|万|억|만|조|兆|[Tt]rillion|[Bb]illion|[Mm]illion)/g;
-
-/**
- * 범위의 뒤쪽 단위를 앞 수에도 붙인다: "7~10%" → "7%~10%", "5~7억" → "5억~7억".
- * "7%至10%" 와 같은 값 집합이 되게 (2026-10-29 zh 오탐: "7~10%" vs "7%至10%").
- */
-export function expandRanges(text: string): string {
-  return text.replace(RANGE_RE, (_m, a: string, sep: string, b: string, unit: string) => `${a}${unit} ${sep} ${b}${unit}`);
-}
+// 수량 파서는 quantity.ts 하나 (Gate 2) — 데일리·주간·월간 숫자 검사와 금액 규칙이 같은 parseQuantities 를 쓴다
+export { expandRanges };
 
 /**
  * 텍스트 속 "의미 있는" 수치의 정규화 값 집합.
- * 12 이하 정수는 월·순서·개수처럼 말로 풀어 쓰는 경우가 많아 비교에서 뺀다 (단위·%·소수가 붙으면 포함).
+ * 12 이하 정수는 월·순서·개수처럼 말로 풀어 쓰는 경우가 많아 비교에서 뺀다 (단위·%가 붙으면 포함).
+ * 2026-11-02 재감사: 작은 수라도 소수점 표기("飞书10.0" ← 원문 8.0)와 이름에 붙은 수("Genie 4", "GPT-5")는 비교한다.
  * 범위("7~10%", "7-10%", "7%至10%")는 양쪽 수에 단위를 붙여 같은 값으로 본다.
  */
 export function numericValues(raw: string): Set<string> {
-  const text = expandRanges(raw);
-  const out: number[] = [];
-  const tokens: { v: number; unit: string; end: number; start: number }[] = [];
-  for (const m of text.matchAll(NUM_TOKEN)) {
-    const base = Number(m[1].replace(/,/g, ""));
-    if (!Number.isFinite(base)) continue;
-    const unit = (m[2] ?? "").toLowerCase();
-    const mult = unit ? MULT[unit] ?? 1 : 1;
-    const v = base * mult;
-    const prev = tokens[tokens.length - 1];
-    // "5억 3,700만" / "5亿3700万" → 하나의 수
-    if (prev && mult < (MULT[prev.unit] ?? 1) && mult >= 1e4 && /^\s*$/.test(text.slice(prev.end, m.index))) {
-      prev.v += v;
-      prev.end = (m.index ?? 0) + m[0].length;
-      out[out.length - 1] = prev.v;
-      continue;
-    }
-    tokens.push({ v, unit, start: m.index ?? 0, end: (m.index ?? 0) + m[0].length });
-    const significant = Boolean(unit) || Boolean(m[3]) || !Number.isInteger(base) || base > 12;
-    out.push(significant ? v : NaN);
+  return valueSets(raw).sig;
+}
+
+/** 중국어 숫자 한 글자 + 큰 단위 ("六万" → "6万", "两亿" → "2亿") — zh 번역이 "约六万名" 처럼 써도 같은 값으로 본다 */
+const CN_DIGIT: Record<string, string> = { 一: "1", 二: "2", 两: "2", 三: "3", 四: "4", 五: "5", 六: "6", 七: "7", 八: "8", 九: "9", 十: "10" };
+export function cnNumerals(text: string): string {
+  return text.replace(/(?<![一二两三四五六七八九十百千\d])([一二两三四五六七八九十])(?=[万亿千])/g, (d) => CN_DIGIT[d]);
+}
+
+/**
+ * 수치 집합 세 가지 (parseQuantities 하나로):
+ *  - sig: 비교 대상 (단위·%·소수점·이름에 붙은 수·12 넘는 수) — 원문 ko 에서 빠지면 안 되는 값
+ *  - plain: sig 에서 "이름에 붙은 수" 를 뺀 것 — 번역문에서 덧붙이면 안 되는 값 (영어 문장의 "Q3"·"up 3 points" 는 이름이 아니다)
+ *  - all: 모든 수 — 원문의 작은 수가 번역문에 있는지 볼 때
+ */
+export function valueSets(raw: string): { sig: Set<string>; plain: Set<string>; all: Set<string> } {
+  const sig = new Set<string>();
+  const plain = new Set<string>();
+  const all = new Set<string>();
+  for (const q of parseQuantities(expandRanges(cnNumerals(raw)))) {
+    const v = canonicalValue(q.value);
+    all.add(v);
+    const base = q.scaled || q.percent || q.decimal || !Number.isInteger(q.base) || q.base > 12;
+    if (base) plain.add(v);
+    if (base || q.named) sig.add(v);
   }
-  return new Set(out.filter((v) => !Number.isNaN(v)).map((v) => Number(v.toPrecision(6)).toString()));
+  return { sig, plain, all };
 }
 
 // ───────────────────────── 필드 대응
@@ -134,6 +120,53 @@ function shapeOf(c: BriefingContent): string {
   ]);
 }
 
+// ───────────────────────── 이름 (번역 이름표 대조)
+
+const lc = (s: string) => s.toLowerCase();
+/** 한국어 별칭이 낱말 앞에서 시작하나 ("공통의" 의 "통의" 는 알리바바 통의가 아님) */
+function koAliasAt(alias: string, text: string): boolean {
+  // 낱말 하나로 쓰였나: 앞은 한글이 아니고, 뒤는 한글이 아니거나 조사만 ("애플 인텔리전스" 의 "인텔" 은 인텔이 아님 — round 2 재생성 10-31 zh)
+  const esc = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![가-힣])${esc}(?:은|는|이|가|을|를|의|과|와|도|에서|에게|에|으로|로|만|까지|부터|처럼)?(?![가-힣])`).test(text);
+}
+
+/** 번역문이 이름표의 표기를 썼나 (en: 라틴 표기 또는 여러 낱말 표기의 4자 이상 낱말, zh: 한자·라틴 표기 또는 3자 이상 한자 이름의 앞 2자) */
+function nameRendered(entry: NameEntry, entity: Entity | null, out: string, target: Target): boolean {
+  if (entity && entityMentioned(entity, out)) return true;
+  const en = entry.en.some((a) => lc(out).includes(lc(a)) || a.split(/\s+/).some((w) => w.length >= 4 && lc(out).includes(lc(w))));
+  if (target === "en") return en;
+  return en || entry.zh.some((z) => out.includes(z) || (z.length >= 3 && out.includes(z.slice(0, 2))));
+}
+
+/**
+ * 번역문의 기업·제품 이름이 이름표와 같은가. ko 필드에 나오는 실체(정부·기관 묶음 cn_gov 제외)와 제품 이름마다
+ * en 은 라틴 표기, zh 는 한자(또는 라틴) 표기가 번역문에 있어야 한다. 그 언어의 표기가 이름표에 없으면 보지 않는다.
+ */
+export function nameIssues(src: string, out: string, target: Target): string[] {
+  const problems: string[] = [];
+  for (const { entry, entity } of nameEntriesIn(src)) {
+    if (entry.key === "cn_gov") continue;
+    if (entity && !entry.ko.some((k) => koAliasAt(k, src)) && !entity.aliases.some((a) => typeof a !== "string" && a.test(src)) && !entry.en.some((a) => src.includes(a)) && !entry.zh.some((z) => src.includes(z))) continue;
+    const want = target === "en" ? entry.en : [...entry.zh, ...entry.en];
+    if (!want.length) continue;
+    if (!nameRendered(entry, entity, out, target)) problems.push(`name "${entry.ko[0] ?? entry.key}" must be written as ${want.slice(0, 2).map((w) => `"${w}"`).join(" or ")} (NAME_GLOSSARY)`);
+  }
+  return problems;
+}
+
+/** 번역 입력의 이름표 줄 (ko = en = zh) */
+export function nameGlossaryLines(ko: BriefingContent): string[] {
+  const text = fieldsOf(ko).map((f) => f.get(ko) ?? "").join(" ");
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const { entry } of nameEntriesIn(text)) {
+    if (entry.key === "cn_gov" || seen.has(entry.key)) continue;
+    seen.add(entry.key);
+    lines.push(`${entry.ko.slice(0, 2).join("/") || entry.key} = ${entry.en.slice(0, 2).join("/") || "—"} = ${entry.zh.slice(0, 2).join("/") || "—"}`);
+  }
+  return lines;
+}
+
 /** 번역본 재검증. 문제 목록(빈 배열이면 통과) */
 export function checkTranslation(ko: BriefingContent, tr: BriefingContent, target: Target): string[] {
   const problems: string[] = [];
@@ -158,10 +191,12 @@ export function checkTranslation(ko: BriefingContent, tr: BriefingContent, targe
     // 万→10k 식 축약 금지 (원문에 k 가 없을 때)
     if (K_SUFFIX_RE.test(out) && !K_SUFFIX_RE.test(src))
       problems.push(`${f.path}: do not abbreviate numbers with "k" — Korean: "${src}" / yours: "${out}"`);
-    const a = numericValues(src);
-    const b = numericValues(out);
-    const missing = [...a].filter((x) => !b.has(x));
-    const extra = [...b].filter((x) => !a.has(x));
+    for (const n of nameIssues(src, out, target)) problems.push(`${f.path}: ${n}`);
+    // 빠진 값 = ko 의 비교 대상이 번역문에 없음, 덧붙인 값 = 번역문의 비교 대상(이름에 붙은 수 제외)이 ko 에 없음
+    const a = valueSets(src);
+    const b = valueSets(out);
+    const missing = [...a.sig].filter((x) => !b.all.has(x));
+    const extra = [...b.plain].filter((x) => !a.all.has(x));
     // 정규화 값(2300000000 등)을 보여 주면 모델이 그 숫자를 그대로 베껴 쓰므로 원문 문장을 보여 준다
     if (missing.length || extra.length) {
       // 덧붙인 숫자(연도 등)는 원문 표기 그대로 짚어 준다 — "2026" 을 지우라고 말해야 수리가 된다
@@ -178,7 +213,15 @@ export function checkTranslation(ko: BriefingContent, tr: BriefingContent, targe
       // zh 는 억=亿·만=万 으로 단위가 1:1 이므로 자릿수 문자열까지 그대로여야 한다 (5억 3,700만 → 5亿3700万, 53700万 은 위반)
       const da = digitStrings(src);
       const db = digitStrings(out);
-      if ([...da].some((x) => !db.has(x)) || [...db].some((x) => !da.has(x)))
+      // 예외: ko 의 여러 단위 금액("1억 9천만")을 한 단위 소수("1.9亿")로 쓴 것은 같은 값 (round 2 재생성 09-16 zh) —
+      // "53700万" 처럼 더 작은 단위로 늘여 쓴 것은 여전히 위반
+      const koComposite = parseQuantities(src).filter((q) => q.scaled && /\d\s*[조억만천][^\d]*\d/.test(q.raw)).map((q) => canonicalValue(q.value));
+      const condensed = new Set(
+        parseQuantities(out)
+          .filter((q) => q.decimal && q.scaled && koComposite.includes(canonicalValue(q.value)))
+          .map((q) => q.raw.match(/\d[\d,]*(?:\.\d+)?/)?.[0]?.replace(/,/g, "") ?? "")
+      );
+      if ([...da].some((x) => !db.has(x)) || [...db].some((x) => !da.has(x) && !condensed.has(x)))
         problems.push(`${f.path}: digits not verbatim — Korean: "${src}" / yours: "${out}" (keep the same digits; 억→亿, 만→万, 조→万亿)`);
     }
   }
@@ -187,13 +230,13 @@ export function checkTranslation(ko: BriefingContent, tr: BriefingContent, targe
 
 const K_SUFFIX_RE = /\d\s?[kK](?![A-Za-z])/;
 
-/** 쉼표를 뺀 숫자 문자열 집합 (12 이하 정수 제외 — numericValues 와 같은 기준) */
+/** 쉼표를 뺀 숫자 문자열 집합 (12 이하 정수 제외 — numericValues 와 같은 기준, 소수점 표기 "8.0" 은 포함) */
 function digitStrings(text: string): Set<string> {
   const out = new Set<string>();
   for (const m of text.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
     const s = m[0].replace(/,/g, "").replace(/\.$/, "");
     const v = Number(s);
-    if (Number.isFinite(v) && (v > 12 || !Number.isInteger(v))) out.add(s);
+    if (Number.isFinite(v) && (v > 12 || !Number.isInteger(v) || s.includes("."))) out.add(s);
   }
   return out;
 }
@@ -255,7 +298,7 @@ export async function translateBriefing(
       };
     });
   const system = buildTranslateSystemPrompt(target);
-  const user = buildTranslateUserPrompt(payloadOf(ko), hints);
+  const user = buildTranslateUserPrompt(payloadOf(ko), hints, nameGlossaryLines(ko));
   try {
     budgetCheck();
     const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 8000 }, (u) => usages.push(u));

@@ -2,11 +2,15 @@
  * 브리핑 의미 규칙 — 데일리(validate.ts)와 주간·월간(periodic/validate.ts)이 같은 함수를 쓴다 (Gate 2).
  * 편집 QA 감사(2026-11-02, 주장 454건 중 오류 53건)에서 나온 패턴을 결정적으로 잡는다.
  *
- *  - isChinaSubject: 중국 중심 규칙의 "중국 주체" 판정 (하나의 함수 — subject_region 이 들어오면 여기만 바꾼다)
+ *  - isChinaSubject: 중국 중심 규칙의 "중국 주체" 판정 (하나의 함수). 근거 기사 subject_region 기준 + LLM 표시 교차 확인,
+ *      미판정(NULL)이면 예전 실체 규칙. isChinaCandidate: 후보 기사 하나의 같은 판정 (프롬프트 cn 표시·수리 힌트)
  *  - claimIssues: 최상급·서열("최고/최대/첫/유일/역대/1위/가장")과 추세 단정("주도/재편/이동/가열/주류")이
  *      인용 기사에 있는지, 원문이 '중'·'전망'·'가능성' 같은 수식어로 한정했는데 브리핑이 그 수식어를 뺐는지
- *  - staleEventIssues: 근거 기사가 날짜로 못 박은 예전 사건(편집일보다 STALE_DAYS 넘게 전)을 시점 표시 없이 오늘 일처럼
- *  - moneyIssues: 매출·기업가치를 거래 금액처럼(확보·유치·조달), 원문(중국어)과 다른 통화(110亿元 → 110억 달러)
+ *  - staleEventIssues: 근거 기사가 날짜로 못 박은 예전 사건(편집일보다 STALE_DAYS 넘게 전)을 시점 표시 없이 오늘 일처럼.
+ *      연도 없는 날짜는 판 날짜 앞뒤 6개월 창(resolveMonthDay) — 앞으로 있을 날짜는 예전 사건이 아니다.
+ *      pastMarkerIssues: 판과 같은 달을 "지난 N월" 로 씀 (지난해 일로 읽힘)
+ *  - moneyIssues: 매출·기업가치를 거래 금액처럼(확보·유치·조달), 원문(중국어)과 다른 통화(110亿元 → 110억 달러).
+ *      금액 같음은 quantity.ts 의 하나의 파서로 본다 ("162억 8,600만 달러" = "162.86억 달러")
  *  - leakedInstruction: 수리 지시문이 본문에 새어 나옴 ("표기 대신 '스텝스타'")
  *  - headlineTopIssue: 헤드라인이 1위 기사의 주체를 다루지 않음
  *  - entityNotInOriginal: 중국 기업 이름이 한국어 번역에만 있고 중국어 원문에는 없음 (원천 오역 전파: 荣耀 → 화웨이)
@@ -14,7 +18,9 @@
  *
  * 이 파일은 DB 를 import 하지 않는다 (단위 테스트).
  */
-import { LATIN_STOP, entityMentioned, findEntities, isChineseSubject, properNouns, type Entity } from "./entities";
+import { ENTITIES, LATIN_STOP, entityMentioned, findEntities, isChineseSubject, properNouns, type Entity, type ProperNoun } from "./entities";
+import { isChinaRegion } from "../region";
+import { amountGrounded, parseQuantities } from "./quantity";
 
 /** 근거 기사 한 건 (한국어 번역 + 중국어 원문). 데일리 후보·주간 이야기 묶음이 같은 모양으로 넘긴다 */
 export interface SourceDoc {
@@ -26,7 +32,7 @@ export interface SourceDoc {
   /** YYYY-MM-DD (베이징 날짜) */
   news_date?: string;
   source_name?: string;
-  /** 기사 주체 지역 (분류기 v2, 아직 판정에 쓰지 않음 — isChinaSubject 참고) */
+  /** 기사 대상 지역 (ai_news_ex.subject_region, region.ts). isChinaSubject 가 쓴다 — NULL 이면 예전 실체 규칙 */
   subject_region?: string | null;
 }
 
@@ -56,20 +62,39 @@ export interface ChinaStory {
   subject?: string;
   title?: string;
   text?: string;
+  /** 데일리 top_stories 만 (LLM 표시). 주간·월간 흐름에는 없다 */
   subject_is_chinese?: boolean;
 }
 
+/** 근거 기사 한 묶음(ref 하나 = 대표 기사 + 전재 형제, 주간·월간은 S id 하나 = 사건 전체)의 대상 지역 투표: CN | 해외 | 판정 없음 */
+type GroupVote = "cn" | "other" | null;
+
+function groupVote(group: SourceDoc[]): GroupVote {
+  const judged = group.filter((d) => typeof d.subject_region === "string" && d.subject_region.trim() !== "");
+  if (!judged.length) return null;
+  const cn = judged.filter((d) => isChinaRegion(d.subject_region)).length;
+  return cn * 2 >= judged.length ? "cn" : "other";
+}
+
 /**
- * 이야기의 주체가 중국 기업·기관인가. 데일리 top_stories 와 주간·월간 big_picture 가 같은 함수를 쓴다.
+ * 근거 기사 대상 지역(subject_region)으로 본 중국 주체 여부. 판정된 기사가 하나도 없으면 null (→ 예전 실체 규칙).
+ * ref(묶음) 단위로 먼저 다수결(동수 = 중국)한 뒤 ref 끼리 다수결(동수 = 중국) — 많이 보도된 사건 하나가 기사 수로 다른 ref 를 덮지 않게.
+ * CN 에는 대만·홍콩·마카오가 들어간다 (사용자 결정 2026-11-02, region.ts isChinaRegion).
+ */
+export function chinaByRegion(groups: SourceDoc[][]): boolean | null {
+  const votes = groups.map(groupVote).filter((v): v is "cn" | "other" => v !== null);
+  if (!votes.length) return null;
+  return votes.filter((v) => v === "cn").length * 2 >= votes.length;
+}
+
+/**
+ * (예전 규칙, subject_region 이 없는 근거 기사일 때만) 이름표·지명 기준.
  *  1) subject·제목에 중국 실체(이름표)나 중국 지명이 있으면 중국 주체
  *  2) 이름표에 없는 중국 기업(쉰처·Diffusion Intelligence 등)은 LLM 표시(subject_is_chinese)를 믿되,
  *     subject 가 해외 실체로만 이루어졌으면(OpenAI 를 중국으로 표시) 믿지 않는다
  *  3) 주간·월간 흐름(text)은 본문에 중국 실체·지명이 있으면 중국 주체
- * articles: 근거 기사 — 기사 주체 지역(subject_region)이 운영에 들어오면 이 함수 안에서만 바꾼다
- *   (예: articles 의 과반이 subject_region === "CN" 이면 중국 주체). 지금은 쓰지 않는다.
  */
-export function isChinaSubject(story: ChinaStory, articles: SourceDoc[] = []): boolean {
-  void articles;
+export function isChinaSubjectLegacy(story: ChinaStory): boolean {
   if (story.subject && isChineseSubject(story.subject)) return true;
   if (story.title && findEntities(story.title).some((e) => e.chinese)) return true;
   if (story.text && isChineseSubject(story.text)) return true;
@@ -78,6 +103,26 @@ export function isChinaSubject(story: ChinaStory, articles: SourceDoc[] = []): b
     return !(es.length && es.every((e) => !e.chinese));
   }
   return false;
+}
+
+/**
+ * 이야기의 주체가 중국 기업·기관인가. 데일리 top_stories 와 주간·월간 big_picture 가 같은 함수를 쓴다 (Gate 2).
+ * articles: 근거 기사 — ref 별 묶음(SourceDoc[][]) 또는 평평한 목록(기사 하나 = 묶음 하나).
+ *  - 근거 기사에 대상 지역이 있으면: 지역 투표(chinaByRegion)가 중국이어야 하고, 데일리 항목은 LLM 표시(subject_is_chinese)도
+ *    true 여야 센다 (교차 확인 — 2026-11-02 재검증: 근거가 구글 기사뿐인 '바이두' 항목, 오역에서 나온 '상하이대' 주체가 중국으로 세어짐).
+ *  - 근거 기사가 모두 미판정(NULL)이면 예전 실체 규칙(isChinaSubjectLegacy).
+ */
+export function isChinaSubject(story: ChinaStory, articles: SourceDoc[] | SourceDoc[][] = []): boolean {
+  const groups: SourceDoc[][] = articles.map((a) => (Array.isArray(a) ? a : [a]));
+  const byRegion = chinaByRegion(groups);
+  if (byRegion === null) return isChinaSubjectLegacy(story);
+  return byRegion && story.subject_is_chinese !== false;
+}
+
+/** 후보 기사(데일리 ARTICLES 의 cn 표시·수리 힌트) 하나가 중국 주체 후보인가: 대상 지역 우선, 없으면 제목의 중국 실체 */
+export function isChinaCandidate(a: { title_kr?: string | null; title_cn?: string | null; subject_region?: string | null }): boolean {
+  if (typeof a.subject_region === "string" && a.subject_region.trim() !== "") return isChinaRegion(a.subject_region);
+  return findEntities(`${a.title_kr ?? ""} ${a.title_cn ?? ""}`).some((e) => e.chinese);
 }
 
 // ───────────────────────── 최상급·추세 단정
@@ -105,6 +150,8 @@ export const CLAIM_WORDS: ClaimWord[] = [
   { key: "주류", kind: "trend", brief: /주류/, src: /주류|主流/ },
   { key: "재편", kind: "trend", brief: /재편|판도/, src: /재편|판도|重塑|洗牌|重构|格局/ },
   { key: "가열", kind: "trend", brief: /가열|(?<!본)격화|과열/, src: /가열|격화|과열|치열|过热|升温|白热化|激烈/ },
+  // 가격 방향: "가격을 낮췄다" 는 근거에 인하가 있어야 한다 (W43 "검색 API 가격을 낮췄다" — 원문은 무료 → 11월 1일부터 유료화)
+  { key: "인하", kind: "trend", brief: /가격(?:을|이)?\s?(?:크게\s?)?(?:낮췄|낮춰|낮추|내렸|내려|인하)|(?:가격|요금)\s?인하/, src: /인하|낮췄|낮춰|낮춘|내렸|내린|저렴|降价|下调|降低|便宜|直降/ },
   { key: "이동", kind: "trend", brief: /무게\s?(?:중심)?(?:이|가|를)?\s?(?:이동|옮)|옮겨가|옮겨 가|중심이 이동|초점이 (?:옮|이동)/, src: /옮겨|이동|转向|转移/ },
 ];
 
@@ -206,10 +253,32 @@ const REL_AGO = /(\d+)\s?(주|개월|달|년|周|个月|年)\s?(?:만에|뒤|후
 const dayNum = (d: string) => Date.parse(`${d}T00:00:00Z`) / 86_400_000;
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** 문장 속 날짜 중 편집일보다 STALE_DAYS 넘게 이전인 것 (없으면 null) */
-export function staleDateIn(sentence: string, editionDate: string): string | null {
-  const ed = dayNum(editionDate);
-  const year = Number(editionDate.slice(0, 4));
+/** 연도 해석 창: 판 날짜 앞뒤 6개월 (183일) */
+export const YEAR_WINDOW_DAYS = 183;
+
+/**
+ * 연도 없는 "M월 D일" 의 연도 — 판 날짜(기준일)에서 가장 가까운 해 (앞뒤 6개월 창).
+ * 2026-11-02 재감사: 10-31 판의 "11월 4일 iOS 베타 시작"(앞으로 있을 일)을 작년(2025-11-04)으로 되돌려 예전 사건으로 잡았다.
+ * 미래 날짜는 미래로 둔다 — 예전 사건이 아니다. 주간·월간 돈 흐름 표의 거래일(metrics/period.ts)도 이 함수를 쓴다 (Gate 2).
+ */
+export function resolveMonthDay(month: number, day: number, refDate: string): string {
+  const ref = dayNum(refDate);
+  const year = Number(refDate.slice(0, 4));
+  let best = "";
+  let bestGap = Infinity;
+  for (const y of [year - 1, year, year + 1]) {
+    const d = `${y}-${pad(month)}-${pad(day)}`;
+    const gap = Math.abs(dayNum(d) - ref);
+    if (Number.isFinite(gap) && gap < bestGap) {
+      best = d;
+      bestGap = gap;
+    }
+  }
+  return best;
+}
+
+/** 문장 속 날짜 (연도 없는 날짜는 resolveMonthDay). 미래 날짜도 그대로 돌려준다 */
+export function datesIn(sentence: string, refDate: string): string[] {
   const cands: string[] = [];
   for (const re of [KO_FULL_DATE, ZH_FULL_DATE]) {
     for (const m of sentence.matchAll(re)) {
@@ -218,15 +287,17 @@ export function staleDateIn(sentence: string, editionDate: string): string | nul
       cands.push(`${m[1]}-${pad(Number(m[2]))}-${pad(day)}`);
     }
   }
-  for (const re of [KO_MD, ZH_MD]) {
-    for (const m of sentence.matchAll(re)) {
-      let d = `${year}-${pad(Number(m[1]))}-${pad(Number(m[2]))}`;
-      if (dayNum(d) > ed + 1) d = `${year - 1}-${d.slice(5)}`;
-      cands.push(d);
-    }
-  }
+  for (const re of [KO_MD, ZH_MD]) for (const m of sentence.matchAll(re)) cands.push(resolveMonthDay(Number(m[1]), Number(m[2]), refDate));
+  return cands.filter((d) => Number.isFinite(dayNum(d)));
+}
+
+/** 문장 속 날짜 중 편집일보다 STALE_DAYS 넘게 이전인 것 (없으면 null). 앞으로 있을 날짜는 예전 사건이 아니다 */
+export function staleDateIn(sentence: string, editionDate: string): string | null {
+  const ed = dayNum(editionDate);
+  const year = Number(editionDate.slice(0, 4));
+  const cands = datesIn(sentence, editionDate);
   if (/지난해|작년|去年/.test(sentence)) cands.push(`${year - 1}-12-31`);
-  for (const d of cands) if (Number.isFinite(dayNum(d)) && ed - dayNum(d) > STALE_DAYS) return d;
+  for (const d of cands) if (ed - dayNum(d) > STALE_DAYS) return d;
   const rel = REL_AGO.exec(sentence);
   if (rel) {
     const n = Number(rel[1]);
@@ -236,15 +307,52 @@ export function staleDateIn(sentence: string, editionDate: string): string | nul
   return null;
 }
 
+/** 문장에 판 날짜 근처(±STALE_DAYS, 미래 포함)의 날짜가 있나 */
+function freshDateIn(sentence: string, editionDate: string): boolean {
+  const ed = dayNum(editionDate);
+  return datesIn(sentence, editionDate).some((d) => ed - dayNum(d) <= STALE_DAYS);
+}
+
+/**
+ * 묶음 실체(cn_gov = 정부·대학·연구원 여러 기관)는 브리핑 문장에 실제로 쓴 별칭만으로 근거 문장을 찾는다.
+ * 2026-11-02 재감사 07-15: 리드 "중국 당국은 … 공개" 를 다른 기사의 "면벽지능은 2022년 8월 설립 … 칭화대" 와 같은 실체로 보고
+ * 예전 사건(2022-08-31)으로 잡았다 → 수리가 "지난 7월" 이라는 틀린 시점을 넣었다.
+ */
+const UMBRELLA_ENTITIES = new Set(["cn_gov"]);
+function sentenceNouns(sentence: string): ProperNoun[] {
+  return properNouns(sentence).map((n) => {
+    if (!UMBRELLA_ENTITIES.has(n.label)) return n;
+    const e = ENTITIES.find((x) => x.key === n.label);
+    const used = (e?.aliases ?? []).filter((a) => (typeof a === "string" ? sentence.includes(a) : a.test(sentence)));
+    if (!used.length) return n;
+    return { label: n.label, matches: (t: string) => used.some((a) => (typeof a === "string" ? t.includes(a) : a.test(t))) };
+  });
+}
+
+/** "지난 N월"(날짜 없이) — 판과 같은 달이면 지난해 일로 읽힌다 (07-15 판 "지난 7월 … 공개" — 실제는 7월 15일 당일) */
+const PAST_MONTH_RE = /지난\s?(\d{1,2})월(?!\s?\d{1,2}일)/g;
+export function pastMarkerIssues(text: string, editionDate: string | undefined): RuleIssue[] {
+  if (!editionDate) return [];
+  const month = Number(editionDate.slice(5, 7));
+  const out: RuleIssue[] = [];
+  for (const m of text.matchAll(PAST_MONTH_RE)) {
+    if (Number(m[1]) === month)
+      out.push({ rule: "time_marker_wrong", detail: `"${m[0]}" — 판 날짜(${editionDate})와 같은 달이라 지난해 일로 읽힘. 근거 기사의 날짜("${month}월 ○일" 또는 "○일")를 쓰십시오` });
+  }
+  return out;
+}
+
 /**
  * 예전 사건을 시점 표시 없이 오늘 일처럼 썼나 (2026-10-28 "OpenAI 나비에-스토크스 증명 공개" — 공개는 9월 8일).
  * 브리핑 문장의 사건 동사(공개·발표·출시…)와 고유명사가 함께 나오는 근거 문장이 모두 예전 날짜를 달고 있으면 위반.
  * 같은 고유명사·동사가 날짜 없이(오늘 일로) 나오는 근거 문장이 하나라도 있으면 통과.
  * 인용 기사 자체가 편집일보다 STALE_DAYS 넘게 전 기사(news_date)여도 같은 규칙.
+ * 시점 표시가 틀린 경우("지난 7월" — 판과 같은 달)는 pastMarkerIssues 가 따로 본다.
  */
 export function staleEventIssues(text: string, docs: SourceDoc[], editionDate: string | undefined): RuleIssue[] {
-  if (!editionDate || !docs.length) return [];
-  const out: RuleIssue[] = [];
+  if (!editionDate) return [];
+  const out: RuleIssue[] = [...pastMarkerIssues(text, editionDate)];
+  if (!docs.length) return out;
   const ed = dayNum(editionDate);
   const oldDocs = docs.filter((d) => d.news_date && ed - dayNum(d.news_date) > STALE_DAYS);
   if (oldDocs.length && oldDocs.length === docs.length && !BRIEF_TIME_RE.test(text))
@@ -252,7 +360,7 @@ export function staleEventIssues(text: string, docs: SourceDoc[], editionDate: s
   for (const s of splitSentences(text)) {
     if (BRIEF_TIME_RE.test(s)) continue;
     if (!(s.match(EVENT_VERB_RE) ?? []).length) continue;
-    const nouns = properNouns(s);
+    const nouns = sentenceNouns(s);
     if (!nouns.length) continue;
     const hasVerb = (x: string) => (x.match(EVENT_VERB_RE) ?? []).length > 0;
     const docSents = docs.map((d) => [d.title_kr, ...splitSentences(d.summary_kr), ...splitSentences(d.insight_kr ?? ""), ...splitSentences(d.summary_cn ?? "")]);
@@ -268,13 +376,14 @@ export function staleEventIssues(text: string, docs: SourceDoc[], editionDate: s
         relevant++;
         const direct = rel.map((x) => staleDateIn(x, editionDate)).find((x) => x !== null) ?? null;
         const generic = ss.filter((x) => hasVerb(x) && !properNouns(x).length).map((x) => staleDateIn(x, editionDate)).find((x) => x !== null) ?? null;
-        const freshDated = rel.some((x) => /\d{1,2}월\s?\d{1,2}일|\d{1,2}月\d{1,2}日/.test(x) && staleDateIn(x, editionDate) === null);
+        // 판 날짜 근처(또는 앞으로 있을) 날짜를 단 사건 문장이 있으면 오늘 일 (10-31 "11월 4일 베타 테스트 시작")
+        const freshDated = rel.some((x) => freshDateIn(x, editionDate) && staleDateIn(x, editionDate) === null);
         const st = freshDated ? null : direct ?? generic;
         if (st === null) allStale = false;
         else staleAt = staleAt ?? st;
       }
       if (relevant && allStale && staleAt) {
-        out.push({ rule: "stale_event", detail: `${n.label}: 근거 기사의 사건 시점 ${staleAt} — 오늘 일처럼 쓰지 말고 "지난 ○월" 처럼 시점을 밝히십시오` });
+        out.push({ rule: "stale_event", detail: `${n.label}: 근거 기사의 사건 시점 ${staleAt} — 오늘 일처럼 쓰지 말고 "9월 8일 공개한" 처럼 근거 기사의 날짜를 밝히십시오` });
         break;
       }
     }
@@ -317,10 +426,20 @@ export function amountMentions(text: string): AmountMention[] {
   return out;
 }
 
-/** 중국어 원문 금액 뒤 통화. 단위만 있고 통화가 없으면("最大一笔110亿") 위안으로 본다 (중국 매체 관례) */
-function zhCurrencyAfter(after: string): "CNY" | "USD" | "HKD" {
+/**
+ * 중국어 원문 금액 뒤 통화. 단위만 있고 통화가 없으면("最大一笔110亿") 위안으로 본다 (중국 매체 관례) —
+ * 다만 같은 기사 원문에서 그 값이 통화를 단 금액으로 다시 나오거나, 같은 통화 두 금액의 차이면 그 통화
+ * (W44 round 2: 제목 "OpenAI融资目标砍掉100亿！" — 요약은 300亿美元→200亿美元. 위안으로 읽어 currency_mismatch → 큰 흐름 한 칸 삭제).
+ */
+function zhCurrencyAfter(after: string, docZh = "", value = NaN): "CNY" | "USD" | "HKD" {
   if (/^\s*(?:美元|美金|USD|\$)/.test(after)) return "USD";
   if (/^\s*(?:港元|港币|HKD)/.test(after)) return "HKD";
+  if (Number.isFinite(value)) {
+    const labeled = parseQuantities(docZh).filter((q) => q.currency === "USD" || q.currency === "CNY" || q.currency === "HKD");
+    const same = (x: number) => Math.abs(x - value) <= value * 1e-6;
+    const hit = labeled.find((q) => same(q.value)) ?? labeled.find((q) => labeled.some((r) => r !== q && r.currency === q.currency && same(Math.abs(q.value - r.value))));
+    if (hit) return hit.currency as "CNY" | "USD" | "HKD";
+  }
   return "CNY";
 }
 
@@ -333,19 +452,24 @@ function zhCurrencyAfter(after: string): "CNY" | "USD" | "HKD" {
 export function moneyIssues(text: string, docs: SourceDoc[], groundKo?: string): RuleIssue[] {
   const out: RuleIssue[] = [];
   if (!docs.length) return out;
-  const zhText = docs.map((d) => `${d.title_cn} ${d.summary_cn ?? ""}`).join(" ");
   const koBody = docs.flatMap((d) => [d.title_kr, ...splitSentences(d.summary_kr), ...splitSentences(d.insight_kr ?? "")]);
   const zhSents = docs.flatMap((d) => [d.title_cn, ...splitSentences(d.summary_cn ?? "")]);
-  const ground = flat(groundKo ?? docs.map((d) => `${d.title_kr} ${d.summary_kr} ${d.insight_kr ?? ""}`).join(" "));
+  const groundRaw = groundKo ?? docs.map((d) => `${d.title_kr} ${d.summary_kr} ${d.insight_kr ?? ""}`).join(" ");
+  const ground = flat(groundRaw);
   for (const a of amountMentions(text)) {
     // 금액 전체(단위·통화 포함)가 근거에 그대로 있어야 한다
-    if (!hasNumberToken(ground, flat(a.raw))) {
+    // 표기가 달라도 같은 값이면 같은 금액 ("162억 8,600만 달러" = "162.86억 달러", quantity.ts — 숫자 파서는 하나)
+    if (!hasNumberToken(ground, flat(a.raw)) && !amountGrounded(a.raw, groundRaw)) {
       out.push({ rule: "amount_not_in_source", detail: `"${a.raw}" — 근거 기사에 같은 금액·통화 표기가 없음` });
     }
     if (a.zh) {
-      const zhHits = [...zhText.matchAll(new RegExp(`(?<![\\d.])${a.zh.replace(/\./g, "\\.")}`, "g"))].map((m) =>
-        zhCurrencyAfter(zhText.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 4))
-      );
+      // 기사마다 따로 본다 (통화가 없는 금액은 그 기사 원문의 통화로)
+      const zhHits = docs.flatMap((d) => {
+        const t = `${d.title_cn} ${d.summary_cn ?? ""}`;
+        return [...t.matchAll(new RegExp(`(?<![\\d.])${a.zh!.replace(/\./g, "\\.")}`, "g"))].map((m) =>
+          zhCurrencyAfter(t.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 4), t, parseQuantities(a.zh!)[0]?.value)
+        );
+      });
       if (zhHits.length && (a.currency === "USD" || a.currency === "CNY") && !zhHits.includes(a.currency)) {
         out.push({ rule: "currency_mismatch", detail: `"${a.raw}" — 중국어 원문은 ${a.zh}${zhHits[0] === "CNY" ? "(위안)" : zhHits[0] === "USD" ? "美元" : "港元"}` });
       }

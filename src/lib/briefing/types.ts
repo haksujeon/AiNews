@@ -18,7 +18,8 @@ export type BriefingStatus =
   | "withdrawn";
 
 /** §1.2 물량 규칙: ≥6 정상 판, 3~5 짧은 판, <3 생략 */
-export type EditionMode = "normal" | "short" | "skipped";
+/** headlines = 생성이 끝내 실패한 날의 제목만 판 (fallback.ts — LLM 문장 없음, ko 만) */
+export type EditionMode = "normal" | "short" | "skipped" | "headlines";
 
 export const SECTION_CODES = [
   "models",
@@ -48,8 +49,10 @@ export interface CandidateArticle {
   summary_cn?: string;
   /** 베이징 날짜 YYYY-MM-DD */
   news_date?: string;
-  /** 기사 주체 지역 (분류기, rules.ts isChinaSubject 가 쓸 자리) */
+  /** 기사 대상 지역 (ai_news_ex.subject_region, region.ts). 중국 중심 규칙(rules.ts isChinaSubject)·프롬프트 지역 표시 */
   subject_region?: string | null;
+  /** 지역 태그 (CN·US·TW·HK…) */
+  region_tags?: string[];
 }
 
 export interface KeyTerm {
@@ -218,4 +221,7 @@ export interface GenerateResult {
   locales: LocaleOutcome[];
   totalCostUsd: number;
   message?: string;
+  /** 대체 판으로 내려갔으면 short | headlines (n8n 이 outcome generated 여도 알림을 보낸다) */
+  fallback?: string;
+  fallbackReason?: string;
 }

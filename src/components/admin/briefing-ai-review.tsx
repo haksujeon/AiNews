@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import type { StoredReview } from "@/lib/briefing/review/store";
+import type { GenLog } from "@/lib/briefing/review/evidence";
 import { cn } from "@/lib/utils";
 import { BriefingRereviewButton } from "./briefing-rereview-button";
 
@@ -15,6 +16,8 @@ interface Props {
   producedBy: StoredReview | null;
   fixInfo: { from?: { id: string; version: number }; planned?: { path: string; action: string; original: string; text: string; basis: string }[]; dropped?: string[]; fallbacks?: string[] } | null;
   canReview: boolean;
+  /** 생성기 기록 (대체 판·부분 수리·삭제/수정·경고) — 검토 모델에도 같은 내용을 준다 */
+  genLog?: GenLog | null;
 }
 
 const LABEL_TONE: Record<string, string> = {
@@ -26,7 +29,7 @@ const LABEL_TONE: Record<string, string> = {
   correct: "text-ink-3",
 };
 
-export async function BriefingAiReview({ locale, briefingId, reviews, producedBy, fixInfo, canReview }: Props) {
+export async function BriefingAiReview({ locale, briefingId, reviews, producedBy, fixInfo, canReview, genLog }: Props) {
   const t = await getTranslations({ locale, namespace: "briefingAdmin" });
   const latest = reviews.find((r) => r.status === "done") ?? reviews[0] ?? null;
   const claims = latest?.claims ?? [];
@@ -199,6 +202,26 @@ export async function BriefingAiReview({ locale, briefingId, reviews, producedBy
               <li key={r.id}>
                 {new Date(r.created_at).toISOString().slice(0, 16).replace("T", " ")} · {r.trigger} · r{r.round} · {r.status === "done" ? `${r.verdict} ${r.score}` : `error`}
                 {r.decision?.action ? ` · ${String(r.decision.action)}` : ""} · {r.prompt_version}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {genLog && (genLog.fallback || genLog.edits.length > 0 || genLog.warns.length > 0) && (
+        <details className="mt-3 text-xs text-ink-2" data-testid="admin-gen-log">
+          <summary className="cursor-pointer text-ink-3">{t("aiReviewGenLog", { n: genLog.edits.length + genLog.warns.length })}</summary>
+          {genLog.fallback && <p className="mt-1 font-semibold text-destructive">{t("aiReviewGenFallback", { mode: genLog.fallback, reason: genLog.fallbackReason ?? "" })}</p>}
+          {genLog.targetedRepair && <p className="mt-1">{t("aiReviewGenTargeted")}</p>}
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {genLog.warns.map((w, i) => (
+              <li key={`w${i}`}>
+                <span className="font-mono">[{w.rule}]</span> {w.path}: {w.detail}
+              </li>
+            ))}
+            {genLog.edits.map((e, i) => (
+              <li key={`e${i}`}>
+                <span className="font-mono">{e.action}</span> {e.path} <span className="text-ink-3">({e.round})</span> {e.reason}
+                {e.before ? <span className="block text-ink-3">“{e.before}”{e.after ? ` → “${e.after}”` : ""}</span> : null}
               </li>
             ))}
           </ul>

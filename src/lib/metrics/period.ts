@@ -28,6 +28,8 @@ import { rankStories, type RankableArticle } from "../news-rank";
 import { ENTITIES, findEntities } from "../briefing/entities";
 import { REGION_BADGE_SQL, SUBJECT_REGIONS, regionChipSql, type SubjectRegion } from "../region";
 import { groupPeriodStories, isPolitical } from "../briefing/select";
+import { datesIn } from "../briefing/rules";
+import { parseQuantities } from "../briefing/quantity";
 import type { CandidateArticle, KeyTerm } from "../briefing/types";
 
 // ───────────────────────── 공통
@@ -62,7 +64,8 @@ export const TERM_DELTA = 3;
 export const MISSING_RATIO = 0.5;
 // v3 (2026-11-02): '중국 대 해외'를 언급 기준(chinaVsOverseas)에서 대표 지역 기준(region_share = regionCounts)으로 바꿈.
 //   예전 스냅숏(v2)은 china_vs_overseas 만 있고, 화면·지시문은 region_share 가 없으면 예전 지표를 그대로 보여 준다.
-export const METRICS_VERSION = "period-v3-2026-11-02";
+// v4 (재감사 round 2): 돈 흐름 표 — 기사가 날짜로 못 박은 거래일이 기간 밖이면 뺌, 같은 거래의 통화별 행을 하나로 합침
+export const METRICS_VERSION = "period-v4-2026-11-02";
 /** 보충 수집 때 매체별 하루 상한 (데이터 알림 문구) */
 export const BACKFILL_CAPS: Record<string, number> = { "36Kr": 12, ITHome: 6 };
 
@@ -961,12 +964,75 @@ export interface MoneyRow {
   amount: string;
   title_kr: string;
   entities: string[];
+  /** 같은 거래를 다른 통화로 쓴 기사 (합친 행). 금액은 그 기사 제목 그대로 */
+  same_deal?: { id: string; day: string; source: string; amount: string }[];
 }
 
-/** 제목에 거래 낱말과 금액이 함께 있는 기사. 금액은 제목 그대로 — 합산·환산·서열 없음 */
-export function moneyTable(arts: PeriodArticle[]): MoneyRow[] {
+/** 거래 문장의 날짜 (금액이 나오는 문장만). 연도 없는 날짜는 기사 날짜 기준으로 해석 (rules.ts resolveMonthDay, Gate 2) */
+export function dealDates(a: Pick<PeriodArticle, "title_kr" | "summary_kr" | "day">, amount: string): string[] {
+  const head = amount.match(/\d[\d,.]*\s?(?:조|억|만)?/)?.[0]?.replace(/\s/g, "") ?? "";
+  if (!head) return [];
+  const sents = [a.title_kr, ...a.summary_kr.split(/(?<=[.!?。])\s+/)];
+  return sents.filter((x) => x.replace(/\s/g, "").includes(head)).flatMap((x) => datesIn(x, a.day));
+}
+
+/**
+ * 거래일이 기간 밖인가: 금액이 나오는 문장에 날짜가 있고, 그 날짜가 모두 기간 시작 전 (앞으로 있을 날짜는 기간 안으로 본다).
+ * 2026-11-02 재감사 W41: 10-07 기사(후속 인터뷰)의 "AMD가 9월 28일 … 82억 달러 규모 World Labs 인수 발표" 가 이번 주 거래로 들어갔다.
+ */
+export function dealBeforePeriod(a: Pick<PeriodArticle, "title_kr" | "summary_kr" | "day">, amount: string, start: string): boolean {
+  const dates = dealDates(a, amount);
+  return dates.length > 0 && dates.every((d) => d < start);
+}
+
+/** 통화 쌍별 환율 허용 범위 (1 단위 앞 통화 = 몇 뒤 통화). 기사들의 환산값(6.5~6.8)과 시세 변동을 담는다 */
+const FX_BAND: Record<string, [number, number]> = { "USD/CNY": [6.3, 7.6], "USD/HKD": [7.6, 8.0], "HKD/CNY": [0.8, 1.0] };
+
+/** 두 금액이 환율 허용 범위 안에서 같은 값인가 (통화가 다를 때만) */
+export function sameAmountAcrossCurrencies(a: string, b: string): boolean {
+  const qa = parseQuantities(a).find((q) => q.currency);
+  const qb = parseQuantities(b).find((q) => q.currency);
+  if (!qa || !qb || qa.currency === qb.currency) return false;
+  for (const [x, y] of [[qa, qb], [qb, qa]]) {
+    const band = FX_BAND[`${x.currency}/${y.currency}`];
+    if (band && y.value / x.value >= band[0] && y.value / x.value <= band[1]) return true;
+  }
+  return false;
+}
+
+const LATIN_NAME = /[A-Z][A-Za-z0-9]{2,}(?:[.\-][A-Za-z0-9]+)*/g;
+const MONEY_STOP = new Set(["IPO", "CEO", "AI", "AGI", "GPU", "API", "LLM", "USD"]);
+/** 거래 주체 이름: 실체 키 + 제목·요약 첫 문장의 라틴 이름 (TypeSafe 처럼 이름표에 없는 회사 — 제목에 이름이 없는 기사도 있다) */
+export function dealNames(a: Pick<PeriodArticle, "title_kr" | "summary_kr">, entities: string[]): Set<string> {
+  const lead = a.summary_kr.split(/(?<=[.!?。])\s+/)[0] ?? "";
+  return new Set([...entities, ...(`${a.title_kr} ${lead}`.match(LATIN_NAME) ?? []).filter((x) => !MONEY_STOP.has(x))]);
+}
+
+/**
+ * 같은 거래를 통화만 달리 쓴 행을 하나로 합친다: 같은 주체 + 날짜 ±1일 + 환율 허용 범위 안의 같은 금액.
+ * 2026-11-02 재감사 W41: TypeSafe AI "8.7억 달러" 와 "58.6억 위안"(같은 라운드)이 두 거래로 나열됐다.
+ */
+export function mergeSameDeals(rows: MoneyRow[], namesOf: Map<string, Set<string>> = new Map()): MoneyRow[] {
+  const out: MoneyRow[] = [];
+  const gap = (x: string, y: string) => Math.abs(Date.parse(`${x}T00:00:00Z`) - Date.parse(`${y}T00:00:00Z`)) / 86_400_000;
+  const names = (r: MoneyRow) => namesOf.get(r.id) ?? new Set(r.entities);
+  const same = (a: MoneyRow, b: MoneyRow) => [...names(a)].some((x) => names(b).has(x));
+  for (const r of rows) {
+    const hit = out.find((o) => gap(o.day, r.day) <= 1 && same(o, r) && sameAmountAcrossCurrencies(o.amount, r.amount));
+    if (hit) hit.same_deal = [...(hit.same_deal ?? []), { id: r.id, day: r.day, source: r.source, amount: r.amount }];
+    else out.push({ ...r });
+  }
+  return out;
+}
+
+/**
+ * 제목에 거래 낱말과 금액이 함께 있는 기사. 금액은 제목 그대로 — 합산·환산·서열 없음.
+ * range 가 있으면 거래일(금액 문장의 날짜)이 기간 시작 전인 행을 빼고, 같은 거래의 통화별 행을 합친다.
+ */
+export function moneyTable(arts: PeriodArticle[], range?: { start: string; end: string }): MoneyRow[] {
   const seen = new Set<string>();
-  return arts
+  const namesOf = new Map<string, Set<string>>();
+  const rows = arts
     .filter((a) => {
       const both = `${a.title_kr} ${a.summary_kr}`;
       return FUND_RE_BROAD.test(both) && (both.match(AMT_RE_BROAD) ?? []).length > 0 && !isPolitical(asCandidate(a));
@@ -974,6 +1040,8 @@ export function moneyTable(arts: PeriodArticle[]): MoneyRow[] {
     .filter((a) => FUND_RE_TITLE.test(a.title_kr) && (a.title_kr.match(AMOUNT_RE) ?? []).length > 0)
     .map((a) => {
       const amount = a.title_kr.match(AMOUNT_RE)![0];
+      const entities = findEntities(`${a.title_kr} ${a.title_cn}`).map((e) => e.key);
+      namesOf.set(a.id, dealNames(a, entities));
       return {
         row: {
           id: a.id,
@@ -982,12 +1050,13 @@ export function moneyTable(arts: PeriodArticle[]): MoneyRow[] {
           kind: dealKind(a.title_kr),
           amount,
           title_kr: a.title_kr,
-          entities: findEntities(`${a.title_kr} ${a.title_cn}`).map((e) => e.key),
+          entities,
         },
         role: amountRole(a.title_kr, amount),
+        stale: range ? dealBeforePeriod(a, amount, range.start) : false,
       };
     })
-    .filter((x) => x.role === "deal")
+    .filter((x) => x.role === "deal" && !x.stale)
     .map((x) => x.row)
     .filter((r) => {
       const k = r.title_kr.slice(0, 14);
@@ -996,6 +1065,7 @@ export function moneyTable(arts: PeriodArticle[]): MoneyRow[] {
       return true;
     })
     .sort((a, b) => a.day.localeCompare(b.day));
+  return range ? mergeSameDeals(rows, namesOf) : rows;
 }
 
 // ───────────────────────── 여러 매체가 함께 다룬 이야기 (순수)
@@ -1221,7 +1291,7 @@ export async function computePeriodMetrics(
     entities,
     terms: termMovement(termCur, termPrev),
     region_share: { cur: regionCur, prev: regionPrev },
-    money_table: moneyTable(arts),
+    money_table: moneyTable(arts, { start, end }),
     stories: {
       group_count: stories.length,
       multi_source_count: stories.filter((s) => s.sources.length >= 2).length,

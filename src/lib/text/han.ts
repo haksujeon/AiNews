@@ -158,8 +158,13 @@ function agreeParticle(word: string, rest: string): { from: string; to: string }
  * 괄호 밖 한자 덩어리 중 사전에 정확히 일치하는 4자 이하 덩어리만 바꾼다. 바로 뒤 조사는 새 낱말 받침에 맞춘다.
  * (덩어리 일부만 맞는 경우 — 华为云 — 는 바꾸지 않는다: 잘못된 부분 치환을 막기 위해)
  */
-export function applyHanGlossary(text: string, glossary: ReadonlyMap<string, string>): { text: string; replaced: [string, string][] } {
-  const toks = hanTokens(text, { allowParenthetical: true });
+export function applyHanGlossary(
+  text: string,
+  glossary: ReadonlyMap<string, string>,
+  opts: { insideParens?: boolean } = {}
+): { text: string; replaced: [string, string][] } {
+  // insideParens: 괄호 안 한자도 바꾼다 (브리핑 본문은 괄호 병기도 허용하지 않는다). 기본은 예전처럼 괄호 밖만 (백필)
+  const toks = hanTokens(text, { allowParenthetical: !opts.insideParens });
   const replaced: [string, string][] = [];
   let out = "";
   let last = 0;
@@ -177,6 +182,26 @@ export function applyHanGlossary(text: string, glossary: ReadonlyMap<string, str
     replaced.push([k.text, ko]);
   }
   return { text: out + text.slice(last), replaced };
+}
+
+/**
+ * 한글·라틴이 섞인 괄호 안의 한자 덩어리를 지운다: "캡컷(剪映 국제판)" → "캡컷(국제판)". 괄호가 비면 괄호째 지운다.
+ * (괄호 안이 한자뿐인 병기는 브리핑 validate.ts stripParentheticalHan 이 지운다)
+ * 2026-11-02 재감사 10-27: 한자 2자(剪映) 때문에 바이트댄스 캡컷 주요 기사 한 건이 통째로 빠졌다.
+ */
+export function dropHanInsideParens(text: string): string {
+  const ranges = parenRanges(text);
+  if (!ranges.length) return text;
+  let out = "";
+  let last = 0;
+  for (const [s, e] of ranges) {
+    const inner = text.slice(s + 1, e - 1);
+    if (!HAN_CHAR.test(inner)) continue;
+    const cleaned = inner.replace(HAN_RUN, " ").replace(/\s*[·、，,]\s*(?=[·、，,]|$)/g, "").replace(/^[\s·、，,]+|[\s·、，,]+$/g, "").replace(/\s{2,}/g, " ");
+    out += text.slice(last, s) + (cleaned ? `${text[s]}${cleaned}${text[e - 1]}` : "");
+    last = e;
+  }
+  return (out + text.slice(last)).replace(/\s{2,}/g, " ");
 }
 
 export function classifyHan(text: string | null | undefined, glossary: ReadonlyMap<string, string>): HanClassification {

@@ -12,6 +12,7 @@ import { PUBLIC_NEWS_WHERE } from "@/lib/news-query";
 import { ROW_COLUMNS, insertBriefing, type BriefingRow, type EditionType } from "./repository";
 import type { BriefingContent, CandidateArticle, StoredBriefingContent, ValidationIssue, ValidationReport } from "./types";
 import { citedRefs, contextFromArticles, validateKo } from "./validate";
+import { SOURCE_ARTICLE_COLUMNS } from "./columns";
 
 export interface AdminBriefingListRow {
   id: string;
@@ -124,11 +125,7 @@ export async function saveEditedBriefing(
 
   const ids = [...new Set([...(row.input_article_ids ?? []), ...(row.article_ids ?? [])])];
   const { rows: arts } = await pool.query(
-    `SELECT id, source_name, source_url, category,
-            COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr,
-            COALESCE(summary_kr, '') AS summary_kr, COALESCE(ai_insights_kr, '') AS ai_insights_kr,
-            COALESCE(key_terms, '[]'::jsonb) AS key_terms, (${PUBLIC_NEWS_WHERE}) AS visible,
-            COALESCE(summary_cn, '') AS summary_cn, to_char((news_date AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS news_date
+    `SELECT ${SOURCE_ARTICLE_COLUMNS}, (${PUBLIC_NEWS_WHERE}) AS visible
        FROM ai_news_ex WHERE id = ANY($1::uuid[])`,
     [ids]
   );

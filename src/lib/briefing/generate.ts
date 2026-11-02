@@ -2,9 +2,13 @@
  * 브리핑 생성 — 모든 실행 경로(n8n HTTP 호출, cron, 관리자 재생성, CLI)가 이 함수 하나를 부른다 (Gate 2).
  *
  *  1. 날짜 잠금 → 후보 선정(§3.2) → 물량 규칙(§1.2) → 입력 해시가 같으면 건너뜀(force 제외)
- *  2. ko 생성 → 괄호 병기 한자 정리 → 검증 → 치명 위반(중국 중심 미달·한자·길이·헤드라인 규칙 포함)이면 수리 1회
+ *  2. ko 생성 → 결정적 정리(괄호 병기 한자 삭제·한자 사전 치환·넘친 문장/절 자르기·같은 사건 항목 병합) → 검증
+ *     → 치명 위반(중국 중심 미달·한자·길이·헤드라인 규칙 포함)이면 수리(최대 2회)
+ *     → 삭제 전 마지막 시도: 문제 문장만 지우기(localFixes) → 남은 치명 칸만 부분 수리 1회(buildTargetedRepairPrompt)
  *     → 남은 치명 항목 삭제 → 전체 재검증(삭제한 항목을 헤드라인·리드가 쓰고 있으면 다시 잡힘, 최대 2회)
- *     → 최소 개수(주요 4·숫자 3·주목 기업 3) 충족이면 draft, 주요 기사 3건 이상이면 짧은 판(mode short) draft, 아니면 failed
+ *     → 최소 개수(주요 4·숫자 3·주목 기업 3) 충족이면 draft, 주요 기사 3건 이상이면 짧은 판(mode short) draft
+ *     → 그래도 실패면 대체 판(fallback.ts): 짧은 판(검증 통과 주요 기사 ≥ 3) 또는 제목만 판(mode headlines). 판 없는 날을 만들지 않는다
+ *     감사 기록: validation.edits[] (회차·위치·사유·고치기 전/후 원문), 핵심 기사 삭제는 경고 dropped_key_story
  *  3. ko 가 draft 면 en / zh 값만 번역 + 재검증 (각 언어판은 독립적으로 draft/failed)
  *  4. 토큰·비용·지연·LiteLLM request id 를 행마다 기록. 1회 실행 비용 상한(BRIEFING_MAX_COST_USD, 기본 $0.10)
  *  5. 주말 합본(결정 D7, 규칙은 sla.ts): 토요일 판 = 토·일 기사, period_start~period_end 에 기록.
@@ -24,22 +28,31 @@ import type {
   ValidationReport,
 } from "./types";
 import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "./llm";
-import { findEntities } from "./entities";
-import { PROMPT_VERSION, TRANSLATE_PROMPT_VERSION, buildRepairPrompt, buildSystemPrompt, buildUserPrompt } from "./prompt";
+import { PROMPT_VERSION, TRANSLATE_PROMPT_VERSION, buildRepairPrompt, buildSystemPrompt, buildTargetedRepairPrompt, buildUserPrompt } from "./prompt";
 import { computeInputHash, editionModeFor, selectCandidates } from "./select";
+import { isChinaCandidate } from "./rules";
 import {
   HEADLINE_MAX,
+  LIMITS,
   citedRefs,
   contextFromGroups,
   dropFatalItems,
+  droppedKeyStories,
   fitSentenceLengths,
+  getField,
+  glossKoHan,
   itemOf,
+  localFixes,
+  mergeDuplicateItems,
   minCountShortfall,
   normalizeContent,
+  setField,
   stripParentheticalHan,
   validateKo,
+  type ContentEdit,
   type ValidationContext,
 } from "./validate";
+import { headlinesEdition, headlinesReport, shortFallback } from "./fallback";
 import { translateBriefing } from "./translate";
 import {
   finishGenerating,
@@ -157,11 +170,11 @@ export function repairHints(c: BriefingContent, r: ValidationReport, groups: Can
   if (r.fatal.some((f) => f.rule === "china_centric")) {
     const used = new Set(c.top_stories.slice(0, 5).flatMap((s) => s.refs));
     const cands = groups
-      .filter((g) => !used.has(g.shortId) && findEntities(`${g.primary.title_kr} ${g.primary.title_cn}`).some((e) => e.chinese))
+      .filter((g) => !used.has(g.shortId) && isChinaCandidate(g.primary))
       .slice(0, 6)
       .map((g) => `${g.shortId}(${g.primary.title_kr.slice(0, 30)})`);
     out.push(
-      `중국 중심 규칙 미달 — 상위 5건 중 3건 이상이 중국 기업·기관 주체여야 합니다. 같은 사건을 두 칸에 나눈 해외 이야기는 하나로 합치고, 중국 주체 후보를 올리십시오: ${cands.join(", ")}`
+      `중국 중심 규칙 미달 — 상위 5건 중 3건 이상이 중국 주체(근거 기사 region CN)여야 합니다. 같은 사건을 두 칸에 나눈 해외 이야기는 하나로 합치고, 중국 주체 후보를 올리십시오: ${cands.join(", ")}`
     );
   }
   for (const f of r.fatal.filter((x) => x.rule === "han_in_ko"))
@@ -169,24 +182,64 @@ export function repairHints(c: BriefingContent, r: ValidationReport, groups: Can
   return out;
 }
 
-/** 삭제 → 전체 재검증을 반복 (삭제한 항목을 헤드라인·리드가 쓰고 있으면 다음 검증에서 잡힌다). 최대 2회 */
+/** 삭제 → 전체 재검증을 반복 (삭제한 항목을 헤드라인·리드가 쓰고 있으면 다음 검증에서 잡힌다). 최대 2회. edits = 지운 항목 원문·사유 */
 export function dropAndRevalidate(
   content: BriefingContent,
   report: ValidationReport,
   ctx: ValidationContext
-): { content: BriefingContent; report: ValidationReport; dropped: string[]; unrecoverable: string[] } {
+): { content: BriefingContent; report: ValidationReport; dropped: string[]; unrecoverable: string[]; edits: ContentEdit[] } {
   let c = content;
   let r = report;
   const dropped: string[] = [];
+  const edits: ContentEdit[] = [];
   for (let pass = 0; pass < 2 && r.fatal.length; pass++) {
     const d = dropFatalItems(c, r.fatal);
     dropped.push(...d.dropped.map((x) => (pass ? `${x}(재검증)` : x)));
-    if (d.unrecoverable.length) return { content: c, report: r, dropped, unrecoverable: d.unrecoverable };
+    edits.push(...d.edits.map((e) => ({ ...e, round: pass ? "final(재검증)" : "final" })));
+    if (d.unrecoverable.length) return { content: c, report: r, dropped, unrecoverable: d.unrecoverable, edits };
     const v = validateKo(d.content, ctx);
     c = v.content;
     r = v.report;
   }
-  return { content: c, report: r, dropped, unrecoverable: [] };
+  return { content: c, report: r, dropped, unrecoverable: [], edits };
+}
+
+/** 부분 수리로 다시 쓸 수 없는 규칙 (항목·판 단위 — 문장을 고쳐도 안 풀림) */
+const NOT_TEXT_FIXABLE = new Set([
+  "schema", "missing_refs", "unknown_ref", "excluded_or_hidden_ref", "term", "china_centric", "duplicate_story", "shared_ref",
+  "subject_not_in_refs", "refs_all_irrelevant",
+]);
+
+/** 부분 수리 대상 칸: 남은 치명 중 문장으로 고칠 수 있는 것 (경로별 문제 묶음) */
+export function targetedRepairFields(c: BriefingContent, r: ValidationReport): { path: string; text: string; limit?: number; problems: string[] }[] {
+  const byPath = new Map<string, string[]>();
+  for (const f of r.fatal) {
+    if (NOT_TEXT_FIXABLE.has(f.rule)) continue;
+    const path = /^companies_to_watch\[\d+\]$/.test(f.path) ? `${f.path}.why` : f.path;
+    if (getField(c, path) === undefined) continue;
+    byPath.set(path, [...(byPath.get(path) ?? []), `[${f.rule}] ${f.detail}`]);
+  }
+  return [...byPath.entries()].map(([path, problems]) => ({
+    path,
+    text: getField(c, path) ?? "",
+    limit: path === "headline" ? HEADLINE_MAX : LIMITS.find(([re]) => re.test(path))?.[1] ?? (/companies_to_watch\[\d+\]\.why$/.test(path) ? 40 : undefined),
+    problems,
+  }));
+}
+
+/** 부분 수리 응답 → 판 (요청한 칸만 바꾼다). 반환: 바꾼 판과 기록 */
+export function applyTargetedRepair(c: BriefingContent, asked: string[], raw: unknown): { content: BriefingContent; edits: ContentEdit[] } {
+  const out = structuredClone(c);
+  const edits: ContentEdit[] = [];
+  const obj = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  for (const path of asked) {
+    const v = obj[path];
+    if (typeof v !== "string" || !v.trim()) continue;
+    const before = getField(out, path);
+    if (before === undefined || before === v.trim()) continue;
+    if (setField(out, path, v.trim())) edits.push({ action: "repair", path, reason: "부분 수리 (삭제 전 마지막 시도)", before, after: v.trim(), round: "targeted" });
+  }
+  return { content: out, edits };
 }
 
 async function generateKo(
@@ -207,19 +260,26 @@ async function generateKo(
   const user = buildUserPrompt(dateLabel, groups, previous);
   const minTop = mode === "normal" ? 3 : 1;
   const validation: Record<string, unknown> = { prompt_version: PROMPT_VERSION };
+  // 감사 기록 (2026-11-02 재감사 §7-8): 회차마다 결정적 정리·부분 수리·삭제 전 원문과 사유. 예전 trimmed_sentences(모든 회차 합집합)는 쓰인 회차 것만
+  const edits: ContentEdit[] = [];
+  const trimmedByRound: Record<string, string[]> = {};
 
-  // 결정적 정리: 괄호 병기 한자 삭제 + 여러 문장 필드는 넘친 끝 문장 삭제
-  const trimmed: string[] = [];
-  const prepare = (c: BriefingContent) => {
-    const f = fitSentenceLengths(stripParentheticalHan(c));
-    trimmed.push(...f.trimmed);
-    return f.content;
+  // 결정적 정리: 괄호 병기 한자 삭제 + 한자 사전 치환 + 넘친 끝 문장(·절) 삭제 + 같은 사건 항목 병합
+  const prepare = (c: BriefingContent, round: string) => {
+    const g = glossKoHan(stripParentheticalHan(c));
+    const f = fitSentenceLengths(g.content);
+    const m = mergeDuplicateItems(f.content, ctx);
+    trimmedByRound[round] = f.trimmed;
+    edits.push(...[...g.edits, ...f.edits, ...m.edits].map((e) => ({ ...e, round })));
+    return m.content;
   };
   cost.check();
   const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 8000 }, track);
   const parsed1 = normalizeContent(parseJsonContent(first.content));
-  let cur = validateKo(prepare(parsed1.content), ctx, parsed1.issues);
+  let cur = validateKo(prepare(parsed1.content, "initial"), ctx, parsed1.issues);
   validation.initial = cur.report;
+  // 핵심 기사 삭제 경고는 첫 판과도 비교한다 (10-29 S-1 은 삭제가 아니라 전체 수리 중에 사라졌다)
+  const initialContent = cur.content;
 
   // 중국 중심·헤드라인 길이·한자·길이도 치명이라 치명이 있으면 수리 (자동으로 자르지 않는다).
   // 1차 수리 뒤에도 삭제할 수 없는 항목(headline·lede·top_stories 전체 — 중국 중심 미달 포함)의 치명이 남으면 한 번 더 (최대 2회).
@@ -234,6 +294,7 @@ async function generateKo(
       const sim = dropAndRevalidate(cur.content, cur.report, ctx);
       if (!sim.unrecoverable.length && !sim.report.fatal.length) break;
     }
+    const label = round === 1 ? "repair" : `repair${round}`;
     try {
       cost.check();
       const extra = repairHints(cur.content, cur.report, groups);
@@ -241,15 +302,15 @@ async function generateKo(
       const reply = await chat({ system, messages, maxTokens: 8000 }, track);
       messages.push({ role: "assistant", content: reply.content });
       const parsed = normalizeContent(parseJsonContent(reply.content));
-      const repaired = validateKo(prepare(parsed.content), ctx, parsed.issues);
-      validation[round === 1 ? "repair" : `repair${round}`] = repaired.report;
+      const repaired = validateKo(prepare(parsed.content, label), ctx, parsed.issues);
+      validation[label] = repaired.report;
       // 수리본이 더 나쁘면(삭제할 수 없는 치명·전체 치명 증가, 주요 기사 감소) 이전 판 유지
       const better =
         unrecoverableCount(repaired.report) < unrecoverableCount(cur.report) ||
         (unrecoverableCount(repaired.report) === unrecoverableCount(cur.report) && repaired.report.fatal.length <= cur.report.fatal.length);
       if (better && repaired.report.stats.topStories >= Math.min(cur.report.stats.topStories, minTop)) {
         cur = repaired;
-        validation.used = round === 1 ? "repair" : `repair${round}`;
+        validation.used = label;
       }
     } catch (e) {
       if (e instanceof BudgetExceeded) throw e;
@@ -258,32 +319,79 @@ async function generateKo(
     }
   }
 
-  if (trimmed.length) validation.trimmed_sentences = [...new Set(trimmed)];
   // 수리 뒤에도 헤드라인만 치명이면(길이·1위 기사·최상급 등) 1위 기사 제목으로 대체 — 주간·월간의 결정적 제목 대체와 같은 방식.
   // 1위 기사 제목은 그 자체로 검증을 거친 문장이고 헤드라인 규칙(1위 기사)도 만족한다. 그래도 걸리면 판 failed.
   const fb = headlineFallback(cur.content, cur.report);
   if (fb) {
     const v = validateKo(fb, ctx);
     if (!v.report.fatal.some((f) => f.path === "headline")) {
+      edits.push({ action: "repair", path: "headline", reason: "헤드라인 치명 → 1위 기사 제목", before: cur.content.headline, after: fb.headline, round: "final" });
       cur = v;
       validation.fallbacks = ["headline"];
     }
   }
+
+  // 삭제 전 마지막 시도 (§7-3): ① 문장 하나만 문제면 그 문장만 지움 → ② 남은 치명 칸만 부분 수리 1회 → ③ 그래도 남으면 삭제
+  const beforeFinal = cur.content;
+  if (cur.report.fatal.length) {
+    const lf = localFixes(cur.content, cur.report.fatal);
+    if (lf.edits.length) {
+      edits.push(...lf.edits.map((e) => ({ ...e, round: "final" })));
+      cur = validateKo(lf.content, ctx);
+    }
+  }
+  const fields = cur.report.fatal.length ? targetedRepairFields(cur.content, cur.report) : [];
+  if (fields.length) {
+    try {
+      cost.check();
+      const reply = await chat(
+        { system, messages: [...messages, { role: "user", content: buildTargetedRepairPrompt(fields) }], maxTokens: 2000 },
+        track
+      );
+      const raw = parseJsonContent(reply.content);
+      const asked = fields.map((f) => f.path);
+      const tr = applyTargetedRepair(cur.content, asked, raw);
+      if (tr.edits.length) {
+        const v = validateKo(prepare(tr.content, "targeted"), ctx);
+        validation.targeted_repair = v.report;
+        // 칸마다 따로 받는다: 고친 칸에 치명이 남지 않은 것만 (09-16: 주목 기업 3칸은 고쳤는데 헤드라인이 33/32자가 돼 전체를 버렸다)
+        const stillBad = (p: string) => v.report.fatal.some((f) => f.path === p || f.path === p.replace(/\.why$/, "") || itemOf(f.path) === p);
+        const good = tr.edits.map((e) => e.path).filter((p) => !stillBad(p));
+        const partial = good.length === tr.edits.length ? { content: tr.content, edits: tr.edits } : applyTargetedRepair(cur.content, good, raw);
+        const pv = good.length === tr.edits.length ? v : validateKo(prepare(partial.content, "targeted"), ctx);
+        if (partial.edits.length && unrecoverableCount(pv.report) <= unrecoverableCount(cur.report) && pv.report.fatal.length < cur.report.fatal.length) {
+          edits.push(...partial.edits);
+          cur = pv;
+        }
+      }
+    } catch (e) {
+      if (e instanceof BudgetExceeded) throw e;
+      validation.targeted_repair_error = (e as Error).message;
+    }
+  }
+
   let content = cur.content;
+  let failure: string | null = null;
   if (cur.report.fatal.length) {
     const d = dropAndRevalidate(content, cur.report, ctx);
     validation.dropped_items = d.dropped;
-    if (d.unrecoverable.length) {
-      validation.final = d.report;
-      return { status: "failed", content: d.content, validation, usages, error: `삭제할 수 없는 항목의 치명 위반: ${d.unrecoverable.join(", ")}` };
-    }
+    edits.push(...d.edits);
+    if (d.unrecoverable.length) failure = `삭제할 수 없는 항목의 치명 위반: ${d.unrecoverable.join(", ")}`;
     cur = { content: d.content, report: d.report };
     content = cur.content;
   }
+  // 핵심 기사 삭제 경고: 여러 매체가 다룬 사건의 유일한 주요 기사가 검증으로 빠졌으면 리뷰어가 보게 남긴다
+  const keyDrops = [...droppedKeyStories(initialContent, content, ctx), ...droppedKeyStories(beforeFinal, content, ctx)].filter(
+    (w, i, all) => all.findIndex((x) => x.detail === w.detail) === i
+  );
+  if (keyDrops.length) cur = { ...cur, report: { ...cur.report, warn: [...cur.report.warn, ...keyDrops] } };
+  validation.edits = edits;
+  const usedTrim = trimmedByRound[String(validation.used)] ?? [];
+  if (usedTrim.length) validation.trimmed_sentences = usedTrim;
   validation.final = cur.report;
-  if (cur.report.fatal.length) return { status: "failed", content, validation, usages, error: "재검증 후에도 치명 위반이 남음" };
-  if (content.top_stories.length < minTop)
-    return { status: "failed", content, validation, usages, error: `주요 기사 ${content.top_stories.length}건 < ${minTop}건` };
+  if (!failure && cur.report.fatal.length) failure = "재검증 후에도 치명 위반이 남음";
+  if (!failure && content.top_stories.length < minTop) failure = `주요 기사 ${content.top_stories.length}건 < ${minTop}건`;
+  if (failure) return fallbackOutcome(failure, cur, groups, ctx, editionDate, validation, usages);
   // 최소 개수 (QA 권고 10): 못 미치면 짧은 판으로 내린다 (주요 기사 3건 이상일 때만 — 위에서 걸렀다)
   const short = minCountShortfall(content, mode);
   if (short.length) {
@@ -291,6 +399,37 @@ async function generateKo(
     return { status: "draft", content, validation, usages, mode: "short" };
   }
   return { status: "draft", content, validation, usages };
+}
+
+/**
+ * 세 번(첫 생성 + 수리 2회 + 부분 수리) 실패한 뒤의 대체 판 (§7-10): 짧은 판(검증 통과 주요 기사 ≥ 3) → 안 되면 제목만 판.
+ * 판이 없는 날을 만들지 않는다. 둘 다 draft — 발행 여부는 리뷰어가 정한다. 실패 사유는 validation.fallback_reason 에 남긴다.
+ */
+function fallbackOutcome(
+  reason: string,
+  cur: { content: BriefingContent; report: ValidationReport },
+  groups: CandidateGroup[],
+  ctx: ValidationContext,
+  editionDate: string,
+  validation: Record<string, unknown>,
+  usages: LlmUsage[]
+): KoOutcome {
+  validation.fallback_reason = reason;
+  const edits = (validation.edits as ContentEdit[] | undefined) ?? [];
+  const sf = shortFallback(cur.content, cur.report, ctx);
+  if (sf) {
+    edits.push({ action: "repair", path: "headline", reason: `대체 짧은 판: ${reason}`, before: cur.content.headline, after: sf.content.headline, round: "fallback" });
+    validation.edits = edits;
+    validation.fallback = "short";
+    const kept = cur.report.warn.filter((w) => w.rule === "dropped_key_story");
+    validation.final = { ...sf.report, warn: [...sf.report.warn, ...kept, { level: "warn", rule: "fallback_short", path: "headline", detail: `대체 짧은 판 — ${reason}` }] };
+    return { status: "draft", content: sf.content, validation, usages, mode: "short" };
+  }
+  const hl = headlinesEdition(groups, editionDate);
+  validation.fallback = "headlines";
+  validation.final = headlinesReport(hl, reason);
+  validation.edits = edits;
+  return { status: "draft", content: hl, validation, usages, mode: "headlines" };
 }
 
 export async function generateBriefing(opts: GenerateOptions = {}): Promise<GenerateResult> {
@@ -378,9 +517,14 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
       ko = await generateKo(dateLabel, mode, sel.groups, cost, period.periodStart, previous);
     } catch (e) {
       const msg = e instanceof LlmError || e instanceof BudgetExceeded ? e.message : `예상치 못한 오류: ${(e as Error).message}`;
-      const u = sumUsage(cost.usages);
-      await finishGenerating(koRow.id, { status: "failed", content: {}, articleIds: [], validation: null, model: BRIEFING_MODEL, promptVersion: PROMPT_VERSION, ...u, error: msg });
-      return { ...base, outcome: "failed", locales: [{ locale: "ko", id: koRow.id, version: koRow.version, status: "failed", fatal: 0, warn: 0, costUsd: u.costUsd, error: msg }], totalCostUsd: cost.total, message: msg };
+      if (!(e instanceof LlmError || e instanceof BudgetExceeded)) {
+        const u = sumUsage(cost.usages);
+        await finishGenerating(koRow.id, { status: "failed", content: {}, articleIds: [], validation: null, model: BRIEFING_MODEL, promptVersion: PROMPT_VERSION, ...u, error: msg });
+        return { ...base, outcome: "failed", locales: [{ locale: "ko", id: koRow.id, version: koRow.version, status: "failed", fatal: 0, warn: 0, costUsd: u.costUsd, error: msg }], totalCostUsd: cost.total, message: msg };
+      }
+      // LLM 장애·비용 상한: 판 없는 날을 만들지 않도록 제목만 판(LLM 문장 없음)을 draft 로 남긴다 (fallback.ts)
+      const hl = headlinesEdition(sel.groups, period.periodStart);
+      ko = { status: "draft", content: hl, validation: { prompt_version: PROMPT_VERSION, fallback: "headlines", fallback_reason: msg, final: headlinesReport(hl, msg) }, usages: [...cost.usages], mode: "headlines" };
     }
 
     const finalReport = ko.validation.final as ValidationReport | undefined;
@@ -405,7 +549,8 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
       fatal: finalReport?.fatal.length ?? 0, warn: finalReport?.warn.length ?? 0, costUsd: koUsage.costUsd, error: ko.error,
     });
 
-    if (ko.status === "draft" && ko.content) {
+    // 제목만 판(headlines)은 LLM 문장이 없어 번역하지 않는다 (ko 만)
+    if (ko.status === "draft" && ko.content && ko.mode !== "headlines") {
       for (const target of ["en", "zh"] as const) {
         let tr;
         try {
@@ -431,7 +576,11 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
       }
     }
 
-    return { ...base, outcome: ko.status === "draft" ? "generated" : "failed", locales, totalCostUsd: cost.total, message: ko.error };
+    const fb = ko.validation.fallback as string | undefined;
+    return {
+      ...base, outcome: ko.status === "draft" ? "generated" : "failed", locales, totalCostUsd: cost.total, message: ko.error,
+      ...(fb ? { fallback: fb, fallbackReason: String(ko.validation.fallback_reason ?? "") } : {}),
+    };
   });
 
   return (

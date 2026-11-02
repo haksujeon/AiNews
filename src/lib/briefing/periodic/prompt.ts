@@ -7,14 +7,18 @@
 import { BACKFILL_CAPS, type PeriodMetrics } from "../../metrics/period";
 import type { ValidationIssue } from "../types";
 import { groupPeriodStories, type PeriodStoryInput } from "../select";
-import { moneyIssues, type SourceDoc } from "../rules";
+import { chinaByRegion, moneyIssues, type SourceDoc } from "../rules";
 import type { PeriodicKind, StoryPoolItem, WeeklyContent } from "./types";
 
 // 프롬프트를 바꾸면 버전을 올린다 (input_hash 에 들어감)
 // weekly v3 / monthly v2 (2026-11-02 편집 QA): 사건 단위 후보, MONEY 표에서 매출·가치·통화 불일치 행 제외,
 //   금액 서열 금지, "가장 많이" 는 지표 1위만, 매체 수 그대로, 수리 지시문 금지
-export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v3-2026-11-02";
-export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v2-2026-11-02";
+// weekly v4 / monthly v3: 중국 주체 = 근거 기사 대상 지역(subject_region) — STORIES 에 region(사건 기사 지역 다수결)·cn 표시
+// weekly v5 / monthly v4 (재감사 round 2): MONEY 의 같은 거래(통화만 다름)는 한 행, 기간 밖 거래 제외(지표 v4),
+//   월간 WEEK_STORIES — month_arc 의 refs 는 그 주의 사건만, 증감·쏠림 표현('열풍·확산·몰리')도 증감 지표 필요
+// weekly v6 / monthly v5: 수리 지시 — 방향 충돌 문장은 지우거나 FACTS 값을 그대로 인용 (사실 뒤집기 금지)
+export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v6-2026-11-02";
+export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v5-2026-11-02";
 export const WEEKLY_HEADLINE_MAX = 36;
 export const WEEKLY_STORY_LIMIT = 50;
 export const MONTHLY_STORY_LIMIT = 60;
@@ -162,8 +166,18 @@ export function buildStoryPool(stories: PoolStory[], money: PeriodMetrics["money
   }
   for (const r of money) {
     if (seen.has(r.id)) continue;
-    pool.push({ ids: [r.id], title_kr: r.title_kr, summary_kr: "", sources: [r.source], days: [r.day], entities: r.entities });
+    // 같은 거래를 다른 통화로 쓴 기사(same_deal)도 같은 후보로 (한 거래 = 한 S id)
+    const same = (r.same_deal ?? []).filter((x) => !seen.has(x.id));
+    pool.push({
+      ids: [r.id, ...same.map((x) => x.id)],
+      title_kr: r.title_kr,
+      summary_kr: "",
+      sources: [...new Set([r.source, ...same.map((x) => x.source)])],
+      days: [...new Set([r.day, ...same.map((x) => x.day)])].sort(),
+      entities: r.entities,
+    });
     seen.add(r.id);
+    same.forEach((x) => seen.add(x.id));
   }
   return pool.map((p, i) => ({ ...p, sid: `S${String(i + 1).padStart(2, "0")}` }));
 }
@@ -173,7 +187,7 @@ function schema(kind: PeriodicKind, weekKeys: string[]): string {
   const arc =
     kind === "monthly"
       ? `
- "month_arc": [ {"week":"${weekKeys.join("|")}","text":"그 주의 흐름 한 문장 90자 이내","refs":["S.."],"metrics":["week.W.. 키"]} ],  // 주마다 1개, ${weekKeys.length}개`
+ "month_arc": [ {"week":"${weekKeys.join("|")}","text":"그 주의 흐름 한 문장 90자 이내","refs":["WEEK_STORIES 에서 그 주의 S.. 만"],"metrics":["week.W.. 키"]} ],  // 주마다 1개, ${weekKeys.length}개`
       : "";
   return `{
  "headline": "${W.cur}를 한 줄로, 공백 포함 ${WEEKLY_HEADLINE_MAX}자 이내 (엄수)",
@@ -207,7 +221,7 @@ export function buildPeriodicSystemPrompt(kind: PeriodicKind, weekKeys: string[]
 4. 문장에 나오는 기업·인물·제품 이름은 refs 기사에 나와야 합니다.
 ${volumeRule}
 6. 언급 건수는 "중국 매체가 다룬 기사 수"입니다. 시장 점유율·인기·실적으로 해석하지 마십시오("언급이 늘었다"는 OK, "영향력이 커졌다"는 근거가 있을 때만).
-7. 중국 중심: big_picture 중 2개 이상은 중국 기업·기관·시장이 주체인 흐름이어야 합니다. 해외 기업 이야기는 중국 매체의 시각이나 중국 영향으로 씁니다.
+7. 중국 중심: big_picture 중 2개 이상은 중국 기업·기관·시장이 주체인 흐름이어야 합니다. "중국 주체"는 refs 사건의 region(기사 대상 지역)이 CN 인 것입니다(STORIES 의 cn:true, 대만·홍콩 기사도 CN). 중국 흐름의 refs 는 cn:true 사건 위주로 답니다. 해외 기업 이야기는 중국 매체의 시각이나 중국 영향으로 씁니다.
 8. 한국어 문장에 한자를 쓰지 마십시오(term.term 만 예외). 과장·추측·투자 권유 금지. 간결한 평서문(~했다, ~이다).
 9. 순위·배수·"최대/최초" 같은 서열 표현은 기사에 그 표현이 그대로 있을 때만 씁니다. 통화가 다른 금액끼리 크기를 비교하지 마십시오.
 10. 증감("늘었다·줄었다")을 말하면 그 증감을 담은 FACTS 키(.chg / .rise / .fall / vol.lfl_change / week.*)를 metrics 에 넣고, 지표의 방향(+/-, 늘어난 용어/줄어든 용어)과 같은 방향으로 씁니다.
@@ -219,6 +233,10 @@ ${volumeRule}
 16. "두 매체가 전했다" 처럼 매체 수를 말할 때는 refs 의 sources 수 그대로 씁니다. china_lens 에서 "국내 기업 위주·해외 기업 위주" 는 cvo.china / cvo.foreign 값이 큰 쪽으로만 씁니다.
 17. "주도·주류·재편·가열·이동" 같은 추세 단정과 "최초·최대·역대" 는 기사에 그 표현이 있을 때만, 기사가 "전망·가능성·중 하나" 로 한정했으면 한정을 그대로 씁니다.
 18. STORIES 는 사건 단위입니다(같은 사건의 여러 날·여러 글이 한 id). 매체 수(sources)가 가장 많은 사건 1·2위는 big_picture 나 movers 에 반영합니다. 같은 사건을 두 항목에 나눠 쓰지 마십시오.
+19. "열풍·붐·쏠림·확산·몰리다" 도 증감 주장입니다 — 증감 FACTS 키(.chg/.rise/.fall/vol.lfl_change/week.*)가 없으면 쓰지 마십시오. 기사의 숫자("호출량 801% 급증")로 말하는 증감은 그 기사 표현 그대로 쓰고, 언급 수 지표와 섞지 마십시오.
+20. MONEY 의 한 행은 거래 하나입니다. "(= …, 같은 거래)" 로 붙은 다른 통화 금액은 같은 거래이므로 두 거래로 나열하지 마십시오.${
+    kind === "monthly" ? "\n21. month_arc 의 각 주 refs 에는 WEEK_STORIES 에 그 주로 나온 S id 만 넣습니다(다른 주 사건 금지)." : ""
+  }
 
 출력: 아래 스키마의 JSON 하나만. 코드 펜스·설명 금지.
 ${schema(kind, weekKeys)}`;
@@ -257,6 +275,16 @@ export function moneyRowProblem(row: PeriodMetrics["money_table"][number], docs:
   return null;
 }
 
+/** STORIES 한 줄의 지역 표시: 사건 기사들의 대표 지역 최빈값(region) + 중국 주체 여부(cn, 검증기와 같은 chinaByRegion). 판정이 없으면 표시 없음 */
+export function storyRegion(docs: SourceDoc[] | undefined): { region?: string; cn?: true } {
+  const judged = (docs ?? []).filter((d) => d.subject_region);
+  if (!judged.length) return {};
+  const counts = new Map<string, number>();
+  for (const d of judged) counts.set(d.subject_region!, (counts.get(d.subject_region!) ?? 0) + 1);
+  const region = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+  return { region, ...(chinaByRegion([judged]) ? { cn: true as const } : {}) };
+}
+
 export function buildPeriodicUserPrompt(
   m: PeriodMetrics,
   facts: Record<string, string>,
@@ -290,20 +318,26 @@ export function buildPeriodicUserPrompt(
         `${w.key} | ${w.start}~${w.end} | ${w.days}일 중 완전 ${w.complete_days}일 | ${w.coverage === "full" ? "완전" : w.coverage === "reduced" ? "축소 수집" : "부분 수집 포함"}`
     )
     .join("\n");
+  // 월간: 주마다 그 주에 날짜가 있는 사건 (month_arc refs 는 여기서만)
+  const weekStories = (m.weeks ?? [])
+    .map((w) => `${w.key}: ${pool.filter((p) => p.days.some((d) => d >= w.start && d <= w.end)).map((p) => p.sid).join(", ") || "(없음)"}`)
+    .join("\n");
   return `PERIOD: ${period}
-DATA_QUALITY: ${dataQualityLine(m)}${weeks ? `\nWEEKS:\n${weeks}` : ""}
+DATA_QUALITY: ${dataQualityLine(m)}${weeks ? `\nWEEKS:\n${weeks}` : ""}${weekStories ? `\nWEEK_STORIES (month_arc 의 주별 refs 후보):\n${weekStories}` : ""}
 FACTS (key = 값 문자열):
 ${Object.entries(facts)
   .map(([k, x]) => `${k} = ${x}`)
   .join("\n")}
 
 MONEY (제목에 나온 거래 금액, 합산·크기 비교 금지):
-${kept.map((r) => `${sidOf.get(r.id) ?? "?"} | ${r.day} | ${r.kind} | ${r.amount} | ${r.title_kr}`).join("\n")}${moneyNote}
+${kept
+  .map((r) => `${sidOf.get(r.id) ?? "?"} | ${r.day} | ${r.kind} | ${r.amount}${r.same_deal?.length ? ` (= ${r.same_deal.map((x) => x.amount).join(", ")}, 같은 거래)` : ""} | ${r.title_kr}`)
+  .join("\n")}${moneyNote}
 
 STORIES (${pool.length}건, sources = 함께 다룬 매체):
 ${pool
   .map((p) =>
-    JSON.stringify({ id: p.sid, sources: p.sources, days: p.days, ent: p.entities, title_kr: p.title_kr, summary_kr: (p.summary_kr || "").slice(0, 200) })
+    JSON.stringify({ id: p.sid, sources: p.sources, days: p.days, ent: p.entities, ...storyRegion(docs?.get(p.sid)), title_kr: p.title_kr, summary_kr: (p.summary_kr || "").slice(0, 200) })
   )
   .join("\n")}`;
 }
@@ -320,7 +354,7 @@ ${lines}
 
 문제가 된 항목만 고쳐서 같은 스키마의 JSON 전체를 다시 출력하십시오.
 - 근거에 없는 숫자·기업명·서열 표현은 FACTS 값이나 refs 기사에 나온 표현으로 바꾸거나 문장에서 뺍니다.
-- 증감을 말하는 문장에는 그 증감 FACTS 키를 metrics 에 넣고, 지표 방향과 반대되는 표현("줄었는데 열풍")을 고칩니다.
+- 증감을 말하는 문장에는 그 증감 FACTS 키를 metrics 에 넣습니다. 지표 방향과 반대되는 문장("줄었는데 열풍")은 지우십시오. 다시 쓸 때는 FACTS 값 문자열을 그대로 인용합니다(예: "智能体 84건→55건"). 기사에 나온 사실(호출량·매출 등)의 방향은 바꾸지 마십시오.
 - ${volume}. 통화가 다른 금액끼리 크기를 비교하지 않습니다.
 - metrics 에 넣은 지표의 대상이 문장에 없으면 그 지표를 빼거나 문장에 대상을 씁니다.
 - headline 이 ${WEEKLY_HEADLINE_MAX}자를 넘었다면 뜻을 유지한 채 ${WEEKLY_HEADLINE_MAX}자 이내로 다시 씁니다.

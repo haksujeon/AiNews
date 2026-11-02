@@ -156,6 +156,28 @@ test("수정 2회 뒤에도 미달 → 초안 유지 (검토 최대 3회)", asyn
   assert.match(r.processed[0].steps.at(-1)!.detail, /수정 2회 뒤에도 미달|고칠|적용할 수정이 없음/);
 });
 
+test("제목만 판(mode headlines) → AI 검토 없이 결정적 조건으로 자동 발행 + 대체 판 알림", async () => {
+  const content = {
+    headline: "10월 28일 중국 AI 주요 기사",
+    lede: "오늘은 자동 검증을 통과한 요약을 만들지 못해 주요 기사 제목과 원문 링크만 싣습니다.",
+    lede_refs: [],
+    top_stories: [1, 2, 3].map((i) => ({ rank: i, section: "industry", subject: "", subject_is_chinese: true, title: `기사 ${i}`, what: "보도: 36Kr", why: "", refs: [], primary_ref: "" })),
+    sections: [], key_numbers: [], companies_to_watch: [], term_of_the_day: null, clusters: [], excluded: [],
+  };
+  const row = dailyRow({ id: "hl-1", mode: "headlines", content, validation: { fallback: "headlines", fallback_reason: "3회 실패", final: { fatal: [], warn: [] } } });
+  const inp = fakeInput(row, { genLog: { fallback: "headlines", fallbackReason: "3회 실패", targetedRepair: false, edits: [], warns: [] } });
+  const h = harness([], new Map([[row.id, inp]]));
+  const r = await runReviewPipeline({ briefingId: row.id, policy }, h.deps);
+  assert.equal(h.chats, 0, "LLM 을 부르지 않는다");
+  assert.deepEqual(h.published, [{ id: "hl-1", version: 3 }]);
+  assert.match(r.message, /대체 판 제목만: 3회 실패/);
+  assert.equal(r.notify, true);
+  const off = harness([], new Map([[row.id, inp]]));
+  await runReviewPipeline({ briefingId: row.id, policy: policyFromEnv({ BRIEFING_AUTO_PUBLISH_HEADLINES: "off" }) }, off.deps);
+  assert.equal(off.published.length, 0);
+  assert.equal(off.decisions.at(-1)!.decision.action, "hold");
+});
+
 test("검토 응답이 스키마 오류면 결정 없이 다음 호출로 (발행 없음)", async () => {
   const h = harness([() => ({ verdict: "PASS" })], new Map([[ORIG.id, fakeInput(ORIG)]]));
   const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
