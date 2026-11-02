@@ -64,7 +64,7 @@ export default async function NewsDetailPage({ params }: Props) {
     notFound();
   }
 
-  const relatedNews = await fetchRelatedNews(news.id, news.country, news.category);
+  const relatedNews = await fetchRelatedNews(news.id);
 
   // 구조화 데이터: NewsArticle(번역 전문 articleBody 없음) + BreadcrumbList(홈 → 기사). 발행자는 레이아웃과 같은 organizationLd.
   const [tm, ts] = await Promise.all([getTranslations({ locale, namespace: "meta" }), getTranslations({ locale, namespace: "seo" })]);

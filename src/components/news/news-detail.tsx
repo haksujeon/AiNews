@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { ArrowLeft, Minus, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import type { NewsItem } from "@/lib/supabase";
+import { ArrowLeft } from "lucide-react";
 import type { PublicNewsItem } from "@/lib/news-gist";
+import type { RelatedSections } from "@/lib/related-types";
 import {
   getTitle,
   getSummary,
@@ -16,15 +14,16 @@ import {
   getSentimentLabel,
   getSourceName,
 } from "@/lib/news-utils";
-import { NewsCard } from "./news-card";
 import { NewsThumbnail } from "./news-thumbnail";
 import { ArticleKicker } from "./article-kicker";
 import { ArticleBody, ArticleByline, KeyTerms } from "./article-body";
+import { RelatedSectionsView } from "./related-sections";
 
 interface NewsDetailProps {
   /** 서버에서 toPublicNewsItem() 을 거친 기사(번역 전문 없음, gist 만) */
   news: PublicNewsItem;
-  relatedNews: NewsItem[];
+  /** 관련 기사 세 묶음 (src/lib/related.ts findRelated — 모달과 같은 함수·같은 컴포넌트) */
+  relatedNews: RelatedSections;
 }
 
 /**
@@ -34,9 +33,6 @@ interface NewsDetailProps {
 export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
   const locale = useLocale();
   const t = useTranslations("detail");
-  const [relatedCount, setRelatedCount] = useState(3);
-  // 관련 기사는 이제 관련 있는 것만 온다(0~4건, src/lib/related.ts). 표시 수·버튼·격자는 실제 건수를 넘지 않게
-  const shown = Math.min(relatedCount, relatedNews.length);
 
   const title = getTitle(news, locale);
   const summary = getSummary(news, locale);
@@ -121,55 +117,8 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
         </aside>
       </div>
 
-      {/* Related news */}
-      {relatedNews.length > 0 && (
-        <section className="mt-16">
-          <div className="mb-6 flex items-center justify-between border-b border-rule-strong pb-2">
-            <h2 className="text-lg font-bold text-ink">{t("relatedNews")}</h2>
-            {relatedNews.length > 1 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={shown <= 1}
-                  onClick={() => setRelatedCount(Math.max(1, shown - 1))}
-                  aria-label={t("fewerRelated")}
-                >
-                  <Minus className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <span className="w-6 text-center text-sm text-ink-2" aria-live="polite">{shown}</span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={shown >= Math.min(4, relatedNews.length)}
-                  onClick={() => setRelatedCount(Math.min(4, relatedNews.length, shown + 1))}
-                  aria-label={t("moreRelated")}
-                >
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </div>
-            )}
-          </div>
-          <div
-            className={`grid gap-x-8 gap-y-6 ${
-              // 칸 수는 고른 표시 수(relatedCount) 기준 — 결과가 1건이어도 카드가 화면 폭 전체로 커지지 않게
-              relatedCount === 1
-                ? "grid-cols-1"
-                : relatedCount === 2
-                  ? "grid-cols-1 md:grid-cols-2"
-                  : relatedCount === 3
-                    ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
-            }`}
-          >
-            {relatedNews.slice(0, shown).map((item) => (
-              <NewsCard key={item.id} item={item} />
-            ))}
-          </div>
-        </section>
-      )}
+      {/* 관련 기사: 같은 사건 다른 매체 / 관련 흐름·후속 / 같은 기업 — 빈 묶음은 숨김 */}
+      <RelatedSectionsView sections={relatedNews} locale={locale} variant="page" headingTag="h2" className="mt-16" />
     </article>
   );
 }

@@ -65,6 +65,15 @@
     "toneLabel": "论调",
     "sourceLabel": "来源"
   },
+  "related": {
+    "title": "相关报道",
+    "sameEvent": "同一事件·其他媒体",
+    "flow": "相关脉络·后续报道",
+    "company": "同一公司动态",
+    "daysBefore": "{n}天前",
+    "daysAfter": "{n}天后",
+    "outletLink": "{outlet}：{title}"
+  },
   "admin": {
     "login": "管理员登录",
     "sendHistory": "发送记录",

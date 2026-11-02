@@ -65,6 +65,15 @@
     "toneLabel": "Tone",
     "sourceLabel": "Source"
   },
+  "related": {
+    "title": "Related coverage",
+    "sameEvent": "Same story, other outlets",
+    "flow": "Background & follow-ups",
+    "company": "More on the same company",
+    "daysBefore": "{n, plural, one {# day earlier} other {# days earlier}}",
+    "daysAfter": "{n, plural, one {# day later} other {# days later}}",
+    "outletLink": "{outlet}: {title}"
+  },
   "admin": {
     "login": "Admin Login",
     "sendHistory": "Send History",

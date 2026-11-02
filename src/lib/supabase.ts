@@ -8,7 +8,7 @@ import { NEWS_PAGE_SIZE, NEWS_DAYS_PER_PAGE, NEWS_DAY_TOP } from './news-types';
 import { buildNewsWhere, EMPTY_FILTERS, PUBLIC_NEWS_WHERE, type NewsFilters } from './news-query';
 import { SCOPE_CATEGORIES, publicCategoriesOf } from './categories';
 import { LIST_FIELDS } from './news-fields';
-import { findRelated } from './related';
+import { findRelated, type RelatedSections } from './related';
 import { citedRanksFromTopStories, splitDay, type DaySplit, type RankableArticle } from './news-rank';
 import { EDITION_TYPE } from './briefing/repository';
 import { buildWeeklyTrend, type StatisticsData } from './statistics-utils';
@@ -275,13 +275,8 @@ export const fetchNewsById = cache(async (id: string): Promise<NewsItem | null> 
 });
 
 /**
- * 상세 페이지 관련 기사. 모달(/api/news/related)과 같은 src/lib/related.ts findRelated 를 쓴다 (Gate 2).
- * 예전 호출부 모양(newsId, country, category)을 그대로 받되, 순위는 기준 기사 id 만으로 정한다.
+ * 상세 페이지 관련 기사 세 묶음. 모달(/api/news/related)과 같은 src/lib/related.ts findRelated 를 쓴다 (Gate 2).
  */
-export async function fetchRelatedNews(
-  newsId: string,
-  ..._legacy: (string | null)[]
-): Promise<NewsItem[]> {
-  void _legacy;
+export async function fetchRelatedNews(newsId: string): Promise<RelatedSections> {
   return findRelated(newsId);
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { requireIngestToken } from '@/lib/ingest-auth';
+import { scheduleRelatedCompute } from '@/lib/related';
 
 // POST /api/news/upsert
 // n8n 워크플로우에서 호출: 뉴스 아이템 upsert
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
     let upserted = 0;
     let inserted = 0;
     let updated = 0;
+    const touched: string[] = [];
     for (const raw of items) {
       if (!raw || typeof raw !== 'object') continue;
       const item: Record<string, unknown> = { ...raw };
@@ -83,13 +85,18 @@ export async function POST(request: NextRequest) {
       const { rows } = await pool.query(
         `INSERT INTO ai_news_ex (${cols}) VALUES (${placeholders})
          ${onConflict}
-         RETURNING (xmax = 0) AS inserted`,
+         RETURNING id, (xmax = 0) AS inserted`,
         vals
       );
       upserted++;
       if (rows[0]?.inserted) inserted++;
       else updated++;
+      if (rows[0]?.id) touched.push(String(rows[0].id));
     }
+
+    // 관련 기사(related_articles) 미리 계산 — 응답을 보낸 뒤(after) 돌므로 upsert 응답 시간은 그대로다.
+    // 다른 기사들의 관련 기사는 "계산 뒤 새 기사" 조건으로 다음 조회 때 다시 계산된다 (src/lib/related.ts).
+    await scheduleRelatedCompute(touched);
 
     return NextResponse.json({ ok: true, upserted, inserted, updated });
   } catch (e) {

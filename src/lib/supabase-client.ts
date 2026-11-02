@@ -2,6 +2,7 @@ import type { NewsItem } from "@/lib/supabase";
 import type { NewsDaysPage, NewsDayRest } from "@/lib/news-types";
 import type { PublicNewsItem } from "@/lib/news-gist";
 import { apiUrl } from "@/lib/api-path";
+import { EMPTY_RELATED, type RelatedSections } from "@/lib/related-types";
 import { filtersToParams, EMPTY_FILTERS, type NewsFilters } from "@/lib/news-query";
 
 export interface NewsPageResult {
@@ -106,13 +107,13 @@ export async function fetchNewsDetailClient(
   return res.json();
 }
 
-/** 관련 기사 (상세 페이지와 같은 findRelated). 기준 기사 id 만으로 정해진다 */
-export async function fetchRelatedNewsClient(
-  newsId: string,
-  limit: number = 4
-): Promise<NewsItem[]> {
-  const params = new URLSearchParams({ id: newsId, limit: String(limit) });
+/** 관련 기사 세 묶음 (상세 페이지와 같은 findRelated). 기준 기사 id 만으로 정해진다 */
+export async function fetchRelatedNewsClient(newsId: string): Promise<RelatedSections> {
+  const params = new URLSearchParams({ id: newsId });
   const res = await fetch(apiUrl(`/api/news/related?${params.toString()}`));
-  if (!res.ok) return [];
-  return res.json();
+  if (!res.ok) return EMPTY_RELATED;
+  const data = (await res.json()) as Partial<RelatedSections> | null;
+  // 응답 모양이 어긋나도(옛 배열 응답 등) 화면이 깨지지 않게
+  const list = (v: unknown) => (Array.isArray(v) ? (v as RelatedSections["flow"]) : []);
+  return { sameEvent: list(data?.sameEvent), flow: list(data?.flow), company: list(data?.company) };
 }

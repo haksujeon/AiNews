@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
-import { Minus, Plus } from "lucide-react";
+import { useLocale } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -10,15 +9,14 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import type { NewsItem } from "@/lib/supabase";
 import type { PublicNewsItem } from "@/lib/news-gist";
+import { EMPTY_RELATED, type RelatedSections } from "@/lib/related-types";
 import { fetchRelatedNewsClient } from "@/lib/supabase-client";
 import { getTitle, getImageUrl } from "@/lib/news-utils";
-import { Link } from "@/i18n/navigation";
 import { NewsThumbnail } from "./news-thumbnail";
 import { ArticleKicker } from "./article-kicker";
 import { ArticleBody, ArticleByline, KeyTerms } from "./article-body";
+import { RelatedSectionsView } from "./related-sections";
 
 interface NewsDetailModalProps {
   /** 가로채기 라우트가 서버에서 toPublicNewsItem() 으로 만든 기사(요지 포함, 번역 전문 없음) */
@@ -34,24 +32,22 @@ interface NewsDetailModalProps {
 // 다시 불러 그동안 로딩 표시 → 본문으로 바뀌며 높이가 튀었다(Gate 3). 이제 관련 기사만 따로 불러온다.
 export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalProps) {
   const locale = useLocale();
-  const t = useTranslations("detail");
-  const [relatedNews, setRelatedNews] = useState<NewsItem[]>([]);
-  const [relatedCount, setRelatedCount] = useState(2);
+  const [relatedNews, setRelatedNews] = useState<RelatedSections>(EMPTY_RELATED);
 
   useEffect(() => {
     // 관련 기사로 연속 이동할 때 늦게 도착한 이전 기사 응답이 덮어쓰지 않도록 한다.
     let cancelled = false;
     if (open && news) {
-      fetchRelatedNewsClient(news.id, 4)
+      fetchRelatedNewsClient(news.id)
         .then((related) => {
           if (!cancelled) setRelatedNews(related);
         })
         .catch(() => {
-          if (!cancelled) setRelatedNews([]);
+          if (!cancelled) setRelatedNews(EMPTY_RELATED);
         });
     }
     if (!open) {
-      setRelatedNews([]);
+      setRelatedNews(EMPTY_RELATED);
     }
     return () => {
       cancelled = true;
@@ -60,9 +56,6 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
   }, [open, news?.id]);
 
   if (!news) return null;
-
-  // 관련 기사는 관련 있는 것만 온다(0~4건). 표시 수·버튼은 실제 건수를 넘지 않게
-  const shown = Math.min(relatedCount, relatedNews.length);
 
   const fullItem = news;
   const title = getTitle(fullItem, locale);
@@ -94,58 +87,9 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
           <ArticleBody news={fullItem} locale={locale} headingTag="h3" />
           <KeyTerms terms={fullItem.key_terms} locale={locale} headingTag="h3" />
 
-          {/* Related news */}
-          {relatedNews.length > 0 && (
-            <section>
-              <div className="mb-1 flex items-center justify-between border-b border-rule-strong pb-2">
-                <h3 className="text-sm font-bold text-ink">{t("relatedNews")}</h3>
-                {relatedNews.length > 1 && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={shown <= 1}
-                      onClick={() => setRelatedCount(Math.max(1, shown - 1))}
-                      aria-label={t("fewerRelated")}
-                    >
-                      <Minus className="h-3.5 w-3.5" aria-hidden="true" />
-                    </Button>
-                    <span className="w-5 text-center text-sm text-ink-2" aria-live="polite">{shown}</span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={shown >= Math.min(4, relatedNews.length)}
-                      onClick={() => setRelatedCount(Math.min(4, relatedNews.length, shown + 1))}
-                      aria-label={t("moreRelated")}
-                    >
-                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
-                {relatedNews.slice(0, shown).map((item) => (
-                  // 관련 기사도 카드와 같은 링크 경로. replace 로 이동해 모달을 닫으면(back)
-                  // 이전 기사가 아니라 목록으로 돌아가게 한다.
-                  <Link
-                    key={item.id}
-                    href={`/news/${item.id}`}
-                    replace
-                    scroll={false}
-                    prefetch={false}
-                    className="group block space-y-1.5 rounded-sm border-b border-rule py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <ArticleKicker category={item.category} sourceName={item.source_name} locale={locale} />
-                    <p className="text-[15px] font-semibold leading-snug text-ink line-clamp-2 decoration-1 underline-offset-[3px] group-hover:underline">
-                      {getTitle(item, locale)}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
+          {/* 관련 기사 세 묶음 — 상세 페이지와 같은 컴포넌트·같은 findRelated. 본문 아래 마지막 블록이라 늦게 도착해도
+              위 내용이 밀리지 않는다(Gate 3) */}
+          <RelatedSectionsView sections={relatedNews} locale={locale} variant="modal" headingTag="h3" />
         </div>
       </DialogContent>
     </Dialog>
