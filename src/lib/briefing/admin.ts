@@ -9,13 +9,17 @@
  */
 import pool from "@/lib/db";
 import { PUBLIC_NEWS_WHERE } from "@/lib/news-query";
-import { EDITION_TYPE, insertBriefing, type BriefingRow } from "./repository";
+import { ROW_COLUMNS, insertBriefing, type BriefingRow, type EditionType } from "./repository";
 import type { BriefingContent, CandidateArticle, StoredBriefingContent, ValidationIssue, ValidationReport } from "./types";
 import { citedRefs, contextFromArticles, validateKo } from "./validate";
 
 export interface AdminBriefingListRow {
   id: string;
+  edition_type: EditionType;
   edition_date: string;
+  period_end: string | null;
+  /** 주간·월간: 결손일 등 데이터 알림이 있어 발행 전 확인이 필요한가 */
+  data_quality: boolean;
   locale: string;
   version: number;
   status: string;
@@ -31,32 +35,31 @@ export interface AdminBriefingListRow {
   published_at: string | null;
 }
 
-/** 최근 판 목록. 치명·경고 수: ko 는 validation.final, en/zh 는 번역 재검증 문제 수(치명으로 셈) */
-export async function listBriefingsForAdmin(limit = 150): Promise<AdminBriefingListRow[]> {
+/**
+ * 최근 판 목록. 치명·경고 수: ko 는 validation.final, en/zh 는 번역 재검증 문제 수(치명으로 셈).
+ * editionType 을 주면 그 유형만 (관리자 목록의 유형 필터), 없으면 전체.
+ */
+export async function listBriefingsForAdmin(limit = 150, editionType?: EditionType): Promise<AdminBriefingListRow[]> {
   const { rows } = await pool.query(
-    `SELECT id, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, locale, version, status, mode,
+    `SELECT id, edition_type, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, to_char(period_end, 'YYYY-MM-DD') AS period_end,
+            COALESCE(jsonb_array_length(content->'meta'->'data_quality'->'incomplete_days'), 0) > 0 AS data_quality,
+            locale, version, status, mode,
             content->>'headline' AS headline, error, cost_usd, needs_review, source_briefing_id, created_at, published_at,
             CASE WHEN locale = 'ko' THEN COALESCE(jsonb_array_length(validation->'final'->'fatal'), 0)
                  ELSE COALESCE(jsonb_array_length(validation->'problems'), 0) END AS fatal,
             CASE WHEN locale = 'ko' THEN COALESCE(jsonb_array_length(validation->'final'->'warn'), 0) ELSE 0 END AS warn
        FROM daily_briefings
-      WHERE edition_type = $1
+      WHERE ($1::text IS NULL OR edition_type = $1)
       ORDER BY edition_date DESC, created_at DESC
       LIMIT $2`,
-    [EDITION_TYPE, limit]
+    [editionType ?? null, limit]
   );
   return rows as AdminBriefingListRow[];
 }
 
+/** 유형과 관계없이 id 로 한 행 (관리자 상세는 edition_type 을 보고 데일리/주간 화면을 고른다) */
 export async function getBriefingRow(id: string): Promise<BriefingRow | null> {
-  const { rows } = await pool.query(
-    `SELECT id, edition_type, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, locale, version, status, mode,
-            schema_version, content, article_ids, input_article_ids, candidate_count, input_hash, validation,
-            source_briefing_id, model, prompt_version, llm_request_ids, input_tokens, output_tokens, cost_usd, latency_ms,
-            error, needs_review, edited_by, created_at, updated_at, published_at
-       FROM daily_briefings WHERE id = $1::uuid AND edition_type = $2`,
-    [id, EDITION_TYPE]
-  );
+  const { rows } = await pool.query(`SELECT ${ROW_COLUMNS} FROM daily_briefings WHERE id = $1::uuid`, [id]);
   return (rows[0] as BriefingRow) ?? null;
 }
 
@@ -110,6 +113,7 @@ export async function saveEditedBriefing(
 ): Promise<SaveEditResult> {
   const row = await getBriefingRow(id);
   if (!row) return { ok: false, status: 404, message: "briefing not found" };
+  if (row.edition_type !== "daily") return { ok: false, status: 400, message: "only daily briefings can be edited inline" };
   if (row.locale !== "ko") return { ok: false, status: 400, message: "only ko versions can be edited" };
   const stored = row.content as unknown as StoredBriefingContent;
   if (!stored?.top_stories?.length || !["draft", "published", "superseded"].includes(row.status))

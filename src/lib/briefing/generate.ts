@@ -41,22 +41,24 @@ export function isValidEditionDate(date: string): boolean {
   return date <= beijingToday();
 }
 
-class BudgetExceeded extends Error {}
+export class BudgetExceeded extends Error {}
 
-class CostTracker {
+/** 1회 실행 비용 상한 추적. 데일리(BRIEFING_MAX_COST_USD)와 주간·월간(PERIODIC_MAX_COST_USD)이 같은 클래스를 쓴다 */
+export class CostTracker {
   usages: LlmUsage[] = [];
+  constructor(readonly max: number = MAX_COST) {}
   get total() {
     return Math.round(this.usages.reduce((s, u) => s + u.costUsd, 0) * 1e6) / 1e6;
   }
   check = () => {
-    if (this.total >= MAX_COST) throw new BudgetExceeded(`비용 상한 초과: $${this.total} ≥ $${MAX_COST}`);
+    if (this.total >= this.max) throw new BudgetExceeded(`비용 상한 초과: $${this.total} ≥ $${this.max}`);
   };
   add = (u: LlmUsage) => {
     this.usages.push(u);
   };
 }
 
-function sumUsage(list: LlmUsage[]) {
+export function sumUsage(list: LlmUsage[]) {
   return {
     llmRequestIds: list.map((u) => u.requestId).filter((x): x is string => Boolean(x)),
     inputTokens: list.reduce((s, u) => s + u.inputTokens, 0),

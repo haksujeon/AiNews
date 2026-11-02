@@ -11,12 +11,23 @@ import pool from "@/lib/db";
 import { PUBLIC_NEWS_WHERE } from "@/lib/news-query";
 import type { BriefingLocale, BriefingStatus, CandidateArticle, EditionMode } from "./types";
 
-export const EDITION_TYPE = "daily";
+/** 판 유형. 데일리·주간·월간이 같은 테이블·상태 기계·관리자 화면을 쓴다 (Gate 2) */
+export type EditionType = "daily" | "weekly" | "monthly";
+export const EDITION_TYPES: EditionType[] = ["daily", "weekly", "monthly"];
+/** 기본 유형 (인자를 주지 않은 호출 = 데일리) */
+export const EDITION_TYPE: EditionType = "daily";
+
+export function isEditionType(v: unknown): v is EditionType {
+  return typeof v === "string" && (EDITION_TYPES as string[]).includes(v);
+}
 
 export interface BriefingRow {
   id: string;
-  edition_type: string;
-  edition_date: string; // YYYY-MM-DD
+  edition_type: EditionType;
+  edition_date: string; // YYYY-MM-DD (주간·월간 = period_start)
+  period_start: string | null;
+  period_end: string | null;
+  metrics_id: string | null;
   locale: BriefingLocale;
   version: number;
   status: BriefingStatus;
@@ -44,7 +55,9 @@ export interface BriefingRow {
   published_at: string | null;
 }
 
-const ROW_COLUMNS = `id, edition_type, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, locale, version, status, mode,
+export const ROW_COLUMNS = `id, edition_type, to_char(edition_date, 'YYYY-MM-DD') AS edition_date,
+  to_char(period_start, 'YYYY-MM-DD') AS period_start, to_char(period_end, 'YYYY-MM-DD') AS period_end, metrics_id,
+  locale, version, status, mode,
   schema_version, content, article_ids, input_article_ids, candidate_count, input_hash, validation, source_briefing_id,
   model, prompt_version, llm_request_ids, input_tokens, output_tokens, cost_usd, latency_ms, error, needs_review,
   edited_by, created_at, updated_at, published_at`;
@@ -67,10 +80,20 @@ export async function loadCandidateArticles(date: string): Promise<CandidateArti
   return rows.map((r) => ({ ...r, key_terms: Array.isArray(r.key_terms) ? r.key_terms : [] })) as CandidateArticle[];
 }
 
-/** 날짜별 잠금. 이미 다른 실행이 잡고 있으면 null */
-export async function withDateLock<T>(date: string, fn: () => Promise<T>): Promise<T | null> {
+/** 잠금 키. 데일리는 예전 키를 그대로 써서 옛 코드와도 서로 막는다. 주간·월간은 periodic:weekly:2026-W44 처럼 */
+export function lockKey(date: string, editionType: EditionType = EDITION_TYPE, label?: string): string {
+  return editionType === "daily" ? `daily_briefing:${date}` : `periodic:${editionType}:${label ?? date}`;
+}
+
+/** 판별 잠금. 이미 다른 실행이 잡고 있으면 null */
+export async function withDateLock<T>(
+  date: string,
+  fn: () => Promise<T>,
+  editionType: EditionType = EDITION_TYPE,
+  label?: string
+): Promise<T | null> {
   const client: PoolClient = await pool.connect();
-  const key = `daily_briefing:${date}`;
+  const key = lockKey(date, editionType, label);
   try {
     const { rows } = await client.query("SELECT pg_try_advisory_lock(hashtext($1)) AS ok", [key]);
     if (!rows[0]?.ok) return null;
@@ -84,18 +107,24 @@ export async function withDateLock<T>(date: string, fn: () => Promise<T>): Promi
   }
 }
 
-export async function latestBriefing(date: string, locale: BriefingLocale): Promise<BriefingRow | null> {
+export async function latestBriefing(date: string, locale: BriefingLocale, editionType: EditionType = EDITION_TYPE): Promise<BriefingRow | null> {
   const { rows } = await pool.query(
     `SELECT ${ROW_COLUMNS} FROM daily_briefings
       WHERE edition_type = $1 AND edition_date = $2::date AND locale = $3
       ORDER BY version DESC LIMIT 1`,
-    [EDITION_TYPE, date, locale]
+    [editionType, date, locale]
   );
   return (rows[0] as BriefingRow) ?? null;
 }
 
 export interface NewBriefing {
+  /** 기본 'daily' */
+  editionType?: EditionType;
   date: string;
+  /** 기본: date ~ date (데일리) */
+  periodStart?: string;
+  periodEnd?: string;
+  metricsId?: string | null;
   locale: BriefingLocale;
   status: BriefingStatus;
   mode: EditionMode;
@@ -122,16 +151,18 @@ export async function insertBriefing(b: NewBriefing): Promise<{ id: string; vers
     `INSERT INTO daily_briefings
        (edition_type, edition_date, locale, version, status, mode, content, article_ids, input_article_ids,
         candidate_count, input_hash, validation, source_briefing_id, model, prompt_version, llm_request_ids,
-        input_tokens, output_tokens, cost_usd, latency_ms, error)
+        input_tokens, output_tokens, cost_usd, latency_ms, error, period_start, period_end, metrics_id)
      SELECT $1, $2::date, $3,
             COALESCE((SELECT MAX(version) FROM daily_briefings WHERE edition_type = $1 AND edition_date = $2::date AND locale = $3), 0) + 1,
-            $4, $5, $6::jsonb, $7::uuid[], $8::uuid[], $9, $10, $11::jsonb, $12, $13, $14, $15::text[], $16, $17, $18, $19, $20
+            $4, $5, $6::jsonb, $7::uuid[], $8::uuid[], $9, $10, $11::jsonb, $12, $13, $14, $15::text[], $16, $17, $18, $19, $20,
+            $21::date, $22::date, $23::uuid
      RETURNING id, version`,
     [
-      EDITION_TYPE, b.date, b.locale, b.status, b.mode, JSON.stringify(b.content ?? {}), b.articleIds, b.inputArticleIds,
+      b.editionType ?? EDITION_TYPE, b.date, b.locale, b.status, b.mode, JSON.stringify(b.content ?? {}), b.articleIds, b.inputArticleIds,
       b.candidateCount, b.inputHash, b.validation === undefined ? null : JSON.stringify(b.validation),
       b.sourceBriefingId ?? null, b.model ?? null, b.promptVersion ?? null, b.llmRequestIds ?? [],
       b.inputTokens ?? null, b.outputTokens ?? null, b.costUsd ?? null, b.latencyMs ?? null, b.error ?? null,
+      b.periodStart ?? b.date, b.periodEnd ?? b.date, b.metricsId ?? null,
     ]
   );
   return rows[0] as { id: string; version: number };
@@ -140,7 +171,7 @@ export async function insertBriefing(b: NewBriefing): Promise<{ id: string; vers
 /** 'generating' 행 마무리. 다른 상태(특히 published)는 건드리지 않는다. */
 export async function finishGenerating(
   id: string,
-  patch: Omit<NewBriefing, "date" | "locale" | "inputHash" | "candidateCount" | "inputArticleIds" | "mode">
+  patch: Omit<NewBriefing, "date" | "locale" | "inputHash" | "candidateCount" | "inputArticleIds" | "mode" | "editionType" | "periodStart" | "periodEnd">
 ): Promise<boolean> {
   const { rowCount } = await pool.query(
     `UPDATE daily_briefings

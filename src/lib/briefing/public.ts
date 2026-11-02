@@ -7,7 +7,7 @@
 import pool from "@/lib/db";
 import { PUBLIC_NEWS_WHERE } from "@/lib/news-query";
 import type { BriefingLocale, StoredBriefingContent } from "./types";
-import { EDITION_TYPE } from "./repository";
+import { EDITION_TYPE, type EditionType } from "./repository";
 
 export interface BriefingArticleRef {
   id: string;
@@ -58,6 +58,7 @@ const TITLE_COL: Record<BriefingLocale, string> = { ko: "title_kr", en: "title_e
 
 interface RawBriefingRow {
   id: string;
+  edition_type: EditionType;
   edition_date: string;
   locale: BriefingLocale;
   version: number;
@@ -68,14 +69,18 @@ interface RawBriefingRow {
   article_ids: string[];
 }
 
-const RAW_COLUMNS = `id, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, locale, version, mode, published_at,
+const RAW_COLUMNS = `id, edition_type, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, locale, version, mode, published_at,
   needs_review, content, article_ids`;
 
 /**
- * 행 → 화면용 판. 공개 페이지와 관리자 검토 화면이 같은 함수로 인용 기사를 붙이고 숨긴 기사를 걸러낸다 (Gate 2).
- * available_locales 는 같은 날짜에 발행된 언어판.
+ * 인용 기사(보이는 것만)와 같은 판의 발행 언어판. 데일리·주간·월간이 같은 함수로 기사를 붙인다 (Gate 2).
  */
-async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
+export async function loadBriefingRefs(row: {
+  article_ids: string[];
+  locale: BriefingLocale;
+  edition_type: EditionType;
+  edition_date: string;
+}): Promise<{ articles: Record<string, BriefingArticleRef>; available_locales: BriefingLocale[] }> {
   const titleCol = TITLE_COL[row.locale] ?? "title_kr";
   const [{ rows: arts }, { rows: locs }] = await Promise.all([
     pool.query(
@@ -89,12 +94,20 @@ async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
     pool.query(
       `SELECT locale FROM daily_briefings
         WHERE status = 'published' AND edition_type = $1 AND edition_date = $2::date ORDER BY locale`,
-      [EDITION_TYPE, row.edition_date]
+      [row.edition_type, row.edition_date]
     ),
   ]);
   const articles: Record<string, BriefingArticleRef> = {};
   for (const a of arts) articles[a.id] = a as BriefingArticleRef;
+  return { articles, available_locales: locs.map((l) => l.locale) };
+}
 
+/**
+ * 행 → 화면용 판. 공개 페이지와 관리자 검토 화면이 같은 함수로 인용 기사를 붙이고 숨긴 기사를 걸러낸다 (Gate 2).
+ * available_locales 는 같은 날짜에 발행된 언어판.
+ */
+async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
+  const { articles, available_locales } = await loadBriefingRefs(row);
   return {
     id: row.id,
     edition_date: row.edition_date,
@@ -103,7 +116,7 @@ async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
     mode: row.mode,
     published_at: row.published_at ?? "",
     needs_review: row.needs_review,
-    available_locales: locs.map((l) => l.locale),
+    available_locales,
     content: pruneToVisible(row.content as StoredBriefingContent, new Set(Object.keys(articles))),
     articles,
   };

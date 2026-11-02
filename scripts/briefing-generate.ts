@@ -4,6 +4,9 @@
  *   npx tsx scripts/briefing-generate.ts [--date 2026-10-13] [--force] [--dry-run]
  *   npx tsx scripts/briefing-generate.ts publish --date 2026-10-13 [--version 2]
  *   npx tsx scripts/briefing-generate.ts withdraw --date 2026-10-13 [--locale en]
+ *   npx tsx scripts/briefing-generate.ts weekly [--week 2026-W44] [--force] [--dry-run]
+ *     (주간 리포트 초안. --week 없으면 베이징 기준 지난주. 수집 미완 날짜가 있으면 --force 가 있어야 만든다.
+ *      발행은 관리자 화면에서 데이터 알림을 확인한 뒤 한다)
  *
  * 환경변수는 .env.local 등에서 Next 와 같은 방식(@next/env)으로 읽는다.
  */
@@ -20,6 +23,7 @@ async function main() {
   // db 풀이 import 시점에 DATABASE_URL 을 읽으므로 env 를 먼저 올린 뒤 동적 import
   const { generateBriefing } = await import("../src/lib/briefing/generate");
   const { publishBriefing, withdrawBriefing } = await import("../src/lib/briefing/publish");
+  const { generateWeekly } = await import("../src/lib/briefing/periodic/generate");
   const { default: pool } = await import("../src/lib/db");
 
   const cmd = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : "generate";
@@ -33,6 +37,10 @@ async function main() {
       if (!date) throw new Error("--date 필요");
       const locale = arg("locale") as "ko" | "en" | "zh" | undefined;
       console.log(JSON.stringify({ withdrawn: await withdrawBriefing({ date, locale, editedBy: "cli" }) }));
+    } else if (cmd === "weekly") {
+      const result = await generateWeekly({ isoWeek: arg("week"), force: flag("force"), dryRun: flag("dry-run") });
+      console.log(JSON.stringify(result, null, 2));
+      if (["failed", "invalid_week", "blocked_data_quality", "locked"].includes(result.outcome)) process.exitCode = 1;
     } else if (cmd === "generate") {
       const result = await generateBriefing({ date, force: flag("force"), dryRun: flag("dry-run") });
       console.log(JSON.stringify(result, null, 2));

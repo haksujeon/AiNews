@@ -187,9 +187,11 @@ export function citedRefs(c: BriefingContent): string[] {
 
 export const HAN_RE = /[㐀-鿿豈-﫿]/g;
 export const HANGUL_RE = /[가-힯ᄀ-ᇿ㄰-㆏]/;
-const NUM_RE = /\d[\d,.]*/g;
+/** 문장 속 숫자 (주간·월간 검증기도 같은 정규식을 쓴다) */
+export const NUM_RE = /\d[\d,.]*/g;
 const NUM_UNIT_RE = /\d[\d,.]*\s?(?:%|위안|위|억|만|명|개|점|회|대|배|달러|MW|GW|B\b|년|월|일|시간|종|팀|건|곳|조)/g;
-const norm = (s: string) => s.replace(/[\s,]/g, "");
+/** 숫자 대조용 정규화: 공백·쉼표 제거 */
+export const norm = (s: string) => s.replace(/[\s,]/g, "");
 
 // ───────────────────────── 길이
 
