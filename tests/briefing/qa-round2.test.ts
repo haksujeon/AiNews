@@ -31,6 +31,7 @@ import {
   dropConflictSentences,
   prevPairConflicts,
   summedAmount,
+  uncitedDirectionConflicts,
   volumeWowUnadjusted,
   pruneArcRefs,
   revertFlips,
@@ -277,6 +278,10 @@ test("W44 bp3: '딥시크 호출량 801% 급증'(기사 숫자) 은 ent.deepseek
   const initial = "딥시크 신버전 모델의 단일 주간 호출량은 전주 대비 801% 급증했다. 바이두는 문서 파싱 모델을 오픈소스로 공개했다.";
   assert.deepEqual(directionConflicts(initial, ["ent.deepseek.chg"], facts, ground), []);
   assert.ok(directionConflicts(initial, ["ent.deepseek.chg"], facts).length, "근거 없이 보면 예전처럼 충돌");
+  // round 2 재생성 W44 v11: 인용하지 않은 지표(uncited) 경로에서도 같은 예외 — "…801% 증가했다고 보도됐다"
+  const v11 = "딥시크의 V4.1-Flash-1017은 주간 호출량 1위를 기록했고, 전주 대비 801% 증가했다고 보도됐다.";
+  assert.deepEqual(uncitedDirectionConflicts(v11, facts, [], ground), []);
+  assert.ok(uncitedDirectionConflicts(v11, facts).length, "근거 없이 보면 예전처럼 충돌");
   const flipped = ED<{ text: string }>("w44_bp3").text;
   assert.match(flipped, /크게 줄었다/);
   const before = weekly({ big_picture: [{ title: "t", text: initial, refs: ["S01"], metrics: ["ent.deepseek.chg"] }] });

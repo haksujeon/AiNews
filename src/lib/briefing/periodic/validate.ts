@@ -318,11 +318,13 @@ const CLAUSE_SPLIT = /,|，|(?<=[가-힣](?:고|며|지만|으나|는데|반면)
  * 인용하지 않은 증감 지표와 반대 방향 (2026-11-02 W44 dek "구현형 AI와 에이전트 용어의 언급이 함께 늘었다" — 智能体 84→55).
  * 언급·기사·보도 이야기를 하는 문장에서, 용어(한국어 표기 포함)·기업이 나오는 절의 방향(없으면 다음 절)을 지표와 맞춘다.
  */
-export function uncitedDirectionConflicts(text: string, facts: Record<string, string>, cited: string[] = []): string[] {
+export function uncitedDirectionConflicts(text: string, facts: Record<string, string>, cited: string[] = [], ground = ""): string[] {
   const out: string[] = [];
   const keys = Object.keys(facts).filter((k) => /^(term|ent)\..+\.(rise|fall|chg)$/.test(k) && !cited.includes(k));
   for (const s of splitSentences(text)) {
     if (!MENTION_RE.test(s)) continue;
+    // 기사 숫자로 말한 수량 증감("801% 증가했다고 보도됐다")은 언급 지표와 다른 사실 (round 2 재생성 W44 v11)
+    if (!TREND_CHANGE_RE.test(s) && sourcedChange(s, ground)) continue;
     const clauses = s.split(CLAUSE_SPLIT).filter((c) => c.trim());
     for (const k of keys) {
       const v = facts[k] ?? "";
@@ -471,7 +473,8 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
       for (const k of irrelevantMetrics(u.text, u.metrics, ctx.entityNames, u.subject)) push("warn", "metric_relevance", u.path, `${k} 대상이 문장에 없음`);
     }
     // 인용하지 않은 지표와도 방향이 맞아야 한다 (dek·term·china_lens 포함)
-    for (const d of uncitedDirectionConflicts(u.text, F, u.metrics)) push("fatal", "direction_conflict", u.path, d);
+    for (const d of uncitedDirectionConflicts(u.text, F, u.metrics, u.refs.map((r) => ctx.sourceText.get(r) ?? "").join(" ")))
+      push("fatal", "direction_conflict", u.path, d);
     for (const i of rankIssues(u.text, ctx, u.path === "term" ? c.term?.term : undefined, u.subject)) push("fatal", i.rule, u.path, i.detail);
     for (const i of periodicSemanticIssues(u, ctx, groundText)) push("fatal", i.rule, u.path, i.detail);
     if (u.path === "china_lens") {
@@ -567,6 +570,16 @@ export function periodicText(c: WeeklyContent, item: string): string | undefined
   return undefined;
 }
 
+/** 칸(항목 위치)의 refs */
+function periodicRefs(c: WeeklyContent, item: string): string[] | undefined {
+  const m = item.match(/^(big_picture|movers|watch_next|month_arc)\[(\d+)\]$/);
+  if (m) return (c[m[1] as "big_picture" | "movers" | "watch_next" | "month_arc"] ?? [])[Number(m[2])]?.refs;
+  if (item === "money") return c.money?.refs;
+  if (item === "china_lens") return c.china_lens?.refs;
+  if (item === "dek") return c.dek_refs;
+  return undefined;
+}
+
 function setPeriodicText(c: WeeklyContent, item: string, v: string): boolean {
   const m = item.match(/^(big_picture|movers|watch_next|month_arc)\[(\d+)\]$/);
   if (m) {
@@ -587,7 +600,12 @@ function setPeriodicText(c: WeeklyContent, item: string, v: string): boolean {
  * 방향 충돌(direction_conflict)이 난 칸에서 충돌 문장만 지운다 (수리 호출 전, 결정적).
  * 수리에 맡기면 "호출량 급증" 을 "크게 줄었다" 로 뒤집었다 (W44) — 방향을 고쳐 쓰지 않고 그 문장을 뺀다. 문장이 하나뿐이면 그대로 둔다.
  */
-export function dropConflictSentences(c: WeeklyContent, fatal: ValidationIssue[], facts: Record<string, string>): { content: WeeklyContent; edits: PeriodicEdit[] } {
+export function dropConflictSentences(
+  c: WeeklyContent,
+  fatal: ValidationIssue[],
+  facts: Record<string, string>,
+  sourceText: Map<string, string> = new Map()
+): { content: WeeklyContent; edits: PeriodicEdit[] } {
   const out = structuredClone(c);
   const edits: PeriodicEdit[] = [];
   for (const f of fatal.filter((x) => x.rule === "direction_conflict")) {
@@ -597,7 +615,11 @@ export function dropConflictSentences(c: WeeklyContent, fatal: ValidationIssue[]
     const key = f.detail.split("=")[0];
     const sents = splitSentences(text);
     if (sents.length < 2) continue;
-    const bad = sents.filter((s) => [...directionConflicts(s, [key], facts), ...uncitedDirectionConflicts(s, facts)].some((d) => d.startsWith(`${key}=`)));
+    // 검증과 같은 근거(그 칸의 refs)로 다시 본다 — 기사 숫자로 뒷받침되는 문장은 지우지 않는다
+    const ground = (periodicRefs(out, item) ?? []).map((r) => sourceText.get(r) ?? "").join(" ");
+    const bad = sents.filter((s) =>
+      [...directionConflicts(s, [key], facts, ground), ...uncitedDirectionConflicts(s, facts, [], ground)].some((d) => d.startsWith(`${key}=`))
+    );
     const keep = sents.filter((s) => !bad.includes(s));
     if (!bad.length || !keep.length) continue;
     const next = keep.join(" ");
@@ -651,9 +673,10 @@ export function revertFlips(
   after: WeeklyContent,
   flipped: string[],
   fatal: ValidationIssue[],
-  facts: Record<string, string>
+  facts: Record<string, string>,
+  sourceText: Map<string, string> = new Map()
 ): { content: WeeklyContent; edits: PeriodicEdit[] } {
-  const base = dropConflictSentences(before, fatal, facts).content;
+  const base = dropConflictSentences(before, fatal, facts, sourceText).content;
   const out = structuredClone(after);
   const edits: PeriodicEdit[] = [];
   for (const item of flipped) {

@@ -368,7 +368,7 @@ async function generateKo(
   let report = validateWeekly(content, ctx, p1.issues);
   validation.initial = report;
   // 방향 충돌은 수리에 맡기기 전에 충돌 문장만 지운다 (W44: 수리가 '호출량 급증'을 '크게 줄었다'로 뒤집었다)
-  const dc = dropConflictSentences(content, report.fatal, ctx.facts);
+  const dc = dropConflictSentences(content, report.fatal, ctx.facts, ctx.sourceText);
   if (dc.edits.length) {
     edits.push(...dc.edits.map((e) => ({ ...e, round: "initial" })));
     content = dc.content;
@@ -399,7 +399,7 @@ async function generateKo(
       // 충돌 문장을 지우기 전 원문(initialContent)과도 비교한다 — 지운 문장을 수리가 뒤집어 다시 넣는 경우
       const flipped = [...new Set([...directionFlips(content, c2, ctx.facts), ...directionFlips(initialContent, c2, ctx.facts)])];
       if (flipped.length) {
-        const rv = revertFlips(content, c2, flipped, report.fatal, ctx.facts);
+        const rv = revertFlips(content, c2, flipped, report.fatal, ctx.facts, ctx.sourceText);
         edits.push(...rv.edits.map((e) => ({ ...e, round: label })));
         c2 = rv.content;
       }
