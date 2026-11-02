@@ -28,13 +28,15 @@ import { HEADLINE_MAX, citedRefs, contextFromGroups, dropFatalItems, normalizeCo
 import { translateBriefing } from "./translate";
 import { finishGenerating, insertBriefing, latestBriefing, loadCandidateArticles, withDateLock } from "./repository";
 import { editionPeriod, scheduledRunEdition, weekday } from "./sla";
+import { beijingDate, periodDayQuality } from "@/lib/metrics/period";
+import pool from "@/lib/db";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_COST = Number(process.env.BRIEFING_MAX_COST_USD || "0.10");
 
-/** 베이징(Asia/Shanghai) 오늘 날짜 YYYY-MM-DD */
+/** 베이징(Asia/Shanghai) 오늘 날짜 YYYY-MM-DD — 주간·월간과 같은 beijingDate (metrics/period.ts) */
 export function beijingToday(now = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  return beijingDate(now);
 }
 
 export function isValidEditionDate(date: string): boolean {
@@ -197,7 +199,7 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
   if (!date) {
     return {
       date: beijingToday(), outcome: "skipped_weekend", mode: null, candidateCount: 0, inputHash: null, locales: [], totalCostUsd: 0,
-      message: "토요일 밤에는 생성하지 않습니다 — 일요일 밤에 토·일 주말 합본을 만듭니다",
+      message: "토요일이 끝난 직후(일요일 00:10)에는 생성하지 않습니다 — 월요일 00:10 에 토·일 주말 합본을 만듭니다",
     };
   }
   if (!isValidEditionDate(date)) {
@@ -221,7 +223,10 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
     const inputHash = computeInputHash(sel.groups, `${PROMPT_VERSION}|${TRANSLATE_PROMPT_VERSION}|${mode}`, BRIEFING_MODEL);
     const base = { date, mode, candidateCount: articles.length, inputHash };
     const inputArticleIds = sel.groups.flatMap((g) => [g.primary.id, ...g.siblings.map((s) => s.id)]);
+    // 수집 품질: 주간·월간과 같은 결손일 판정 (축소·부분 수집일이 있으면 화면에 데이터 알림)
+    const dataQuality = await periodDayQuality(pool, period.periodStart, period.periodEnd);
     const metaBase = {
+      data_quality: dataQuality,
       edition_date: date,
       mode,
       candidate_count: articles.length,

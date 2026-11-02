@@ -142,6 +142,8 @@ export interface StoredBriefingContent extends BriefingContent<string> {
     china_centric_count: number; // 상위 5건 중 중국 주체 수
     prompt_version: string;
     ai_generated: true;
+    /** 판 기간의 수집 품질 (주간·월간과 같은 결손일 판정). 결손일이 있으면 화면에 데이터 알림 */
+    data_quality?: import("../metrics/period").DayQuality;
   };
 }
 
