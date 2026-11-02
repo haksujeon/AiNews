@@ -5,9 +5,9 @@ import { listFeedNews } from "@/lib/seo/data";
 import { getCategoryLabel, getSummary, getTitle } from "@/lib/news-utils";
 import { absoluteUrl } from "@/lib/site";
 import { listPublishedEditions } from "@/lib/briefing/public";
-import { listPublishedWeeklies } from "@/lib/briefing/periodic/public";
+import { listPublishedPeriodics } from "@/lib/briefing/periodic/public";
 import { BRIEFING_PATH, briefingDatePath, formatShortDate } from "@/lib/briefing/view";
-import { WEEKLY_PATH } from "@/components/briefing/briefing-tabs";
+import { periodicPath } from "@/components/briefing/briefing-tabs";
 
 /*
  * RSS 2.0 (P0-2): /ainews/feed/{ko|en|zh}/all.xml · briefing.xml · category/{분류}.xml
@@ -44,7 +44,11 @@ async function newsItems(locale: Locale, category?: string): Promise<FeedItem[]>
 async function briefingItems(locale: Locale): Promise<FeedItem[]> {
   const tm = await getTranslations({ locale, namespace: "meta" });
   const ts = await getTranslations({ locale, namespace: "seo" });
-  const [daily, weekly] = await Promise.all([listPublishedEditions(locale, FEED_MAX_ITEMS), listPublishedWeeklies(FEED_MAX_ITEMS * 3)]);
+  const [daily, weekly, monthly] = await Promise.all([
+    listPublishedEditions(locale, FEED_MAX_ITEMS),
+    listPublishedPeriodics("weekly", FEED_MAX_ITEMS * 3),
+    listPublishedPeriodics("monthly", FEED_MAX_ITEMS * 3),
+  ]);
   const items: (FeedItem & { sort: string })[] = [
     ...daily.map((e) => ({
       title: tm("briefingTitle", { date: formatShortDate(e.edition_date, locale), headline: e.headline }),
@@ -53,11 +57,14 @@ async function briefingItems(locale: Locale): Promise<FeedItem[]> {
       pubDate: `${e.edition_date}T00:00:00+08:00`,
       sort: `${e.edition_date}T00:00:00+08:00`,
     })),
-    ...weekly
+    ...[...weekly, ...monthly]
       .filter((w) => w.locale === locale)
       .map((w) => ({
-        title: ts("weeklyItemTitle", { week: w.iso_week, headline: w.headline }),
-        link: absoluteUrl(locale, `${WEEKLY_PATH}/${w.iso_week}`),
+        title:
+          w.edition_type === "monthly"
+            ? ts("monthlyItemTitle", { month: w.key, headline: w.headline })
+            : ts("weeklyItemTitle", { week: w.key, headline: w.headline }),
+        link: absoluteUrl(locale, periodicPath(w.edition_type, w.key)),
         description: w.dek,
         pubDate: w.published_at,
         sort: w.published_at ?? "",

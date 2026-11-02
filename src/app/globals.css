@@ -229,6 +229,8 @@
 .pc-dprev { fill: var(--chart-prev); stroke: var(--paper); stroke-width: 2; }
 .pc-dcur { fill: var(--chart-1); stroke: var(--paper); stroke-width: 2; }
 .pc-tick { stroke: var(--ink); stroke-width: 2; }
+/* 월간 작은 여러 개: 주별 선 */
+.pc-line { stroke: var(--chart-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .pc-t-axis { fill: var(--ink-3); font-size: 11px; }
 .pc-t-axis2 { fill: var(--ink-3); font-size: 10px; }
 .pc-t-label { fill: var(--ink); font-size: 13px; }
@@ -253,7 +255,7 @@
 @media (forced-colors: active) {
   .pc-cur, .pc-dcur { fill: Highlight; }
   .pc-prev, .pc-dprev { fill: GrayText; }
-  .pc-grid, .pc-db, .pc-exp, .pc-gap, .pc-hatch-line, .pc-tick { stroke: CanvasText; }
+  .pc-grid, .pc-db, .pc-exp, .pc-gap, .pc-hatch-line, .pc-tick, .pc-line { stroke: CanvasText; }
   .pc-hatch-bg { fill: Canvas; }
   .pc-t-axis, .pc-t-axis2, .pc-t-label, .pc-t-han, .pc-t-py, .pc-t-val, .pc-t-chg, .pc-t-note, .pc-t-cn { fill: CanvasText; }
   .pc-swatch-gap { forced-color-adjust: none; background: repeating-linear-gradient(45deg, CanvasText 0 1px, Canvas 1px 4px); }

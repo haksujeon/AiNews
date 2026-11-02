@@ -9,11 +9,12 @@
  * | schema                        | 치명 | 필수 필드 |
  * | missing_refs / unknown_ref    | 치명 | 근거 기사 없음 / 없는 S id |
  * | unknown_metric                | 치명 | FACTS 에 없는 지표 키 |
- * | number_not_in_source          | 치명 | 숫자가 인용 기사·지표 값에 없음 (기간 표기 10월·11월 1일·W44 는 제외) |
+ * | number_not_in_source          | 치명 | 숫자가 인용 기사·지표 값에 없음 (기간 표기 2026년·10월·11월 1일·W44 는 제외) |
  * | unsupported_entity            | 치명 | 고유명사가 인용 근거에 없음 |
  * | trend_unbacked (신규)          | 치명 | 큰 흐름에 refs 3개 미만이고 지표도 없음 |
- * | volume_wow_unadjusted (신규)   | 치명 | 지난주 대비 기사 수 비교에 같은 요일 지표(vol.lfl*) 없음 |
+ * | volume_wow_unadjusted (신규)   | 치명 | 지난주(지난달) 대비 기사 수 비교에 보정 지표(vol.lfl* / vol.prev_avg_complete_day) 없음 |
  * | volume_week_unadjusted        | 치명 | (월간) 주별 원 건수 비교 |
+ * | unknown_week                  | 치명 | (월간) month_arc 의 주 키가 지표에 없음 |
  * | change_unbacked (신규)         | 치명 | "늘었다·줄었다" 에 증감 지표 없음 |
  * | cross_currency_rank (신규)     | 치명 | 통화가 다른 금액의 서열 표현 |
  * | summed_amount                 | 치명 | 금액 합산 표현 |
@@ -28,7 +29,7 @@
 import type { ValidationIssue } from "../types";
 import { ENTITIES, entityMentioned, properNouns } from "../entities";
 import { HAN_RE, NUM_RE, norm } from "../validate";
-import type { PeriodicValidationReport, WeeklyContent } from "./types";
+import type { PeriodicValidationReport, PeriodicContent as WeeklyContent } from "./types";
 
 export interface PeriodicValidationContext {
   kind: "weekly" | "monthly";
@@ -41,6 +42,8 @@ export interface PeriodicValidationContext {
   /** 지표 상위 용어 */
   terms: Set<string>;
   headlineMax: number;
+  /** 월간: 지표 weeks[].key (month_arc.week 검사) */
+  weekKeys?: Set<string>;
 }
 
 // ───────────────────────── 정규화
@@ -67,6 +70,9 @@ export function normalizeWeekly(raw: unknown): { content: WeeklyContent; issues:
     china_lens: lens && str(lens.text) ? { text: str(lens.text), refs: strArr(lens.refs), metrics: strArr(lens.metrics) } : null,
     watch_next: arr(r.watch_next).map((b) => ({ text: str(b.text), refs: strArr(b.refs) })).filter((w) => w.text),
     term: term && str(term.term) ? { term: str(term.term), why: str(term.why), metrics: strArr(term.metrics) } : null,
+    month_arc: arr(r.month_arc)
+      .map((b) => ({ week: str(b.week), text: str(b.text), refs: strArr(b.refs), metrics: strArr(b.metrics) }))
+      .filter((b) => b.text),
   };
   const issues: ValidationIssue[] = [];
   if (!content.headline) issues.push({ level: "fatal", rule: "schema", path: "headline", detail: "headline 없음" });
@@ -102,6 +108,7 @@ export function citedSids(c: WeeklyContent): string[] {
     ...(c.money?.refs ?? []),
     ...(c.china_lens?.refs ?? []),
     ...c.watch_next.flatMap((w) => w.refs),
+    ...(c.month_arc ?? []).flatMap((b) => b.refs),
   ];
 }
 
@@ -112,6 +119,7 @@ function citedMetrics(c: WeeklyContent): string[] {
     ...c.movers.flatMap((b) => b.metrics),
     ...(c.china_lens?.metrics ?? []),
     ...(c.term?.metrics ?? []),
+    ...(c.month_arc ?? []).flatMap((b) => b.metrics),
   ];
 }
 
@@ -121,6 +129,7 @@ function collectUnits(c: WeeklyContent, headlineMax: number): Unit[] {
     // 지표만으로 쓴 결정적 대체 dek 은 refs 없이 metrics 로 근거를 단다
     { path: "dek", text: c.dek, refs: c.dek_refs, metrics: c.dek_metrics, limit: 220, noRefsOk: !c.dek_refs.length && c.dek_metrics.length > 0 },
   ];
+  (c.month_arc ?? []).forEach((b, i) => units.push({ path: `month_arc[${i}]`, text: b.text, refs: b.refs, metrics: b.metrics, limit: 90 }));
   c.big_picture.forEach((b, i) => units.push({ path: `big_picture[${i}]`, text: `${b.title} ${b.text}`, refs: b.refs, metrics: b.metrics, trend: true, limit: 264 }));
   c.movers.forEach((b, i) => units.push({ path: `movers[${i}]`, text: b.text, refs: b.refs, metrics: b.metrics, limit: 90, subject: b.entity }));
   if (c.money) units.push({ path: "money", text: c.money.text, refs: c.money.refs, metrics: [], limit: 200 });
@@ -132,16 +141,16 @@ function collectUnits(c: WeeklyContent, headlineMax: number): Unit[] {
 
 // ───────────────────────── 의미 규칙 (순수, 단위 테스트 대상)
 
-/** 기간 표기(10월·11월 1일·W44)는 숫자 검사에서 뺀다 */
+/** 기간 표기(2026년·10월·11월 1일·W44)는 숫자 검사에서 뺀다 */
 export function stripPeriodLabels(text: string): string {
-  return text.replace(/\d{1,2}월(\s?\d{1,2}일)?|W\d{1,2}\b/g, "");
+  return text.replace(/20\d{2}년|\d{1,2}월(\s?\d{1,2}일)?|W\d{1,2}\b/g, "");
 }
 
-const WOW_RE = /지난주|전주|지난 주/;
+const WOW_RE = /지난주|전주|지난 주|지난달|전월|지난 달/;
 const VOLUME_RE = /기사 수|보도량|물량|기사가 (늘|줄)/;
-/** 지난주 대비 기사 수 비교인데 같은 요일 지표(vol.lfl*)를 인용하지 않음 */
+/** 지난주(지난달) 대비 기사 수 비교인데 보정 지표(같은 요일 vol.lfl* / 결손일 뺀 평균 vol.prev_avg_complete_day)를 인용하지 않음 */
 export function volumeWowUnadjusted(text: string, metrics: string[]): boolean {
-  return WOW_RE.test(text) && VOLUME_RE.test(text) && !metrics.some((k) => k.startsWith("vol.lfl"));
+  return WOW_RE.test(text) && VOLUME_RE.test(text) && !metrics.some((k) => k.startsWith("vol.lfl") || k === "vol.prev_avg_complete_day");
 }
 
 /** (월간) 주별 원 건수 비교: 주 길이·결손이 달라 평일 평균 지표를 써야 함 */
@@ -277,6 +286,10 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
   c.movers.forEach((mv, i) => {
     if (!ctx.entityNames.has(mv.entity)) push("fatal", "unknown_entity_key", `movers[${i}]`, mv.entity);
   });
+  if (ctx.weekKeys)
+    (c.month_arc ?? []).forEach((b, i) => {
+      if (!ctx.weekKeys!.has(b.week)) push("fatal", "unknown_week", `month_arc[${i}]`, b.week || "(없음)");
+    });
   const cn = chinaCentricCount(c);
   if (cn < Math.min(2, c.big_picture.length)) push("warn", "china_centric", "big_picture", `중국 주체 흐름 ${cn}개`);
 
@@ -305,7 +318,7 @@ export function repairProblems(r: PeriodicValidationReport): ValidationIssue[] {
 
 /** 문장 위치 → 삭제 단위 */
 export function itemOfPeriodic(path: string): string {
-  const m = path.match(/^(big_picture\[\d+\]|movers\[\d+\]|watch_next\[\d+\]|money|china_lens|term|headline|dek)/);
+  const m = path.match(/^(big_picture\[\d+\]|movers\[\d+\]|watch_next\[\d+\]|month_arc\[\d+\]|money|china_lens|term|headline|dek)/);
   return m ? m[1] : path;
 }
 
@@ -321,6 +334,7 @@ export function dropFatalPeriodic(
   c.big_picture = c.big_picture.filter((_, i) => !items.has(`big_picture[${i}]`));
   c.movers = c.movers.filter((_, i) => !items.has(`movers[${i}]`));
   c.watch_next = c.watch_next.filter((_, i) => !items.has(`watch_next[${i}]`));
+  c.month_arc = (c.month_arc ?? []).filter((_, i) => !items.has(`month_arc[${i}]`));
   if (items.has("money")) c.money = null;
   if (items.has("china_lens")) c.china_lens = null;
   if (items.has("term")) c.term = null;

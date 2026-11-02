@@ -17,6 +17,8 @@ import {
   lastDueEdition,
   previousEdition,
   scheduledEditionFor,
+  generateAtOf,
+  runDayOf,
   scheduledRunEdition,
   type EditionFacts,
 } from "../../src/lib/briefing/sla";
@@ -39,17 +41,27 @@ test("KST 23:59 는 베이징 22:59 — 같은 날짜, generate 의 beijingToday
   assert.equal(kstClock(now).date, "2026-11-03");
   assert.equal(beijingDate(now), "2026-11-03");
   assert.equal(beijingToday(now), "2026-11-03");
-  // KST 00:30 (재시도) = 베이징 전날 23:30 → 같은 판
-  const retry = kst("2026-11-04T00:30:00");
-  assert.equal(beijingDate(retry), "2026-11-03");
-  assert.equal(beijingToday(retry), "2026-11-03");
-  assert.equal(scheduledRunEdition(retry), "2026-11-03");
 });
 
-test("현재 판: 23:40 KST 에 넘어간다", () => {
-  assert.equal(currentEdition(kst("2026-11-03T23:39:00")), "2026-11-02");
-  assert.equal(currentEdition(kst("2026-11-03T23:40:00")), "2026-11-03");
+test("자정 생성: 00:10 KST 실행 = 방금 끝난 전날 판, 00:40 재시도·01:10·02:00 수동 실행도 같은 판", () => {
+  const run = kst("2026-11-04T00:10:00");
+  assert.equal(runDayOf(run), "2026-11-03");
+  assert.equal(scheduledRunEdition(run), "2026-11-03");
+  // 00:10·00:40 KST 는 베이징 전날 23:10·23:40 → 옛 코드(베이징 오늘)와도 같은 판
+  assert.equal(beijingToday(run), "2026-11-03");
+  assert.equal(scheduledRunEdition(kst("2026-11-04T00:40:00")), "2026-11-03");
+  assert.equal(beijingToday(kst("2026-11-04T00:40:00")), "2026-11-03");
+  // 베이징 날짜가 넘어간 뒤(01:00 KST~)에도 실행일은 전날
+  assert.equal(scheduledRunEdition(kst("2026-11-04T01:10:00")), "2026-11-03");
+  assert.equal(scheduledRunEdition(kst("2026-11-04T02:00:00")), "2026-11-03");
+  assert.equal(generateAtOf("2026-11-03").toISOString(), kst("2026-11-04T00:10:00").toISOString());
+});
+
+test("현재 판: 다음 날 00:10 KST 에 넘어간다", () => {
+  assert.equal(currentEdition(kst("2026-11-04T00:09:00")), "2026-11-02");
+  assert.equal(currentEdition(kst("2026-11-04T00:10:00")), "2026-11-03");
   assert.equal(currentEdition(kst("2026-11-04T08:59:00")), "2026-11-03");
+  assert.equal(currentEdition(kst("2026-11-03T23:50:00")), "2026-11-02");
 });
 
 test("마감: 평일판은 다음 날 09:00 KST, 직전·직후", () => {
@@ -70,21 +82,23 @@ test("마감: 평일판은 다음 날 09:00 KST, 직전·직후", () => {
   assert.equal(pub.overdue, false);
 });
 
-test("주말 규칙: 토요일 판 = 토·일 합본, 일요일 23:40 생성, 월요일 09:00 마감", () => {
+test("주말 규칙: 토요일 판 = 토·일 합본, 월요일 00:10 생성, 월요일 09:00 마감", () => {
   assert.deepEqual(editionPeriod("2026-10-31"), { editionDate: "2026-10-31", periodStart: "2026-10-31", periodEnd: "2026-11-01", weekend: true });
   assert.deepEqual(editionPeriod("2026-11-02"), { editionDate: "2026-11-02", periodStart: "2026-11-02", periodEnd: "2026-11-02", weekend: false });
   assert.equal(scheduledEditionFor("2026-10-31"), null); // 토요일 밤: 생성 안 함
   assert.equal(scheduledEditionFor("2026-11-01"), "2026-10-31"); // 일요일 밤: 토요일 합본
   assert.equal(scheduledEditionFor("2026-10-30"), "2026-10-30"); // 금요일
-  assert.equal(scheduledRunEdition(kst("2026-10-31T23:40:00")), null);
-  assert.equal(scheduledRunEdition(kst("2026-11-01T23:40:00")), "2026-10-31");
+  assert.equal(scheduledRunEdition(kst("2026-11-01T00:10:00")), null); // 토요일이 끝난 직후: 생성 안 함
+  assert.equal(scheduledRunEdition(kst("2026-11-02T00:10:00")), "2026-10-31"); // 일요일이 끝난 직후: 토 합본
+  assert.equal(generateAtOf("2026-10-31").toISOString(), kst("2026-11-02T00:10:00").toISOString());
   assert.equal(dueAtOf("2026-10-31").toISOString(), kst("2026-11-02T09:00:00").toISOString());
   // 금요일판 마감은 토요일 09:00
   assert.equal(dueAtOf("2026-10-30").toISOString(), kst("2026-10-31T09:00:00").toISOString());
-  // 토·일 낮에는 금요일판이 현재 판, 일요일 23:40 부터 토요일 합본
+  // 토·일에는 금요일판이 현재 판, 월요일 00:10 부터 토요일 합본
   assert.equal(currentEdition(kst("2026-10-31T23:50:00")), "2026-10-30");
   assert.equal(currentEdition(kst("2026-11-01T12:00:00")), "2026-10-30");
-  assert.equal(currentEdition(kst("2026-11-01T23:40:00")), "2026-10-31");
+  assert.equal(currentEdition(kst("2026-11-01T23:50:00")), "2026-10-30");
+  assert.equal(currentEdition(kst("2026-11-02T00:10:00")), "2026-10-31");
   assert.equal(currentEdition(kst("2026-11-02T09:30:00")), "2026-10-31");
   assert.equal(previousEdition("2026-11-02"), "2026-10-31");
   assert.equal(previousEdition("2026-10-31"), "2026-10-30");

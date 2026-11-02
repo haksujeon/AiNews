@@ -7,12 +7,11 @@ import { BriefingView } from "@/components/briefing/briefing-view";
 import { PeriodicView } from "@/components/briefing/periodic-view";
 import { getBriefingRow, translationsOf } from "@/lib/briefing/admin";
 import { getBriefingForReview } from "@/lib/briefing/public";
-import { getWeeklyForReview } from "@/lib/briefing/periodic/public";
+import { getPeriodicForReview, periodKeyOf } from "@/lib/briefing/periodic/public";
 import type { StoredWeeklyContent } from "@/lib/briefing/periodic/types";
-import { isoWeekOf } from "@/lib/metrics/period";
 import type { StoredBriefingContent, ValidationIssue } from "@/lib/briefing/types";
 
-// 관리자 브리핑 상세: 검증 결과 + 작업 + 인라인 수정 + 공개 페이지와 같은 컴포넌트(BriefingView / 주간은 PeriodicView)로 그린 미리보기.
+// 관리자 브리핑 상세: 검증 결과 + 작업 + 인라인 수정 + 공개 페이지와 같은 컴포넌트(BriefingView / 주간·월간은 PeriodicView)로 그린 미리보기.
 export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,10 +40,12 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
   const row = await getBriefingRow(id);
   if (!row) notFound();
   const t = await getTranslations({ locale, namespace: "briefingAdmin" });
-  const weekly = row.edition_type === "weekly";
+  // 주간·월간(periodic)은 같은 미리보기·작업을 쓴다
+  const weekly = row.edition_type === "weekly" || row.edition_type === "monthly";
+  const monthly = row.edition_type === "monthly";
   const [preview, weeklyPreview, translations] = await Promise.all([
     weekly ? null : getBriefingForReview(id),
-    weekly ? getWeeklyForReview(id) : null,
+    weekly ? getPeriodicForReview(id) : null,
     row.locale === "ko" && !weekly ? translationsOf(id) : [],
   ]);
 
@@ -60,8 +61,9 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
   const problems = v.problems ?? [];
   const content = row.content as unknown as Partial<StoredBriefingContent>;
   const editable = !weekly && row.locale === "ko" && !!content.top_stories?.length && ["draft", "published", "superseded"].includes(row.status);
-  const week = weekly ? ((content as unknown as Partial<StoredWeeklyContent>).meta?.iso_week ?? isoWeekOf(row.edition_date)) : "";
-  const dqDays = weekly ? ((content as unknown as Partial<StoredWeeklyContent>).meta?.data_quality?.incomplete_days ?? []) : [];
+  const week = weekly ? periodKeyOf(monthly ? "monthly" : "weekly", content as unknown as Partial<StoredWeeklyContent>, row.edition_date) : "";
+  // 데일리도 같은 결손일 판정을 meta.data_quality 에 남긴다 (데일리는 알림만, 발행 확인은 주간·월간)
+  const dqDays = (content as unknown as Partial<StoredWeeklyContent>).meta?.data_quality?.incomplete_days ?? [];
 
   return (
     <AdminShell>
@@ -70,7 +72,9 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
           {t("backToList")}
         </Link>
         <h1 className="mt-2 text-xl font-bold text-ink" data-testid="admin-briefing-title">
-          {weekly
+          {monthly
+            ? t("detailTitleMonthly", { month: week, locale: row.locale.toUpperCase(), version: row.version })
+            : weekly
             ? t("detailTitleWeekly", { week, locale: row.locale.toUpperCase(), version: row.version })
             : t("detailTitle", { date: row.edition_date, locale: row.locale.toUpperCase(), version: row.version })}
         </h1>
@@ -145,7 +149,7 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
               locale={row.locale}
               canPublish={row.locale === "ko" && row.status === "draft" && !fatal.length}
               canWithdraw={row.status === "published"}
-              editionType={weekly ? "weekly" : "daily"}
+              editionType={monthly ? "monthly" : weekly ? "weekly" : "daily"}
               week={week || undefined}
               dataQualityDays={dqDays}
               edit={
@@ -161,10 +165,10 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
           </div>
 
           <section className="min-w-0 lg:order-1" aria-label={t("preview")}>
-            <p className="border-b border-rule pb-1.5 text-xs font-semibold text-ink-3">{weekly ? t("previewWeekly") : t("preview")}</p>
+            <p className="border-b border-rule pb-1.5 text-xs font-semibold text-ink-3">{monthly ? t("previewMonthly") : weekly ? t("previewWeekly") : t("preview")}</p>
             {weekly ? (
               weeklyPreview ? (
-                <PeriodicView weekly={weeklyPreview} />
+                <PeriodicView report={weeklyPreview} />
               ) : (
                 <p className="py-8 text-sm text-ink-3">{t("notRenderable")}</p>
               )

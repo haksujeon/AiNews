@@ -23,9 +23,9 @@ interface Props {
   canPublish: boolean;
   canWithdraw: boolean;
   edit: { headline: string; lede: string; top_stories: StoryText[] } | null;
-  /** 판 유형 (기본 daily). 주간은 date = 그 주 월요일 */
-  editionType?: "daily" | "weekly";
-  /** 주간: ISO 주 (확인 문구용) */
+  /** 판 유형 (기본 daily). 주간은 date = 그 주 월요일, 월간은 date = 그 달 1일 */
+  editionType?: "daily" | "weekly" | "monthly";
+  /** 주간·월간: 기간 키 2026-W44 / 2026-10 (확인 문구용) */
   week?: string;
   /** 주간: 수집 미완 날짜 — 있으면 발행 전에 확인란을 선택해야 한다 */
   dataQualityDays?: string[];
@@ -65,7 +65,9 @@ export function BriefingReviewActions({
   // 철회 사유 (필수, 공개 정정 기록 public_note 로 저장된다)
   const [reason, setReason] = useState("");
   const reasonOk = reason.trim().length >= 2;
-  const weekly = editionType === "weekly";
+  // 주간·월간은 같은 작업(발행 확인·다시 생성)을 쓰고 확인 문구만 다르다
+  const weekly = editionType === "weekly" || editionType === "monthly";
+  const monthly = editionType === "monthly";
   const needsAck = weekly && dataQualityDays.length > 0;
 
   async function call(action: string, url: string, body: unknown, confirmText?: string) {
@@ -103,7 +105,11 @@ export function BriefingReviewActions({
       "publish",
       "/api/admin/briefing/publish",
       { date, version, edition_type: editionType, acknowledgeDataQuality: needsAck ? ack : undefined },
-      weekly ? t("confirmPublishWeekly", { week: week ?? date, version }) : t("confirmPublish", { date, version })
+      monthly
+        ? t("confirmPublishMonthly", { month: week ?? date, version })
+        : weekly
+          ? t("confirmPublishWeekly", { week: week ?? date, version })
+          : t("confirmPublish", { date, version })
     );
     if (r) {
       setMessage({ kind: "ok", text: t("done") });
@@ -115,7 +121,7 @@ export function BriefingReviewActions({
       "withdraw",
       "/api/admin/briefing/publish",
       { date, action: "withdraw", edition_type: editionType, reason: reason.trim() },
-      weekly ? t("confirmWithdrawWeekly", { week: week ?? date }) : t("confirmWithdraw", { date })
+      monthly ? t("confirmWithdrawMonthly", { month: week ?? date }) : weekly ? t("confirmWithdrawWeekly", { week: week ?? date }) : t("confirmWithdraw", { date })
     );
     if (r) {
       setMessage({ kind: "ok", text: t("done") });
@@ -128,12 +134,16 @@ export function BriefingReviewActions({
       "regenerate",
       "/api/admin/briefing/regenerate",
       { date, edition_type: editionType },
-      weekly ? t("confirmRegenerateWeekly", { week: week ?? date }) : t("confirmRegenerate", { date })
+      monthly
+        ? t("confirmRegenerateMonthly", { month: week ?? date })
+        : weekly
+          ? t("confirmRegenerateWeekly", { week: week ?? date })
+          : t("confirmRegenerate", { date })
     );
     if (r && weekly) {
       const summary = `${String(r.outcome ?? "")} v${String(r.version ?? "—")} ${String(r.status ?? "")}${typeof r.message === "string" && r.message ? ` (${r.message})` : ""}`;
       setMessage({ kind: r.outcome === "failed" ? "error" : "ok", text: summary.trim() });
-      router.push("/admin/briefings?type=weekly");
+      router.push(`/admin/briefings?type=${editionType}`);
       router.refresh();
     } else if (r) {
       const locales = (r.locales as { locale: string; version: number; status: string; error?: string }[] | undefined) ?? [];
@@ -296,7 +306,7 @@ export function BriefingReviewActions({
           </div>
         </section>
       ) : (
-        (weekly ? <p className="text-xs leading-relaxed text-ink-3">{t("weeklyEditNote")}</p> : locale !== "ko" && <p className="text-xs text-ink-3">{t("editOnlyKo")}</p>)
+        (weekly ? <p className="text-xs leading-relaxed text-ink-3">{t(monthly ? "monthlyEditNote" : "weeklyEditNote")}</p> : locale !== "ko" && <p className="text-xs text-ink-3">{t("editOnlyKo")}</p>)
       )}
     </div>
   );

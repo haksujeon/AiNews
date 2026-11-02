@@ -1,7 +1,7 @@
 /**
  * 정정 기록 (P0-6). 공개 /corrections 페이지가 이 함수만 쓴다.
  *
- *  - 대상: 한 번 발행됐다가 철회(withdrawn)되거나 새 버전으로 교체(superseded)된 판. 데일리·주간 모두.
+ *  - 대상: 한 번 발행됐다가 철회(withdrawn)되거나 새 버전으로 교체(superseded)된 판. 데일리·주간·월간 모두.
  *  - cutoff(결정 D6 = 첫 정식 발행일): 발행 시각(published_at)이 cutoff 이후인 판만. 출시 전 시험 판은 나오지 않는다.
  *      1) env CORRECTIONS_SINCE (YYYY-MM-DD 또는 ISO 시각)가 있으면 그것.
  *      2) 없으면 LAUNCH_FLOOR 이후 가장 이른 published_at. (정정 컬럼 마이그레이션 날짜 — 그 전의 발행은 모두 시험)
@@ -16,7 +16,7 @@
 import pool from "@/lib/db";
 import type { BriefingLocale } from "./types";
 import { briefingDatePath } from "./view";
-import { WEEKLY_PATH } from "@/components/briefing/briefing-tabs";
+import { periodicPath } from "@/components/briefing/briefing-tabs";
 
 /** 정식 발행 하한 — 이보다 앞선 발행은 모두 출시 전 시험이다 (scripts/2026-11-02-briefing-corrections.sql) */
 export const LAUNCH_FLOOR = "2026-11-02T00:00:00+09:00";
@@ -27,6 +27,7 @@ export interface CorrectionSourceRow {
   id: string;
   edition_type: string;
   edition_date: string; // YYYY-MM-DD
+  /** 주간·월간 기간 키 (content.meta.period_key → iso_week → month) */
   iso_week: string | null;
   locale: string;
   version: number;
@@ -39,9 +40,9 @@ export interface CorrectionSourceRow {
 export interface Correction {
   id: string;
   kind: CorrectionKind;
-  edition_type: "daily" | "weekly";
+  edition_type: "daily" | "weekly" | "monthly";
   edition_date: string;
-  /** 독자에게 보이는 판 이름: 데일리 = 날짜, 주간 = ISO 주 */
+  /** 독자에게 보이는 판 이름: 데일리 = 날짜, 주간 = ISO 주, 월간 = YYYY-MM */
   edition_label: string;
   version: number;
   published_at: string;
@@ -64,7 +65,7 @@ export function parseSince(v: string | undefined | null): string | null {
 
 function editionPath(r: CorrectionSourceRow): string | null {
   if (r.edition_type === "daily") return briefingDatePath(r.edition_date);
-  if (r.edition_type === "weekly" && r.iso_week) return `${WEEKLY_PATH}/${r.iso_week}`;
+  if ((r.edition_type === "weekly" || r.edition_type === "monthly") && r.iso_week) return periodicPath(r.edition_type, r.iso_week);
   return null;
 }
 
@@ -77,7 +78,7 @@ export function buildCorrections(rows: CorrectionSourceRow[], since: string | nu
   const sinceMs = new Date(since).getTime();
   const groups = new Map<string, CorrectionSourceRow[]>();
   for (const r of rows) {
-    if (!r.published_at || (r.edition_type !== "daily" && r.edition_type !== "weekly")) continue;
+    if (!r.published_at || !["daily", "weekly", "monthly"].includes(r.edition_type)) continue;
     const k = `${r.edition_type}|${r.edition_date}|${r.locale}`;
     groups.set(k, [...(groups.get(k) ?? []), r]);
   }
@@ -95,9 +96,9 @@ export function buildCorrections(rows: CorrectionSourceRow[], since: string | nu
       out.push({
         id: r.id,
         kind: r.status,
-        edition_type: r.edition_type as "daily" | "weekly",
+        edition_type: r.edition_type as Correction["edition_type"],
         edition_date: r.edition_date,
-        edition_label: r.edition_type === "weekly" && r.iso_week ? r.iso_week : r.edition_date,
+        edition_label: r.edition_type !== "daily" && r.iso_week ? r.iso_week : r.edition_date,
         version: r.version,
         published_at: published,
         changed_at: iso(r.changed_at) ?? published,
@@ -115,7 +116,7 @@ export async function resolveCorrectionsSince(): Promise<string | null> {
   if (fromEnv) return fromEnv;
   const { rows } = await pool.query(
     `SELECT MIN(published_at) AS first FROM daily_briefings
-      WHERE published_at IS NOT NULL AND published_at >= $1::timestamptz AND edition_type IN ('daily', 'weekly')`,
+      WHERE published_at IS NOT NULL AND published_at >= $1::timestamptz AND edition_type IN ('daily', 'weekly', 'monthly')`,
     [LAUNCH_FLOOR]
   );
   return iso(rows[0]?.first ?? null);
@@ -126,10 +127,10 @@ export async function listCorrections(locale: BriefingLocale, since?: string | n
   const cutoff = since === undefined ? await resolveCorrectionsSince() : since;
   if (!cutoff) return [];
   const { rows } = await pool.query(
-    `SELECT id, edition_type, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, content->'meta'->>'iso_week' AS iso_week,
+    `SELECT id, edition_type, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, COALESCE(content->'meta'->>'period_key', content->'meta'->>'iso_week', content->'meta'->>'month') AS iso_week,
             locale, version, status, published_at, COALESCE(status_changed_at, updated_at) AS changed_at, public_note
        FROM daily_briefings
-      WHERE locale = $1 AND edition_type IN ('daily', 'weekly') AND published_at IS NOT NULL
+      WHERE locale = $1 AND edition_type IN ('daily', 'weekly', 'monthly') AND published_at IS NOT NULL
         AND status IN ('published', 'superseded', 'withdrawn')
         AND (edition_type, edition_date) IN (
           SELECT edition_type, edition_date FROM daily_briefings

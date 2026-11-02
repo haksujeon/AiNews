@@ -18,6 +18,8 @@ export interface AdminBriefingListRow {
   edition_type: EditionType;
   edition_date: string;
   period_end: string | null;
+  /** 주간·월간 기간 키 (2026-W44 / 2026-10). 데일리는 null */
+  period_key: string | null;
   /** 주간·월간: 결손일 등 데이터 알림이 있어 발행 전 확인이 필요한가 */
   data_quality: boolean;
   locale: string;
@@ -42,6 +44,7 @@ export interface AdminBriefingListRow {
 export async function listBriefingsForAdmin(limit = 150, editionType?: EditionType): Promise<AdminBriefingListRow[]> {
   const { rows } = await pool.query(
     `SELECT id, edition_type, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, to_char(period_end, 'YYYY-MM-DD') AS period_end,
+            COALESCE(content->'meta'->>'period_key', content->'meta'->>'iso_week', content->'meta'->>'month') AS period_key,
             COALESCE(jsonb_array_length(content->'meta'->'data_quality'->'incomplete_days'), 0) > 0 AS data_quality,
             locale, version, status, mode,
             content->>'headline' AS headline, error, cost_usd, needs_review, source_briefing_id, created_at, published_at,

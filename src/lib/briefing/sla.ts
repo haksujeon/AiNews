@@ -2,11 +2,14 @@
  * 데일리 브리핑 발행 일정·SLA — 생성 스케줄(n8n), 생성 라우트의 기본 날짜, 관리자 SLA 띠, 상태 API(알림),
  * 홈 배너의 날짜 칩이 모두 이 파일의 규칙 하나를 쓴다 (Gate 2).
  *
- * 일정 (KST 기준, 판 날짜는 베이징 날짜)
- *  - 평일판 D(월~금): D 23:40 KST(= 베이징 22:40, 같은 날짜) 생성, 00:30 재시도 → 다음 날 09:00 KST 까지 ko 발행.
+ * 일정 (KST 기준, 판 날짜는 베이징 날짜) — 2026-11-02 사용자 결정: 하루가 끝난 자정 뒤에 생성
+ *  - 평일판 D(월~금): D+1 00:10 KST(= 베이징 D 23:10) 생성, 00:40 KST 재시도 → D+1 09:00 KST 까지 ko 발행.
+ *    마지막 수집이 23:00 KST 에 시작해 길면 40분 걸리므로 자정 정각 대신 10분 여유를 둔다.
+ *    재시도까지 베이징 날짜가 D 로 남아(01:00 KST 에 넘어감) 옛 코드(베이징 오늘 기준)와도 같은 판을 가리킨다.
  *  - 주말 합본(결정 D7): 판 날짜 = 토요일, 기간 = 토~일 (edition_date = period_start, 주간판과 같은 규칙).
- *    일요일 23:40 KST 에 생성하고 월요일 09:00 KST 까지 발행한다.
- *  - 토요일 밤 실행은 생성하지 않는다(다음 날 합본에 들어감). 일요일 날짜로 따로 만든 판은 없다.
+ *    월요일 00:10 KST 에 생성하고 월요일 09:00 KST 까지 발행한다.
+ *  - 일요일 00:10 실행(토요일 하루가 끝난 때)은 생성하지 않는다(다음 날 합본에 들어감). 일요일 날짜로 따로 만든 판은 없다.
+ *  - 실행일(run day) = 생성 호출 시각에서 RUN_LAG(3시간)를 뺀 KST 날짜 = 방금 끝난 날. 00:10·00:40·수동 02:00 모두 전날.
  *  - 금요일판 마감은 토요일 09:00 KST (규칙 그대로. 주말 검토를 없애려면 여기서 바꾼다).
  *
  * 알림: 09:30 KST 상태 확인에서 마감이 지났는데 ko 발행본이 없으면 1회 (마감 뒤 24시간 안에서만 notify).
@@ -15,11 +18,14 @@
  */
 import pool from "@/lib/db";
 import { EDITION_TYPE } from "./repository";
+import { beijingDate } from "@/lib/metrics/period";
 
 const DAY_MS = 86_400_000;
 const KST_OFFSET_MS = 9 * 3_600_000;
-/** 생성 시각 23:40 KST (분) */
-export const GENERATE_MINUTE_KST = 23 * 60 + 40;
+/** 생성 시각: 실행일 다음 날 00:10 KST (분) */
+export const GENERATE_MINUTE_KST = 10;
+/** 정기 실행이 가리키는 실행일 = (지금 − RUN_LAG) 의 KST 날짜. 00:10 생성·00:40 재시도·새벽 수동 실행이 모두 전날 */
+export const RUN_LAG_MS = 3 * 3_600_000;
 /** 발행 마감 09:00 KST (분) */
 export const DUE_MINUTE_KST = 9 * 60;
 /** 발행률을 보는 기간 (일) */
@@ -46,10 +52,8 @@ function kstAt(date: string, minute: number): Date {
   return new Date(toDay(date) + minute * 60_000 - KST_OFFSET_MS);
 }
 
-/** 베이징 날짜 (generate.ts beijingToday 와 같은 결과) */
-export function beijingDate(now: Date): string {
-  return fromMs(now.getTime() + 8 * 3_600_000);
-}
+/** 베이징 날짜 — generate.ts beijingToday·주간·월간과 같은 함수 */
+export { beijingDate };
 
 // ───────────────────────── 판 규칙
 
@@ -69,7 +73,7 @@ export function editionPeriod(editionDate: string): EditionPeriod {
   return { editionDate, periodStart: editionDate, periodEnd: weekend ? addDays(editionDate, 1) : editionDate, weekend };
 }
 
-/** 그 날짜(베이징) 밤 정기 실행이 만드는 판. 토요일 밤은 null(일요일에 합본 생성), 일요일 밤은 토요일 합본 */
+/** 그 실행일(그날이 끝난 뒤 자정 실행)이 만드는 판. 토요일은 null(일요일이 끝난 뒤 합본 생성), 일요일은 토요일 합본 */
 export function scheduledEditionFor(runDate: string): string | null {
   const wd = weekday(runDate);
   if (wd === 6) return null;
@@ -77,13 +81,14 @@ export function scheduledEditionFor(runDate: string): string | null {
   return runDate;
 }
 
-/** 판을 생성하는 날 (KST·베이징 같은 날짜) */
+/** 판의 실행일 (그날이 끝난 뒤 자정에 생성한다). 토요일 판 = 일요일 */
 export function generationDayOf(editionDate: string): string {
   return weekday(editionDate) === 6 ? addDays(editionDate, 1) : editionDate;
 }
 
+/** 정기 생성 시각: 실행일 다음 날 00:10 KST */
 export function generateAtOf(editionDate: string): Date {
-  return kstAt(generationDayOf(editionDate), GENERATE_MINUTE_KST);
+  return kstAt(addDays(generationDayOf(editionDate), 1), GENERATE_MINUTE_KST);
 }
 
 /** 발행 마감: 생성일 다음 날 09:00 KST */
@@ -101,7 +106,8 @@ export function previousEdition(editionDate: string): string {
 /** 지금 시각 기준 "현재 판": 정기 생성 시각이 지난 가장 최근 판 (마감 전이면 검토 중인 판) */
 export function currentEdition(now: Date): string {
   const { date, minute } = kstClock(now);
-  const runDay = minute >= GENERATE_MINUTE_KST ? date : addDays(date, -1);
+  // 가장 최근 정기 실행(00:10 KST)이 가리킨 실행일 = 그 실행 날짜의 전날
+  const runDay = addDays(minute >= GENERATE_MINUTE_KST ? date : addDays(date, -1), -1);
   return scheduledEditionFor(runDay) ?? addDays(runDay, -1);
 }
 
@@ -111,9 +117,14 @@ export function lastDueEdition(now: Date): string {
   return now.getTime() >= dueAtOf(cur).getTime() ? cur : previousEdition(cur);
 }
 
-/** n8n 정기 실행(날짜를 주지 않은 생성 호출)이 만들 판. 토요일 밤이면 null */
+/** 정기 실행의 실행일: (지금 − 3시간)의 KST 날짜 = 방금 끝난 날 */
+export function runDayOf(now: Date): string {
+  return kstClock(new Date(now.getTime() - RUN_LAG_MS)).date;
+}
+
+/** n8n 정기 실행(날짜를 주지 않은 생성 호출)이 만들 판. 토요일이 끝난 직후(일요일 00:10)면 null */
 export function scheduledRunEdition(now: Date): string | null {
-  return scheduledEditionFor(beijingDate(now));
+  return scheduledEditionFor(runDayOf(now));
 }
 
 /**

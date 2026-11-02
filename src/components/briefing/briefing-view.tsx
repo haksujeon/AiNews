@@ -111,6 +111,9 @@ export function BriefingView({ briefing, pager }: Props) {
   const note = c.editor_note ? null : editorNoteData(briefing);
   const allOutlets = outletsOf(Object.keys(briefing.articles), briefing.articles);
   const term = c.term_of_the_day;
+  // 수집 품질 (주간·월간과 같은 결손일 판정): 축소·부분 수집일이 있으면 데이터 알림
+  const dq = c.meta?.data_quality;
+  const dqDays = dq?.days ?? [];
 
   return (
     <article lang={htmlLang} data-testid="briefing">
@@ -155,6 +158,20 @@ export function BriefingView({ briefing, pager }: Props) {
           </nav>
         )}
       </header>
+
+      {dqDays.length > 0 && (
+        <p role="note" className="mt-[18px] border-l-[3px] border-ink-3 bg-surface px-3.5 py-2.5 text-sm leading-[1.65] text-ink-2" data-testid="briefing-data-notice">
+          <strong className="mr-2 text-ink">{t("dataNoticeTitle")}</strong>
+          {dqDays
+            .map((d) =>
+              d.reduced
+                ? t("dataNoticeReduced", { date: formatShortDate(d.day, loc), count: d.count })
+                : t("dataNoticePartial", { date: formatShortDate(d.day, loc), count: d.count, median: d.expected })
+            )
+            .join(" ")}{" "}
+          {t("dataNoticeTail")}
+        </p>
+      )}
 
       <div className="grid gap-6 pb-10 pt-2 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-12">
         {/* ── 본문 칼럼 ── */}

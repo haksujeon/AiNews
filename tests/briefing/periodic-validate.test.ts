@@ -109,6 +109,8 @@ test("metric_relevance: 인용한 지표의 대상(매체·기업)이 문장에 
 
 test("기간 표기(10월·11월 1일·W44)는 숫자 검사에서 뺀다", () => {
   assert.equal(stripPeriodLabels("10월 W44 에 11월 1일까지 562건").trim(), "에 까지 562건");
+  // 월간 실제 제목 "2026년 10월, …" (2026-11-02 초안에서 연도가 근거 밖 숫자로 잡혀 판 전체가 실패했다)
+  assert.equal(stripPeriodLabels("2026년 10월, AI 자금").trim(), ", AI 자금");
 });
 
 test("제목은 여유 없이 36자: 37자면 headline_length 경고", () => {
