@@ -326,6 +326,15 @@ test("헤드라인 대체: 수리 뒤에도 헤드라인만 치명이면 1위 �
   assert.equal(headlineFallback(c, { ...r, fatal: [] }), null);
 });
 
+test("주간 한자 정리: W44 big_picture 의 '구현형 AI(具身智能)와 智能体' → 괄호 병기 삭제·지표 용어 한국어 표기", async () => {
+  const { glossPeriodicHan } = await import("../../src/lib/briefing/periodic/generate");
+  const c = normalizeWeekly({ headline: "h", dek: "d", big_picture: [{ title: "t", text: "구현형 AI(具身智能)와 智能体 등 용어 언급이 늘었다." }], term: { term: "智能体", why: "智能体 언급" } }).content;
+  const g = glossPeriodicHan(c);
+  assert.equal(g.big_picture[0].text, "구현형 AI와 에이전트 등 용어 언급이 늘었다.");
+  assert.equal(g.term!.term, "智能体"); // 용어 칸 원어는 그대로
+  assert.equal(g.term!.why, "에이전트 언급");
+});
+
 test("범위 토큰: '일반 GPU에서 구동' 의 GPU 는 플랫폼 범위가 아니다 (10-27 재생성 오탐)", () => {
   const docs: SourceDoc[] = [{ title_kr: "", title_cn: "", summary_kr: "장문서 벤치마크 1위를 기록했으며, 일반 GPU에서도 구동할 수 있다.", insight_kr: "" }];
   assert.ok(!claimIssues("바이두 OCR 2, 장문서 벤치마크 1위", docs).some((i) => /GPU/.test(i.detail)));

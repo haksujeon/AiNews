@@ -40,6 +40,7 @@ import {
 import { previousPeriod, resolvePeriod, resolveWeek, type ResolvedPeriod } from "./period-key";
 import type { PeriodicKind, PeriodicMeta, PeriodicValidationReport, StoredPeriodicContent, StoryPoolItem, WeeklyContent } from "./types";
 import {
+  TERM_KO,
   citedSids,
   dropFatalPeriodic,
   needsRepair,
@@ -207,6 +208,63 @@ export function toStoredWeekly(
   return { content, articleIds: many([...new Set(citedSids(c))]) };
 }
 
+/** 남은 치명 항목 삭제 + headline·dek 결정적 대체 → 재검증 (최대 2회). 수리 단계의 "살릴 수 있나" 판정에도 쓴다 */
+export function dropPeriodic(
+  content: WeeklyContent,
+  report: PeriodicValidationReport,
+  ctx: PeriodicValidationContext,
+  m: PeriodMetrics
+): { content: WeeklyContent; report: PeriodicValidationReport; dropped: string[]; fallbacks: string[] } {
+  let c = structuredClone(content);
+  let r = report;
+  let dropped: string[] = [];
+  const fallbacks: string[] = [];
+  // 항목을 빼면 headline 의 근거(본문 전체 refs·지표)도 줄어 새 치명이 생길 수 있다 → 한 번 더 뺀다 (최대 2회)
+  for (let pass = 0; pass < 2 && r.fatal.length; pass++) {
+    const d = dropFatalPeriodic(c, r.fatal);
+    c = d.content;
+    dropped = [...new Set([...dropped, ...d.dropped])];
+    if (d.needsFallback.includes("dek") && !fallbacks.includes("dek")) {
+      const fb = fallbackDek(m);
+      c.dek = fb.text;
+      c.dek_refs = [];
+      c.dek_metrics = fb.metrics;
+      fallbacks.push("dek");
+    }
+    if (d.needsFallback.includes("headline") && !fallbacks.includes("headline")) {
+      c.headline = fallbackHeadline(m);
+      fallbacks.push("headline");
+    }
+    r = validateWeekly(c, ctx);
+  }
+  return { content: c, report: r, dropped, fallbacks };
+}
+
+/** 한국어 문장의 지표 용어 한자를 한국어 표기로 (term.term 은 그대로). 괄호 병기 한자는 지운다 */
+const HAN_GLOSS: [string, string][] = [
+  ...Object.entries(TERM_KO).map(([zh, ko]) => [zh, ko[0]] as [string, string]),
+  ["资本开支", "자본지출"],
+  ["大模型", "대형 모델"],
+];
+export function glossPeriodicHan(c: WeeklyContent): WeeklyContent {
+  const out = structuredClone(c);
+  const f = (t: string) => {
+    let x = t.replace(/\s?[(（]\s*[\u3400-\u9fff·、，,\s]+\s*[)）]/g, "");
+    for (const [zh, ko] of HAN_GLOSS) x = x.split(zh).join(ko);
+    return x;
+  };
+  out.headline = f(out.headline);
+  out.dek = f(out.dek);
+  out.big_picture = out.big_picture.map((b) => ({ ...b, title: f(b.title), text: f(b.text) }));
+  out.movers = out.movers.map((b) => ({ ...b, text: f(b.text) }));
+  if (out.money) out.money = { ...out.money, text: f(out.money.text) };
+  if (out.china_lens) out.china_lens = { ...out.china_lens, text: f(out.china_lens.text) };
+  out.watch_next = out.watch_next.map((w) => ({ ...w, text: f(w.text) }));
+  if (out.term) out.term = { ...out.term, why: f(out.term.why) };
+  out.month_arc = (out.month_arc ?? []).map((b) => ({ ...b, text: f(b.text) }));
+  return out;
+}
+
 interface KoOutcome {
   status: "draft" | "failed";
   content: WeeklyContent | null;
@@ -233,63 +291,51 @@ async function generateKo(
   cost.check();
   const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 6000 }, track);
   const p1 = normalizeWeekly(parseJsonContent(first.content));
-  let content = p1.content;
+  // 결정적 정리: 지표 용어 한자를 한국어 표기로 (智能体 → 에이전트), 괄호 병기 한자 삭제
+  let content = glossPeriodicHan(p1.content);
   let report = validateWeekly(content, ctx, p1.issues);
   validation.initial = report;
   let repaired = false;
 
-  if (needsRepair(report)) {
+  // 수리 최대 2회 — 2차는 지금 판을 삭제·대체해도 살릴 수 없을 때만 (삭제 뒤 중국 중심 미달 등). 데일리와 같은 규칙
+  const messages: { role: "user" | "assistant"; content: string }[] = [
+    { role: "user", content: user },
+    { role: "assistant", content: first.content },
+  ];
+  validation.used = "initial";
+  for (let round = 1; round <= 2 && needsRepair(report); round++) {
+    if (round > 1) {
+      const sim = dropPeriodic(content, report, ctx, m);
+      if (!sim.report.fatal.length && sim.content.big_picture.length >= MIN_BIG_PICTURE) break;
+    }
     try {
       cost.check();
-      const second = await chat(
-        {
-          system,
-          messages: [
-            { role: "user", content: user },
-            { role: "assistant", content: first.content },
-            { role: "user", content: buildWeeklyRepairPrompt(content, repairProblems(report), [], kind) },
-          ],
-          maxTokens: 6000,
-        },
-        track
-      );
-      const p2 = normalizeWeekly(parseJsonContent(second.content));
-      const r2 = validateWeekly(p2.content, ctx, p2.issues);
-      validation.repair = r2;
-      // 수리본이 더 나쁘면(치명 증가·큰 흐름 감소) 원본 유지
+      messages.push({ role: "user", content: buildWeeklyRepairPrompt(content, repairProblems(report), [], kind) });
+      const reply = await chat({ system, messages, maxTokens: 6000 }, track);
+      messages.push({ role: "assistant", content: reply.content });
+      const p2 = normalizeWeekly(parseJsonContent(reply.content));
+      const c2 = glossPeriodicHan(p2.content);
+      const r2 = validateWeekly(c2, ctx, p2.issues);
+      validation[round === 1 ? "repair" : `repair${round}`] = r2;
+      // 수리본이 더 나쁘면(치명 증가·큰 흐름 감소) 이전 판 유지
       if (r2.fatal.length <= report.fatal.length && r2.stats.bigPicture >= Math.min(report.stats.bigPicture, MIN_BIG_PICTURE)) {
-        content = p2.content;
+        content = c2;
         report = r2;
         repaired = true;
-        validation.used = "repair";
-      } else validation.used = "initial";
+        validation.used = round === 1 ? "repair" : `repair${round}`;
+      }
     } catch (e) {
       if (e instanceof BudgetExceeded) throw e;
       validation.repair_error = (e as Error).message;
-      validation.used = "initial";
+      break;
     }
   }
 
-  let dropped: string[] = [];
-  const fallbacks: string[] = [];
-  // 항목을 빼면 headline 의 근거(본문 전체 refs·지표)도 줄어 새 치명이 생길 수 있다 → 한 번 더 뺀다 (최대 2회)
-  for (let pass = 0; pass < 2 && report.fatal.length; pass++) {
-    const d = dropFatalPeriodic(content, report.fatal);
-    content = d.content;
-    dropped = [...new Set([...dropped, ...d.dropped])];
-    if (d.needsFallback.includes("dek") && !fallbacks.includes("dek")) {
-      const fb = fallbackDek(m);
-      content.dek = fb.text;
-      content.dek_refs = [];
-      content.dek_metrics = fb.metrics;
-      fallbacks.push("dek");
-    }
-    if (d.needsFallback.includes("headline") && !fallbacks.includes("headline")) {
-      content.headline = fallbackHeadline(m);
-      fallbacks.push("headline");
-    }
-    report = validateWeekly(content, ctx);
-  }
+  const d = dropPeriodic(content, report, ctx, m);
+  content = d.content;
+  report = d.report;
+  const dropped = d.dropped;
+  const fallbacks = d.fallbacks;
   validation.dropped_items = dropped;
   validation.fallbacks = fallbacks;
   validation.final = report;
