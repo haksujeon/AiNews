@@ -1,5 +1,5 @@
 /**
- * 발행·철회. MVP 에서는 관리자가 수동으로 승인해 발행한다.
+ * 발행·철회. 관리자 수동 발행과 AI 검토 자동 발행(2026-11-02 결정 D8 변경, review/pipeline.ts)이 이 함수 하나를 쓴다 (Gate 2).
  *
  *  - 발행 단위는 ko 판 한 버전 + 그 ko 에서 번역된 en/zh 중 draft 인 것.
  *    (en/zh 가 failed 여도 ko 발행은 막지 않는다. 그 언어는 발행본이 없게 된다)
@@ -8,6 +8,8 @@
  *  - 주간·월간: 기간에 결손일(수집 미완)이 있으면 관리자가 데이터 알림을 확인(acknowledgeDataQuality)해야 발행한다.
  *  - 데일리·주간·월간이 같은 함수를 쓴다 (editionType, 기본 'daily').
  *  - 철회는 공개 사유(reason)가 필수이고 public_note 에 남는다 (정정 기록, P0-6).
+ *  - AI 검토 자동 발행(review/pipeline.ts)은 briefingId(검토한 정확한 행)+version 을 주고, 더 새 ko 버전이 있거나
+ *    그 날짜 발행본이 이미 있으면 발행하지 않는다 (onlyIfLatest·noSupersede). "최신 draft" 로 발행하지 않는다 (감사 발행 위험).
  *  - status_changed_at 은 DB 트리거(scripts/2026-11-02-briefing-corrections.sql)가 상태가 바뀔 때마다 채운다.
  */
 import pool from "@/lib/db";
@@ -34,6 +36,12 @@ export async function publishBriefing(opts: {
   editionType?: EditionType;
   /** 주간·월간: 결손일 데이터 알림을 확인했음 */
   acknowledgeDataQuality?: boolean;
+  /** 이 id 의 ko 행만 발행 (version 과 함께 — 다른 행이 잡히면 거절) */
+  briefingId?: string;
+  /** 같은 판에 더 새 ko 버전이 있으면 거절 */
+  onlyIfLatest?: boolean;
+  /** 그 날짜 발행본이 이미 있으면 교체하지 않고 거절 */
+  noSupersede?: boolean;
 }): Promise<PublishResult> {
   const editionType = opts.editionType ?? EDITION_TYPE;
   const client = await pool.connect();
@@ -49,6 +57,22 @@ export async function publishBriefing(opts: {
     );
     const ko = koRows[0];
     if (!ko) throw new PublishError("발행할 ko 초안이 없습니다", 404);
+    if (opts.briefingId && (ko.id !== opts.briefingId || opts.version === undefined))
+      throw new PublishError(`검토한 행(${opts.briefingId})과 발행 대상(${ko.id})이 다릅니다`, 409);
+    if (opts.onlyIfLatest) {
+      const { rows: newer } = await client.query(
+        `SELECT version FROM daily_briefings WHERE edition_type = $1 AND edition_date = $2::date AND locale = 'ko' AND version > $3 LIMIT 1`,
+        [editionType, opts.date, ko.version]
+      );
+      if (newer.length) throw new PublishError(`더 새 ko 버전(v${newer[0].version})이 있어 v${ko.version} 을 자동 발행하지 않습니다`, 409);
+    }
+    if (opts.noSupersede) {
+      const { rows: pub } = await client.query(
+        `SELECT version FROM daily_briefings WHERE edition_type = $1 AND edition_date = $2::date AND status = 'published' LIMIT 1`,
+        [editionType, opts.date]
+      );
+      if (pub.length) throw new PublishError(`이미 발행본(v${pub[0].version})이 있어 교체하지 않습니다`, 409);
+    }
     if (ko.status !== "draft") throw new PublishError(`ko v${ko.version} 상태가 draft 가 아닙니다 (${ko.status})`, 409);
     const fatal = (ko.validation?.final?.fatal ?? []) as unknown[];
     if (fatal.length) throw new PublishError("검증 치명 위반이 남은 판은 발행할 수 없습니다", 409);

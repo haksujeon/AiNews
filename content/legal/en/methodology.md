@@ -16,13 +16,15 @@ Before translation, an AI classifier keeps only articles related to AI technolog
 - We never show the full body text, only a 3–5 sentence gist of the AI translation.
 - After translation we automatically check that no untranslated Chinese text is left over. Original-script names in parentheses, such as Yu Qian (于谦), are allowed.
 
-## 4. Briefing validation and editor approval
+## 4. Briefing validation and AI review
 
 - The daily briefing draft is written by AI using only the summaries of articles collected that day. Every item links to its source articles.
-- Each draft goes through automatic validation: every number must appear in the cited article, every cited reference must exist, and no Chinese may remain in translated text. A draft with a critical violation cannot be published.
-- **Only editions that an editor has read and approved are published.** Nothing is published automatically.
-- If we find an error after publication, we replace or withdraw the edition and disclose the reason in the [corrections log](/corrections).
-- Figures in the weekly report are computed from our database, and the AI writes sentences that quote only those figures and articles. It too is published after editor approval.
+- Each draft first goes through automatic validation: every number must appear in the cited article, every cited reference must exist, and no Chinese may remain in translated text. A draft with a critical violation cannot be published.
+- **A different AI model from the one that wrote the draft then reviews it.** The reviewer splits the text into individual factual claims and checks each against the cited articles (including the Chinese originals), flagging claims that are unsupported, wrong, mis-stated in number or unit, overstated, or attributed to the wrong article. It also checks for major stories of the period that were left out and whether the English and Chinese editions match the Korean one.
+- Problems that can be fixed sentence by sentence are corrected using only wording found in the source articles; sentences that cannot be backed by a source are deleted. The corrected edition goes through validation and AI review again (up to two rounds).
+- If the review score meets the threshold, there are no factual errors (wrong facts, number or unit errors, misattributed sources), no unsupported sentences and at most one overstatement, **the edition is published automatically without human approval.** Otherwise it stays a draft and an operator is notified, who fixes or regenerates it before publishing.
+- The AI review can miss errors too. If we find an error after publication or receive a report, we replace or withdraw the edition and disclose the reason in the [corrections log](/corrections).
+- Figures in the weekly and monthly reports are computed from our database, and the AI writes sentences that quote only those figures and articles. They go through the same AI review; a period with incompletely collected days is not published automatically and is published only after an operator confirms the data notice.
 
 ## 5. How we rank
 
@@ -35,7 +37,7 @@ Before translation, an AI classifier keeps only articles related to AI technolog
 - Whether the title or summary carries concrete figures
 - Event and recruiting notices, columns and interviews are ranked lower
 
-Once a briefing is published, that day's top stories in the list follow the order of the editor-approved briefing first.
+Once a briefing is published, that day's top stories in the list follow the order of the published briefing first.
 
 ## 6. Images
 

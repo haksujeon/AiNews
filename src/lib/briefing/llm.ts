@@ -13,6 +13,10 @@ import type { LlmUsage } from "./types";
 export const BRIEFING_MODEL = process.env.BRIEFING_MODEL || "anthropic-api-haiku-5-5";
 const PRICE_IN_PER_M = 0.1;
 const PRICE_OUT_PER_M = 0.5;
+/** 모델별 요금 ($/M 토큰, LiteLLM_SpendLogs 실측). 없는 모델은 생성 모델(haiku) 요금 */
+export const MODEL_PRICES: Record<string, { in: number; out: number }> = {
+  "anthropic-api-sonnet-4-6": { in: 3, out: 15 },
+};
 
 export class LlmError extends Error {
   constructor(
@@ -30,6 +34,10 @@ export interface ChatRequest {
   messages: { role: "user" | "assistant"; content: string }[];
   maxTokens?: number;
   timeoutMs?: number;
+  /** 기본 BRIEFING_MODEL (생성). AI 검토는 더 강한 모델을 따로 준다 (review/llm) */
+  model?: string;
+  /** 시도 횟수 (기본 3 = 재시도 2회). 긴 응답(검토)은 시간 초과 재시도가 비싸서 줄인다 */
+  maxAttempts?: number;
 }
 
 export interface ChatResponse {
@@ -37,8 +45,9 @@ export interface ChatResponse {
   usage: LlmUsage;
 }
 
-export function costOf(inputTokens: number, outputTokens: number): number {
-  return Math.round(((inputTokens * PRICE_IN_PER_M + outputTokens * PRICE_OUT_PER_M) / 1e6) * 1e6) / 1e6;
+export function costOf(inputTokens: number, outputTokens: number, model: string = BRIEFING_MODEL): number {
+  const p = MODEL_PRICES[model] ?? { in: PRICE_IN_PER_M, out: PRICE_OUT_PER_M };
+  return Math.round(((inputTokens * p.in + outputTokens * p.out) / 1e6) * 1e6) / 1e6;
 }
 
 function config() {
@@ -50,6 +59,7 @@ function config() {
 
 async function chatOnce(req: ChatRequest): Promise<ChatResponse> {
   const { base, key } = config();
+  const model = req.model ?? BRIEFING_MODEL;
   const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), req.timeoutMs ?? 180_000);
@@ -59,7 +69,7 @@ async function chatOnce(req: ChatRequest): Promise<ChatResponse> {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: BRIEFING_MODEL,
+        model,
         max_tokens: req.maxTokens ?? 8000,
         thinking: { type: "disabled" },
         messages: [{ role: "system", content: req.system }, ...req.messages],
@@ -89,10 +99,10 @@ async function chatOnce(req: ChatRequest): Promise<ChatResponse> {
   const choice = d.choices?.[0];
   const usage: LlmUsage = {
     requestId: d.id ?? null,
-    model: BRIEFING_MODEL,
+    model,
     inputTokens,
     outputTokens,
-    costUsd: costOf(inputTokens, outputTokens),
+    costUsd: costOf(inputTokens, outputTokens, model),
     latencyMs,
     finishReason: choice?.finish_reason ?? null,
   };
@@ -110,7 +120,8 @@ async function chatOnce(req: ChatRequest): Promise<ChatResponse> {
  */
 export async function chat(req: ChatRequest, onUsage?: (u: LlmUsage) => void): Promise<ChatResponse> {
   let lastErr: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const attempts = Math.max(1, req.maxAttempts ?? 3);
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const r = await chatOnce(req);
       onUsage?.(r.usage);
@@ -118,7 +129,7 @@ export async function chat(req: ChatRequest, onUsage?: (u: LlmUsage) => void): P
     } catch (e) {
       lastErr = e;
       if (e instanceof LlmError && e.usage) onUsage?.(e.usage);
-      if (!(e instanceof LlmError) || !e.retryable || attempt === 2) break;
+      if (!(e instanceof LlmError) || !e.retryable || attempt === attempts - 1) break;
       await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
     }
   }

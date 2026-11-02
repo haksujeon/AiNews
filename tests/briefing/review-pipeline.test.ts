@@ -1,0 +1,165 @@
+/**
+ * AI 검토 파이프라인 통합 테스트 (LLM·DB 모의) — 실행: npm run test:unit
+ *  검토 → (수정 → 재검토) → 자동 발행 / 초안 유지, 자동 발행 스위치, dry-run(저장·발행 없음), 재생성 필요 판.
+ *  발행은 검토한 정확한 행(id·version)으로만 부른다.
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { runReviewPipeline, type PipelineDeps } from "../../src/lib/briefing/review/pipeline";
+import { policyFromEnv } from "../../src/lib/briefing/review/policy";
+import type { ReviewInput } from "../../src/lib/briefing/review/evidence";
+import type { BriefingRow } from "../../src/lib/briefing/repository";
+import { dailyRow, fakeInput, reviewerJson } from "./review-fixtures";
+
+interface Harness {
+  deps: PipelineDeps;
+  published: { id: string; version: number }[];
+  saved: Record<string, unknown>[];
+  decisions: { reviewId: string; decision: Record<string, unknown> }[];
+  stored: { trigger: string; round: number; verdict: string | null }[];
+  chats: number;
+}
+
+function harness(replies: ((input: ReviewInput) => unknown)[], inputs: Map<string, ReviewInput>): Harness {
+  const h: Harness = { deps: null as unknown as PipelineDeps, published: [], saved: [], decisions: [], stored: [], chats: 0 };
+  let current: ReviewInput | null = null;
+  let n = 0;
+  h.deps = {
+    review: {
+      chat: async (_req, onUsage) => {
+        const reply = replies[h.chats++];
+        assert.ok(reply, "예상보다 검토 호출이 많음");
+        onUsage?.({ requestId: `req-${h.chats}`, model: "mock", inputTokens: 1000, outputTokens: 200, costUsd: 0.01, latencyMs: 5, finishReason: "stop" });
+        return { content: JSON.stringify(reply(current!)), usage: { requestId: null, model: "mock", inputTokens: 0, outputTokens: 0, costUsd: 0, latencyMs: 0, finishReason: "stop" } };
+      },
+      loadInput: async () => {
+        throw new Error("파이프라인은 입력을 직접 넘긴다");
+      },
+      store: async (r) => {
+        h.stored.push({ trigger: r.trigger, round: r.round, verdict: r.verdict });
+        return `rev-${++n}`;
+      },
+    },
+    loadInput: async (id) => {
+      const i = inputs.get(id);
+      assert.ok(i, `입력 없음 ${id}`);
+      current = i;
+      return i;
+    },
+    findTargets: async () => [],
+    lock: (_t, fn) => fn(),
+    producedByRound: async (id) => (id === "fixed-1" ? 0 : null),
+    pipelineReviews: async () => [],
+    publishable: async () => ({ ok: true, detail: "최신" }),
+    publish: async (_t, row: BriefingRow) => {
+      h.published.push({ id: row.id, version: row.version });
+      return { published: [{ locale: "ko", id: row.id, version: row.version }] };
+    },
+    saveFixed: async (input, content) => {
+      h.saved.push(content);
+      const row = dailyRow({ id: "fixed-1", version: input.row.version + 1, content: content as BriefingRow["content"] });
+      inputs.set("fixed-1", fakeInput(row));
+      return { id: "fixed-1", version: row.version };
+    },
+    saveTranslations: async () => {},
+    retranslate: async () => [
+      { locale: "en", content: { headline: "x" }, candidate: null, problems: [], repaired: false, usages: [] },
+      { locale: "zh", content: { headline: "x" }, candidate: null, problems: [], repaired: false, usages: [] },
+    ],
+    recordDecision: async (reviewId, decision) => {
+      h.decisions.push({ reviewId, decision: decision as Record<string, unknown> });
+    },
+    now: () => 0,
+  };
+  // 입력 첫 읽기 전에도 current 가 있게
+  current = inputs.values().next().value ?? null;
+  return h;
+}
+
+const ORIG = dailyRow();
+const pass = (i: ReviewInput) => reviewerJson(i);
+/** 헤드라인 overclaim 2건(헤드라인·주요 기사 제목) → 근거로 고친 헤드라인, 주목 기업 문장은 근거 없음(수정안 없음 → 삭제) */
+const fixable = (i: ReviewInput) =>
+  reviewerJson(
+    i,
+    {
+      S01: { l: "overclaim", e: "智谱发布GLM-6", n: "'중국 최대' 근거 없음" },
+      S14: { l: "unsupported", e: "근거 없음", n: "기사에 없음" },
+    },
+    { fixes: [{ s: "S01", a: "replace", t: "즈푸, GLM-6 공개", e: "智谱发布GLM-6" }], verdict: "FIXABLE" }
+  );
+const policy = policyFromEnv({});
+
+test("PASS → 검토한 정확한 행(id·version)으로 자동 발행, 결정 기록", async () => {
+  const h = harness([pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.deepEqual(h.published, [{ id: ORIG.id, version: 3 }]);
+  assert.equal(r.processed[0].published, true);
+  assert.equal(r.notify, true);
+  assert.match(r.message, /자동 발행/);
+  assert.equal(h.decisions.at(-1)!.decision.action, "published");
+  assert.equal(h.saved.length, 0);
+});
+
+test("FIXABLE → 근거로 고친 새 버전 저장 → 재검토 PASS → 새 버전을 발행", async () => {
+  const h = harness([fixable, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(h.saved.length, 1);
+  const fixed = h.saved[0] as { headline: string; companies_to_watch: unknown[] };
+  assert.equal(fixed.headline, "즈푸, GLM-6 공개");
+  assert.equal(fixed.companies_to_watch.length, 0, "근거 없는 문장은 지워 항목이 빠진다");
+  assert.deepEqual(h.published, [{ id: "fixed-1", version: 4 }]);
+  assert.deepEqual(h.stored.map((s) => s.round), [0, 1]);
+  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["fixed", "published"]);
+  assert.equal(r.processed[0].steps.map((s) => s.action).join(","), "reviewed,fixed,reviewed,published");
+});
+
+test("자동 발행 스위치 off → 통과해도 발행하지 않고 알림", async () => {
+  const h = harness([pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy: policyFromEnv({ BRIEFING_AUTO_PUBLISH: "off" }) }, h.deps);
+  assert.equal(h.published.length, 0);
+  assert.equal(h.decisions.at(-1)!.decision.action, "switch_off");
+  assert.match(r.message, /자동 발행이 꺼져/);
+});
+
+test("dry-run → 수정본을 메모리에서만 만들고 저장·발행하지 않는다", async () => {
+  const h = harness([fixable, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const r = await runReviewPipeline({ briefingId: ORIG.id, dryRun: true, policy }, h.deps);
+  assert.equal(h.saved.length, 0);
+  assert.equal(h.published.length, 0);
+  assert.deepEqual(h.stored.map((s) => s.trigger), ["dry_run", "dry_run"]);
+  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["fixed_in_memory", "would_publish"]);
+  assert.match(r.message, /dry-run/);
+});
+
+test("재생성 필요(wrong 3건) → 고치지 않고 초안 유지 + 알림", async () => {
+  const bad = (i: ReviewInput) =>
+    reviewerJson(i, { S02: { l: "wrong", e: "x", n: "x" }, S06: { l: "wrong", e: "x", n: "x" }, S10: { l: "wrong", e: "x", n: "x" } }, { verdict: "FAIL" });
+  const h = harness([bad], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(h.saved.length, 0);
+  assert.equal(h.published.length, 0);
+  assert.equal(h.decisions.at(-1)!.decision.action, "hold");
+  assert.equal(r.notify, true);
+  assert.match(r.message, /초안 유지/);
+});
+
+test("수정 2회 뒤에도 미달 → 초안 유지 (검토 최대 3회)", async () => {
+  const inputs = new Map([[ORIG.id, fakeInput(ORIG)]]);
+  const h = harness([fixable, fixable, fixable], inputs);
+  // 두 번째 수정본도 같은 id 로 저장되도록: producedByRound 를 회차대로
+  let round = -1;
+  h.deps.producedByRound = async () => (round++ < 0 ? null : round - 1);
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(h.chats, 3);
+  assert.equal(h.published.length, 0);
+  assert.match(r.processed[0].steps.at(-1)!.detail, /수정 2회 뒤에도 미달|고칠|적용할 수정이 없음/);
+});
+
+test("검토 응답이 스키마 오류면 결정 없이 다음 호출로 (발행 없음)", async () => {
+  const h = harness([() => ({ verdict: "PASS" })], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(h.published.length, 0);
+  assert.equal(r.processed[0].final, false);
+  assert.equal(r.pending, 1);
+});

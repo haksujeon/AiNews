@@ -3,6 +3,8 @@ import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { BriefingReviewActions } from "@/components/admin/briefing-review-actions";
+import { BriefingAiReview } from "@/components/admin/briefing-ai-review";
+import { reviewThatProduced, reviewsOf } from "@/lib/briefing/review/store";
 import { BriefingView } from "@/components/briefing/briefing-view";
 import { PeriodicView } from "@/components/briefing/periodic-view";
 import { getBriefingRow, translationsOf } from "@/lib/briefing/admin";
@@ -11,7 +13,7 @@ import { getPeriodicForReview, periodKeyOf } from "@/lib/briefing/periodic/publi
 import type { StoredWeeklyContent } from "@/lib/briefing/periodic/types";
 import type { StoredBriefingContent, ValidationIssue } from "@/lib/briefing/types";
 
-// 관리자 브리핑 상세: 검증 결과 + 작업 + 인라인 수정 + 공개 페이지와 같은 컴포넌트(BriefingView / 주간·월간은 PeriodicView)로 그린 미리보기.
+// 관리자 브리핑 상세: 검증 결과 + AI 검토 결과(자동 발행 판정) + 작업 + 인라인 수정 + 공개 페이지와 같은 컴포넌트(BriefingView / 주간·월간은 PeriodicView)로 그린 미리보기.
 export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -43,10 +45,12 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
   // 주간·월간(periodic)은 같은 미리보기·작업을 쓴다
   const weekly = row.edition_type === "weekly" || row.edition_type === "monthly";
   const monthly = row.edition_type === "monthly";
-  const [preview, weeklyPreview, translations] = await Promise.all([
+  const [preview, weeklyPreview, translations, aiReviews, producedBy] = await Promise.all([
     weekly ? null : getBriefingForReview(id),
     weekly ? getPeriodicForReview(id) : null,
     row.locale === "ko" && !weekly ? translationsOf(id) : [],
+    row.locale === "ko" ? reviewsOf(id).catch(() => []) : [],
+    row.locale === "ko" ? reviewThatProduced(id).catch(() => null) : null,
   ]);
 
   const v = (row.validation ?? {}) as {
@@ -55,6 +59,7 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
     dropped_items?: string[];
     fallbacks?: string[];
     used?: string;
+    ai_review_fix?: Parameters<typeof BriefingAiReview>[0]["fixInfo"];
   };
   const fatal = v.final?.fatal ?? [];
   const warn = v.final?.warn ?? [];
@@ -123,6 +128,16 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
               {v.dropped_items?.length ? <p className="mt-2 text-xs text-ink-3">{t("droppedItems", { items: v.dropped_items.join(", ") })}</p> : null}
               {v.fallbacks?.length ? <p className="mt-1 text-xs text-ink-3">{t("fallbacks", { items: v.fallbacks.join(", ") })}</p> : null}
             </section>
+            {row.locale === "ko" && (
+              <BriefingAiReview
+                locale={locale}
+                briefingId={row.id}
+                reviews={aiReviews}
+                producedBy={producedBy}
+                fixInfo={v.ai_review_fix ?? null}
+                canReview={["draft", "published"].includes(row.status) && Boolean(row.content && Object.keys(row.content).length)}
+              />
+            )}
             {row.locale === "ko" && !weekly && (
               <section>
                 <h2 className="border-b border-rule-strong pb-1.5 text-sm font-bold text-ink">{t("translations")}</h2>
