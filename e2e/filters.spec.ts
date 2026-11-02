@@ -28,7 +28,8 @@ async function idsIn(scope: Locator): Promise<string[]> {
 /** "늘리기" 를 끝까지 눌러 관련 기사 전부를 보이게 한 뒤 id 목록 */
 async function expandRelated(page: Page, section: Locator, more: string): Promise<string[]> {
   const btn = section.getByRole('button', { name: more });
-  for (let i = 0; i < 4 && (await btn.isEnabled()); i++) await btn.click();
+  // 관련 기사가 1건이면 ± 버튼이 없다
+  for (let i = 0; i < 4 && (await btn.count()) > 0 && (await btn.isEnabled()); i++) await btn.click();
   return idsIn(section.locator('div.grid'));
 }
 
@@ -37,9 +38,10 @@ test('API: 필터 선택지는 공개 분류 3개(설정 순서), 국가 1개 / 
   expect(facets.categories).toEqual(PUBLIC);
   expect(facets.countries.length).toBeLessThanOrEqual(1);
 
-  const all = await (await request.get(`${BASE_URL}/api/news?limit=1`)).json();
-  const econ = await (await request.get(`${BASE_URL}/api/news?limit=1&categories=economy,culture`)).json();
-  expect(econ.total).toBe(all.total);
+  // 다른 데이터 작업이 행을 넣고 있을 수 있어 두 요청을 연달아 다시 받아 비교한다
+  const total = async (q: string) => (await (await request.get(`${BASE_URL}/api/news?limit=1${q}`)).json()).total as number;
+  await expect.poll(async () => (await total('&categories=economy,culture')) - (await total('')), { timeout: 15_000 }).toBe(0);
+  const all = { total: await total('') };
   const tech = await (await request.get(`${BASE_URL}/api/news?limit=1&categories=ai-tech,economy`)).json();
   expect(tech.total).toBeLessThan(all.total);
 });
@@ -124,6 +126,57 @@ test('관련 기사: 상세 페이지와 모달이 같은 id 목록 (ko·zh, 144
       expect(modalIds).toEqual(detailIds);
       await modalSection.scrollIntoViewIfNeeded();
       await shot(page, `related-modal-${locale}-${vp.width}`, dialog);
+    }
+  }
+});
+
+test('관련 기사가 1건이면 표시 수·버튼이 실제 건수를 넘지 않는다 (상세·모달)', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  const related = async (id: string) =>
+    ((await (await request.get(`${BASE_URL}/api/news/related?id=${id}&limit=4`)).json()) as { id: string }[]).map((r) => r.id);
+  // 상세: 라벨 세트에서 1건만 나오는 기사를 찾는다 (없으면 홈 카드에서)
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${BASE_URL}/ko`);
+  const cardIds = await idsIn(page.locator('main'));
+  const pool = [
+    '81759824-45aa-41e2-8717-644f7884d502',
+    '0a774e2b-12c4-4d5c-918c-78489a708bea',
+    'd701448d-9ae1-4c02-865c-68cd02fad909',
+    ...cardIds.slice(0, 30),
+  ];
+  let one = '';
+  let oneIds: string[] = [];
+  for (const id of pool) {
+    const r = await related(id);
+    if (r.length === 1) {
+      one = id;
+      oneIds = r;
+      if (cardIds.includes(id)) break; // 홈 카드면 모달도 확인할 수 있으니 우선
+    }
+  }
+  test.skip(!one, '관련 기사가 정확히 1건인 기사를 찾지 못했다');
+
+  for (const vp of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(vp);
+    await page.goto(`${BASE_URL}/ko/news/${one}`);
+    const section = page.locator('section', { has: page.getByRole('heading', { name: L.ko.related }) });
+    await expect(section).toBeVisible();
+    await expect(section.getByRole('button', { name: L.ko.more })).toHaveCount(0);
+    expect(await idsIn(section.locator('div.grid'))).toEqual(oneIds);
+    // 결과가 1건이어도 격자 칸은 기본 표시 수(3) 그대로 — 카드 하나가 전체 폭으로 커지지 않는다
+    await expect(section.locator('div.grid')).toHaveClass(/lg:grid-cols-3/);
+    await section.scrollIntoViewIfNeeded();
+    await shot(page, `related-one-detail-ko-${vp.width}`);
+
+    if (cardIds.includes(one)) {
+      await page.goto(`${BASE_URL}/ko`);
+      await page.locator(`main a[href*="/news/${one}"]`).first().click();
+      const dialog = page.getByRole('dialog');
+      const ms = dialog.locator('section', { has: page.getByRole('heading', { name: L.ko.related }) });
+      await expect(ms).toBeVisible();
+      await expect(ms.getByRole('button', { name: L.ko.more })).toHaveCount(0);
+      expect(await idsIn(ms.locator('div.grid'))).toEqual(oneIds);
+      await shot(page, `related-one-modal-ko-${vp.width}`, dialog);
     }
   }
 });

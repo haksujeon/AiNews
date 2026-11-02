@@ -61,6 +61,9 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
 
   if (!news) return null;
 
+  // 관련 기사는 관련 있는 것만 온다(0~4건). 표시 수·버튼은 실제 건수를 넘지 않게
+  const shown = Math.min(relatedCount, relatedNews.length);
+
   const fullItem = news;
   const title = getTitle(fullItem, locale);
 
@@ -96,32 +99,34 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
             <section>
               <div className="mb-1 flex items-center justify-between border-b border-rule-strong pb-2">
                 <h3 className="text-sm font-bold text-ink">{t("relatedNews")}</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={relatedCount <= 1}
-                    onClick={() => setRelatedCount((c) => Math.max(1, c - 1))}
-                    aria-label={t("fewerRelated")}
-                  >
-                    <Minus className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Button>
-                  <span className="w-5 text-center text-sm text-ink-2" aria-live="polite">{relatedCount}</span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={relatedCount >= Math.min(4, relatedNews.length)}
-                    onClick={() => setRelatedCount((c) => Math.min(4, relatedNews.length, c + 1))}
-                    aria-label={t("moreRelated")}
-                  >
-                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Button>
-                </div>
+                {relatedNews.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={shown <= 1}
+                      onClick={() => setRelatedCount(Math.max(1, shown - 1))}
+                      aria-label={t("fewerRelated")}
+                    >
+                      <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Button>
+                    <span className="w-5 text-center text-sm text-ink-2" aria-live="polite">{shown}</span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={shown >= Math.min(4, relatedNews.length)}
+                      onClick={() => setRelatedCount(Math.min(4, relatedNews.length, shown + 1))}
+                      aria-label={t("moreRelated")}
+                    >
+                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
-                {relatedNews.slice(0, relatedCount).map((item) => (
+                {relatedNews.slice(0, shown).map((item) => (
                   // 관련 기사도 카드와 같은 링크 경로. replace 로 이동해 모달을 닫으면(back)
                   // 이전 기사가 아니라 목록으로 돌아가게 한다.
                   <Link
