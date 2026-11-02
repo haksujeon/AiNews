@@ -24,8 +24,10 @@ test("normalizeRegion: 대만·홍콩·마카오 → CN 대표 지역 + TW/HK �
   assert.deepEqual(normalizeRegion("TW"), { subject_region: "CN", region_tags: ["CN", "TW"] });
   assert.deepEqual(normalizeRegion("HK", ["US"]), { subject_region: "CN", region_tags: ["CN", "US", "HK"] });
   assert.deepEqual(normalizeRegion("MO"), { subject_region: "CN", region_tags: ["CN", "HK"] });
-  // 대표 지역이 다른 나라여도 TW 태그가 있으면 CN 태그도 붙는다 (SiPearl×신다 = EU, 태그 TW)
-  assert.deepEqual(normalizeRegion("EU", ["TW"]), { subject_region: "EU", region_tags: ["CN", "EU", "TW"] });
+  // 대만이 두 번째 지역일 뿐이면 CN 태그를 더하지 않는다 (SiPearl×신다 = EU + TW, 엔비디아×TSMC = US + TW → 미중 배지 없음)
+  assert.deepEqual(normalizeRegion("EU", ["TW"]), { subject_region: "EU", region_tags: ["EU", "TW"] });
+  assert.deepEqual(normalizeRegion("US", ["TW"]), { subject_region: "US", region_tags: ["US", "TW"] });
+  assert.deepEqual(regionBadges("US", normalizeRegion("US", ["TW"])!.region_tags), []);
 });
 
 test("normalizeRegion: GLOBAL 은 태그에 넣지 않고, 모르는 코드는 버린다", () => {

@@ -55,7 +55,7 @@ export interface RegionValue {
 
 /**
  * 원시 판정(LLM·규칙·n8n) → 저장 값. 알 수 없는 대표 지역이면 null(저장하지 않음 → 나중에 백필).
- *  - TW/HK/MO 대표 지역 → CN, 태그에 TW/HK 를 남긴다.
+ *  - TW/HK/MO 대표 지역 → CN, 태그에 CN + TW/HK 를 남긴다. 태그로만 온 TW/HK 는 그대로 두고 CN 을 더하지 않는다.
  *  - 태그: 알려진 코드만, GLOBAL·NONE 제거, 대표 지역(GLOBAL 제외)을 넣는다, 정해진 순서로 중복 없이.
  */
 export function normalizeRegion(primary: unknown, tags: unknown = []): RegionValue | null {
@@ -72,9 +72,9 @@ export function normalizeRegion(primary: unknown, tags: unknown = []): RegionVal
     p = "CN";
   }
   if (!isSubject(p)) return null;
+  // 대표 지역(CN 으로 접힌 경우 포함)은 태그에도 넣는다. 대만·홍콩이 '두 번째 지역'일 뿐이면 CN 태그를 붙이지 않는다
+  // — 미국 기업 × TSMC 공급망 기사에 '미중' 배지가 뜨지 않도록 (결정 2 는 대만이 '주제'인 기사만 CN 으로 본다).
   if (p !== "GLOBAL") set.add(p);
-  // 대만·홍콩 태그가 있으면 중국 태그도 함께 (대표 지역이 다른 나라여도 '중국 쪽 이야기'로 보이게)
-  if (set.has("TW") || set.has("HK")) set.add("CN");
   return { subject_region: p, region_tags: REGION_TAGS.filter((t) => set.has(t) && isTag(t)) };
 }
 
