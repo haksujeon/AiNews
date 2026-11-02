@@ -86,10 +86,12 @@ test("흐름·후속 묶음: 라벨 붙은 것 중 관련 비율 ≥ 0.6, 모두
 });
 
 test("빈 묶음: 관련 기사가 없는 기준 기사는 묶음이 비고(숨김), 억지로 채우지 않는다", () => {
-  // 0a774e2b(국산 인터커넥트 칩)·e230d2ab(민첩손) — 라벨상 관련 기사 거의 없음
+  // 0a774e2b(국산 인터커넥트 칩)·e230d2ab(민첩손) — 라벨상 같은 이야기(같은 사건·흐름)가 거의 없음.
+  // "같은 기업" 묶음은 라벨 기준(같은 이야기인가)과 목적이 달라 세지 않는다: e230d2ab 는 智元 행사 기사라
+  // 로봇 기업 이름표(2026-11-02 추가) 이후 지위안 소식이 같은 기업 묶음에 정상적으로 들어온다.
   for (const s of ["0a774e2b-12c4-4d5c-918c-78489a708bea", "e230d2ab-6c4c-4f44-bf99-5e68c730dc38"]) {
     const r = results.get(s)!;
-    const shown = r.sections.sameEvent.length + r.sections.flow.length + r.sections.company.length;
+    const shown = r.sections.sameEvent.length + r.sections.flow.length;
     assert.ok(shown <= 1, `${s.slice(0, 8)} shown ${shown}`);
   }
   const emptyAll = [...results.values()].filter((r) => !r.sections.sameEvent.length && !r.sections.flow.length && !r.sections.company.length).length;
