@@ -1,0 +1,738 @@
+{
+ "totalGroups": 65,
+ "political": [
+  "b8789b32-fde5-4299-8405-0e87235e3f10",
+  "918f7ebe-7230-4357-80af-39f775133208"
+ ],
+ "groups": [
+  {
+   "shortId": "A01",
+   "primary": "7e5a209c-8668-4b27-bfc2-51a093a4aa25",
+   "siblings": [
+    "63f96969-980d-4acd-a56d-92544f929d26"
+   ],
+   "sources": [
+    "Huxiu",
+    "36Kr"
+   ],
+   "score": 7.355,
+   "scoreDetail": {
+    "coverage": 4.754887502163468,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 1,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A02",
+   "primary": "d41fdcbf-7730-46b0-8ab9-2e23d1737a78",
+   "siblings": [
+    "8b6998e8-d348-4ad4-96d5-63e15e2cabac"
+   ],
+   "sources": [
+    "Huxiu",
+    "36Kr"
+   ],
+   "score": 7.155,
+   "scoreDetail": {
+    "coverage": 4.754887502163468,
+    "source": 0.8,
+    "category": 1,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A03",
+   "primary": "22842adc-6d44-4834-99cc-fa1aea2e0676",
+   "siblings": [
+    "00e3a282-2764-4f13-af69-09b0ca9eb750"
+   ],
+   "sources": [
+    "Huxiu",
+    "36Kr"
+   ],
+   "score": 6.955,
+   "scoreDetail": {
+    "coverage": 4.754887502163468,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A04",
+   "primary": "b0686258-69e1-43a4-b88e-fa1eabd481f6",
+   "siblings": [],
+   "sources": [
+    "Qbitai"
+   ],
+   "score": 6.5,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 1,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A05",
+   "primary": "9c8d8c65-83cb-4c9e-abc1-0d04b709d8f5",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 6.3,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 1,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A06",
+   "primary": "fd119d97-8a0c-43d1-a271-33a8d1d8aa80",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 6.3,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 1,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A07",
+   "primary": "2c610ba1-ebec-4b35-9918-eb3d091783d2",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 6.1,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A08",
+   "primary": "52f92762-e22c-43b8-a00d-4a2ec94442a8",
+   "siblings": [],
+   "sources": [
+    "XinZhiYuan"
+   ],
+   "score": 6.1,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 1,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A09",
+   "primary": "7ea3a37d-b2be-4977-bb6c-2fdb77cf5855",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 6.1,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A10",
+   "primary": "b1a74e3f-45bc-4934-a2c3-2e3a79822c71",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 6.1,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A11",
+   "primary": "0134efd0-7717-441e-8764-200268a31a88",
+   "siblings": [],
+   "sources": [
+    "ITHome"
+   ],
+   "score": 6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.7,
+    "category": 0.8,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A12",
+   "primary": "86d6b9b8-07a4-4c2e-a1bb-f5de88cc84a8",
+   "siblings": [],
+   "sources": [
+    "Qbitai"
+   ],
+   "score": 6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 1,
+    "company": 1,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A13",
+   "primary": "cf9e32f5-21e7-4c2c-b1b2-39f0e4a0d614",
+   "siblings": [],
+   "sources": [
+    "Qbitai"
+   ],
+   "score": 6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 1,
+    "company": 1,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A14",
+   "primary": "188a07cf-11f7-44e4-a66e-63c243bcba36",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.9,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 1,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A15",
+   "primary": "22603099-470c-4d9e-b7cf-61bcc550ddd9",
+   "siblings": [],
+   "sources": [
+    "Huxiu"
+   ],
+   "score": 5.9,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.6,
+    "category": 0.8,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A16",
+   "primary": "68a9d9e5-17d8-4247-86b9-bad792f71fdf",
+   "siblings": [],
+   "sources": [
+    "Huxiu"
+   ],
+   "score": 5.9,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.6,
+    "category": 0.8,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A17",
+   "primary": "700fed7c-590f-4a70-9221-dd5b8b6e09ff",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.9,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 1,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A18",
+   "primary": "9a682334-5dbe-4875-a510-eff9c39f1472",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.9,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 1,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A19",
+   "primary": "d215abbf-e223-4882-b6f1-b39f8fa85178",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.9,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 1,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A20",
+   "primary": "eb31cb4d-df83-45a3-a9a0-c1715ba9eb4b",
+   "siblings": [],
+   "sources": [
+    "Huxiu"
+   ],
+   "score": 5.9,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.6,
+    "category": 0.8,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A21",
+   "primary": "afeef382-a96e-476b-b487-835986449f89",
+   "siblings": [],
+   "sources": [
+    "Qbitai"
+   ],
+   "score": 5.8,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 0.8,
+    "company": 0.5,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A22",
+   "primary": "3f1953a2-5934-4301-9342-2274c5cb5ac7",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.7,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A23",
+   "primary": "5860e63a-6b65-4c9f-9e83-40b769acb279",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.7,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A24",
+   "primary": "67279035-ff53-45f7-ae02-74d62718323b",
+   "siblings": [],
+   "sources": [
+    "Huxiu"
+   ],
+   "score": 5.7,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.6,
+    "category": 1,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A25",
+   "primary": "3bcdbbf9-2eb5-4baf-aa17-7eb730ad697d",
+   "siblings": [],
+   "sources": [
+    "ITHome"
+   ],
+   "score": 5.6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.7,
+    "category": 0.8,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A26",
+   "primary": "4d432de2-d718-46e6-baec-5db4995a7074",
+   "siblings": [],
+   "sources": [
+    "XinZhiYuan"
+   ],
+   "score": 5.6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 1,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A27",
+   "primary": "7a564500-eb92-49c2-937d-c3ac61eccfe9",
+   "siblings": [],
+   "sources": [
+    "XinZhiYuan"
+   ],
+   "score": 5.6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 1,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A28",
+   "primary": "8d50c6e8-fe01-4f36-bfe5-afbf8956599c",
+   "siblings": [],
+   "sources": [
+    "Huxiu"
+   ],
+   "score": 5.6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.6,
+    "category": 1,
+    "company": 1,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A29",
+   "primary": "b7c0693c-3f82-470c-beec-4141a7d6f296",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 0.5,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A30",
+   "primary": "d1de1954-3701-468a-b20b-684f14721b07",
+   "siblings": [],
+   "sources": [
+    "Huxiu"
+   ],
+   "score": 5.6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.6,
+    "category": 1,
+    "company": 1,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A31",
+   "primary": "d2c564c0-c02f-4af9-b478-7cc9fabb5584",
+   "siblings": [],
+   "sources": [
+    "Synced"
+   ],
+   "score": 5.6,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 1,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A32",
+   "primary": "d98073fa-e189-4fbb-a934-3baf2d2c8a2f",
+   "siblings": [],
+   "sources": [
+    "Huxiu"
+   ],
+   "score": 5.5,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.6,
+    "category": 0.8,
+    "company": 0.6,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A33",
+   "primary": "2070e7de-d224-4d88-8628-01d8c1a912ff",
+   "siblings": [],
+   "sources": [
+    "Huxiu"
+   ],
+   "score": 5.4,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.6,
+    "category": 0.8,
+    "company": 1,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A34",
+   "primary": "21bccac7-193d-43ca-aeb4-effb085338c2",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.4,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 1,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A35",
+   "primary": "bad5c966-6c95-4dc4-90b7-bc74082ef9c1",
+   "siblings": [],
+   "sources": [
+    "Synced"
+   ],
+   "score": 5.4,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 0.8,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A36",
+   "primary": "03dfebc8-fd05-42ce-a154-874e24d2e67b",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.3,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 1,
+    "company": 0,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A37",
+   "primary": "390a6f19-aae0-4ca8-af0e-7636deffb403",
+   "siblings": [],
+   "sources": [
+    "Qbitai"
+   ],
+   "score": 5.3,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 0.8,
+    "company": 0,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A38",
+   "primary": "755507a6-6ac0-4334-8859-50d9df62a20e",
+   "siblings": [],
+   "sources": [
+    "ITHome"
+   ],
+   "score": 5.3,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.7,
+    "category": 1,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A39",
+   "primary": "ac48d16d-4916-4124-8c48-c7f0e3b1e7da",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.3,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 1,
+    "company": 0,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A40",
+   "primary": "22b7e9af-ee3f-48ac-b9f6-ce9314d74e32",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 5.2,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0
+   }
+  }
+ ]
+}
