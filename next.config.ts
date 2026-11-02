@@ -13,6 +13,13 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_BASE_PATH: BASE_PATH,
   },
+  // 신뢰 페이지 본문(content/legal/*.md)은 fs 로 읽으므로 standalone 산출물에 넣는다 (Dockerfile)
+  outputFileTracingIncludes: {
+    "/[locale]/about": ["./content/legal/**/*"],
+    "/[locale]/methodology": ["./content/legal/**/*"],
+    "/[locale]/corrections": ["./content/legal/**/*"],
+    "/[locale]/privacy": ["./content/legal/**/*"],
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**" },

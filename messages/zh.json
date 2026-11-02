@@ -448,5 +448,47 @@
     "ogBriefingKicker": "中国AI简报",
     "ogBriefingFallback": "一份简报，读懂当天的中国AI",
     "ogAlt": "AI NEWS 分享卡片"
+  },
+  "trust": {
+    "footerNavLabel": "网站信息",
+    "about": {
+      "nav": "关于",
+      "title": "关于 AI NEWS",
+      "description": "介绍 AI NEWS 做什么、不做什么，以及收录哪些媒体的报道。"
+    },
+    "methodology": {
+      "nav": "编辑方法",
+      "title": "编辑方法",
+      "description": "说明采集时间、AI 相关性筛选、翻译·摘要·洞察生成、校验、编辑审核、排序与图片原则。"
+    },
+    "corrections": {
+      "nav": "更正记录",
+      "title": "更正记录",
+      "description": "公开发布后被撤回或被新版本替换的简报及其原因。"
+    },
+    "privacy": {
+      "nav": "隐私政策",
+      "title": "隐私政策",
+      "description": "说明我们（例如订阅电子报时）处理的个人信息项目、目的、保存期限以及您的权利。"
+    },
+    "draftBanner": "草稿 — 尚待法务与运营审核。审核通过后将移除此提示。",
+    "contactLabel": "联系",
+    "versionLine": "版本 {version} · 生效日期 {date}",
+    "correctionsSince": "自 {date} 起发布的版本开始记录。",
+    "correctionsSinceNone": "尚未正式发布，暂无更正记录。将从首次正式发布日开始记录。",
+    "correctionsEmpty": "目前没有被撤回或替换的版本。",
+    "correctionsListLabel": "更正列表",
+    "kind_withdrawn": "撤回",
+    "kind_superseded": "替换",
+    "editionDaily": "{date} 每日简报",
+    "editionWeekly": "{week} 周报",
+    "versionLabel": "v{version}",
+    "publishedAt": "发布 {time}",
+    "changedAt": "处理 {time}",
+    "reasonLabel": "原因",
+    "reasonMissing": "未记录公开原因。",
+    "reasonSuperseded": "已替换为修正后的新版本。",
+    "viewReplacement": "查看修正版（v{version}）",
+    "noReplacement": "目前没有公开的替代版本。"
   }
 }

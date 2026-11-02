@@ -448,5 +448,47 @@
     "ogBriefingKicker": "중국 AI 브리핑",
     "ogBriefingFallback": "그날의 중국 AI 소식을 한 판으로",
     "ogAlt": "AI NEWS 공유 카드"
+  },
+  "trust": {
+    "footerNavLabel": "사이트 정보",
+    "about": {
+      "nav": "소개",
+      "title": "AI NEWS 소개",
+      "description": "AI NEWS가 무엇을 하고 무엇을 하지 않는지, 어떤 매체의 기사를 다루는지 안내합니다."
+    },
+    "methodology": {
+      "nav": "만드는 방법",
+      "title": "만드는 방법",
+      "description": "기사 수집 일정, AI 관련성 분류, 번역·요약·인사이트 생성, 검증, 편집자 승인, 순위와 이미지 원칙을 설명합니다."
+    },
+    "corrections": {
+      "nav": "정정 기록",
+      "title": "정정 기록",
+      "description": "발행 뒤 철회하거나 새 버전으로 교체한 브리핑과 그 사유를 공개합니다."
+    },
+    "privacy": {
+      "nav": "개인정보 처리방침",
+      "title": "개인정보 처리방침",
+      "description": "뉴스레터 구독 등에서 처리하는 개인정보 항목, 목적, 보유 기간, 이용자의 권리를 안내합니다."
+    },
+    "draftBanner": "초안 — 법무·운영 검토 전 문구입니다. 승인 후 이 표시를 내립니다.",
+    "contactLabel": "문의",
+    "versionLine": "판 {version} · 시행일 {date}",
+    "correctionsSince": "{date} 이후 발행한 판부터 기록합니다.",
+    "correctionsSinceNone": "아직 정식 발행 전이라 기록할 정정이 없습니다. 첫 정식 발행일부터 기록합니다.",
+    "correctionsEmpty": "지금까지 철회하거나 교체한 판이 없습니다.",
+    "correctionsListLabel": "정정 목록",
+    "kind_withdrawn": "철회",
+    "kind_superseded": "교체",
+    "editionDaily": "{date} 데일리 브리핑",
+    "editionWeekly": "{week} 주간 리포트",
+    "versionLabel": "v{version}",
+    "publishedAt": "발행 {time}",
+    "changedAt": "처리 {time}",
+    "reasonLabel": "사유",
+    "reasonMissing": "공개 사유가 기록되지 않았습니다.",
+    "reasonSuperseded": "내용을 고친 새 버전으로 교체했습니다.",
+    "viewReplacement": "고친 판(v{version}) 보기",
+    "noReplacement": "현재 공개 중인 대체판이 없습니다."
   }
 }

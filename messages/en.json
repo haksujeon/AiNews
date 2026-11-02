@@ -448,5 +448,47 @@
     "ogBriefingKicker": "China AI Briefing",
     "ogBriefingFallback": "The day in China AI, in one edition",
     "ogAlt": "AI NEWS share card"
+  },
+  "trust": {
+    "footerNavLabel": "About this site",
+    "about": {
+      "nav": "About",
+      "title": "About AI NEWS",
+      "description": "What AI NEWS does and does not do, and which outlets we cover."
+    },
+    "methodology": {
+      "nav": "Methodology",
+      "title": "Methodology",
+      "description": "Collection schedule, AI-relevance filtering, AI translation, summaries and insights, validation, editor approval, ranking and image policy."
+    },
+    "corrections": {
+      "nav": "Corrections",
+      "title": "Corrections",
+      "description": "Briefings we withdrew or replaced with a new version after publication, and why."
+    },
+    "privacy": {
+      "nav": "Privacy policy",
+      "title": "Privacy policy",
+      "description": "What personal data we process (for example for the newsletter), why, how long we keep it, and your rights."
+    },
+    "draftBanner": "Draft — pending legal and editorial review. This notice will be removed once approved.",
+    "contactLabel": "Contact",
+    "versionLine": "Version {version} · Effective {date}",
+    "correctionsSince": "This log covers editions published on or after {date}.",
+    "correctionsSinceNone": "We have not officially launched yet, so there is nothing to record. The log starts on the first official publication date.",
+    "correctionsEmpty": "No edition has been withdrawn or replaced so far.",
+    "correctionsListLabel": "Corrections list",
+    "kind_withdrawn": "Withdrawn",
+    "kind_superseded": "Replaced",
+    "editionDaily": "Daily briefing, {date}",
+    "editionWeekly": "Weekly report, {week}",
+    "versionLabel": "v{version}",
+    "publishedAt": "Published {time}",
+    "changedAt": "Changed {time}",
+    "reasonLabel": "Reason",
+    "reasonMissing": "No public reason was recorded.",
+    "reasonSuperseded": "Replaced with a corrected version.",
+    "viewReplacement": "Read the corrected edition (v{version})",
+    "noReplacement": "No replacement edition is currently published."
   }
 }
