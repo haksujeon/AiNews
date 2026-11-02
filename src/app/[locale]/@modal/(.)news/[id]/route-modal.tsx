@@ -3,9 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { NewsDetailModal } from "@/components/news/news-detail-modal";
-import type { NewsItem } from "@/lib/supabase";
+import type { PublicNewsItem } from "@/lib/news-gist";
 
-export function RouteNewsModal({ news }: { news: NewsItem }) {
+export function RouteNewsModal({ news }: { news: PublicNewsItem }) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
 

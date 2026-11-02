@@ -2,11 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import type { NewsItem } from "@/lib/supabase";
+import type { PublicNewsItem } from "@/lib/news-gist";
 import { cn } from "@/lib/utils";
 import {
   formatDate,
   getSummary,
-  getContent,
   getAiInsights,
   getSourceName,
   getTermExplanation,
@@ -17,32 +17,27 @@ import {
  * 프로젝트 규칙(같은 기능 = 같은 함수)에 따라 두 화면은 바이라인·요약·인사이트·본문·핵심 용어를
  * 여기 있는 같은 컴포넌트로 그린다. 제목은 화면마다 다르게 감싼다(페이지 h1 / 모달 DialogTitle).
  *
- * 원문(content_cn) 전문은 재게시하지 않는다 — getContent() 는 번역문(ko/en)만 돌려주고
- * zh 에서는 항상 "" 이다. 원문은 source_url 외부 링크로 안내한다.
+ * 원문(content_cn) 전문도, 번역 전문(content_kr/en)도 재게시하지 않는다(P0-7).
+ * 서버가 toPublicNewsItem() 으로 번역문 앞 3~5문장 요지(news.gist)만 넘기고, 전문은 항상
+ * source_url 외부 링크로 안내한다. zh 화면은 gist 가 "" 이라 원문 안내만 보인다.
+ * 읽기 시간 표시는 뺐다(요지 기준으로는 의미가 없다).
  */
 
 type HeadingTag = "h2" | "h3";
 
-/** 본문 길이로 대략의 읽기 시간(분)을 계산한다. 문구는 detail.readTime 메시지로 만든다. */
-function estimateReadMinutes(text: string, locale: string): number {
-  const cpm = locale === "en" ? 1200 : 600;
-  return Math.max(1, Math.round(text.length / cpm));
-}
-
 const sectionLabel = "mb-3 text-xs font-semibold text-ink-3";
 
-/** 바이라인: 원어 출처(굵게)·날짜·읽기 시간, 오른쪽 "원문 보기" 링크. 위아래 괘선. */
+/** 바이라인: 원어 출처(굵게)·날짜, 오른쪽 "원문 보기" 링크. 위아래 괘선. */
 export function ArticleByline({
   news,
   locale,
   className,
 }: {
-  news: NewsItem;
+  news: Pick<NewsItem, "source_name" | "source_url" | "news_date">;
   locale: string;
   className?: string;
 }) {
   const t = useTranslations("detail");
-  const content = getContent(news, locale);
   const source = getSourceName(news.source_name);
   const isOriginalName = !!source && source !== news.source_name;
 
@@ -62,7 +57,6 @@ export function ArticleByline({
         {news.news_date && (
           <time dateTime={news.news_date.split("T")[0]}>{formatDate(news.news_date, locale)}</time>
         )}
-        {content && <span>{t("readTime", { minutes: estimateReadMinutes(content, locale) })}</span>}
       </div>
       {news.source_url && (
         <a
@@ -78,19 +72,19 @@ export function ArticleByline({
   );
 }
 
-/** 요약(첫 문단) → AI 인사이트 1블록 → 본문 번역. 번역이 없으면 원문 매체 안내. */
+/** 요약(첫 문단) → AI 인사이트 1블록 → 번역 요지(3~5문장) → 원문 매체 안내(항상). */
 export function ArticleBody({
   news,
   locale,
   headingTag: Heading = "h2",
 }: {
-  news: NewsItem;
+  news: PublicNewsItem;
   locale: string;
   headingTag?: HeadingTag;
 }) {
   const t = useTranslations("detail");
   const summary = getSummary(news, locale);
-  const content = getContent(news, locale);
+  const gist = news.gist;
   const aiInsights = getAiInsights(news, locale);
 
   return (
@@ -113,27 +107,29 @@ export function ArticleBody({
         </section>
       )}
 
-      {content ? (
+      {gist && (
         <section id="content" className="scroll-mt-20">
-          <Heading className={sectionLabel}>{t("translatedBody")}</Heading>
-          <div className="whitespace-pre-wrap text-base leading-[1.85] text-ink-2 sm:text-[17px]">
-            {content}
-          </div>
-        </section>
-      ) : (
-        news.source_url && (
-          <p className="text-[15px] leading-relaxed text-ink-2">
-            {t("readFullAtSource", { source: getSourceName(news.source_name) || t("sourceFallback") })}{" "}
-            <a
-              href={news.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-sm font-medium text-ink underline decoration-1 underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {t("viewOriginal")}
-            </a>
+          <Heading className={sectionLabel}>{t("translatedGist")}</Heading>
+          <p data-testid="article-gist" className="text-base leading-[1.85] text-ink-2 sm:text-[17px]">
+            {gist}
           </p>
-        )
+          <p className="mt-3 text-xs leading-relaxed text-ink-3">{t("gistNote")}</p>
+        </section>
+      )}
+
+      {/* 전문은 항상 원문 매체에서 — 요지가 있어도 없어도 같은 안내 */}
+      {news.source_url && (
+        <p data-testid="read-full-at-source" className="text-[15px] leading-relaxed text-ink-2">
+          {t("readFullAtSource", { source: getSourceName(news.source_name) || t("sourceFallback") })}{" "}
+          <a
+            href={news.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-sm font-medium text-ink underline decoration-1 underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {t("viewOriginal")}
+          </a>
+        </p>
       )}
     </div>
   );

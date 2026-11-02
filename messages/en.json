@@ -59,6 +59,8 @@
     "imageFallback": "AI NEWS",
     "aiInsightDisclosure": "Analysis written by AI from the original article. Check it against the source.",
     "translatedBody": "Translated text",
+    "translatedGist": "Translated gist",
+    "gistNote": "A 3–5 sentence gist from the start of the AI translation. Read the full story at the source.",
     "categoryLabel": "Section",
     "toneLabel": "Tone",
     "sourceLabel": "Source"

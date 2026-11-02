@@ -59,6 +59,8 @@
     "imageFallback": "AI NEWS",
     "aiInsightDisclosure": "以上为AI根据原文生成的分析，请结合原文判断。",
     "translatedBody": "正文翻译",
+    "translatedGist": "译文要点",
+    "gistNote": "以上为AI译文开头的3–5句要点，完整内容请阅读原文。",
     "categoryLabel": "分类",
     "toneLabel": "论调",
     "sourceLabel": "来源"

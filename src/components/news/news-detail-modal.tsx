@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Loader2, Minus, Plus } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { NewsItem } from "@/lib/supabase";
-import { fetchNewsDetailClient, fetchRelatedNewsClient } from "@/lib/supabase-client";
+import type { PublicNewsItem } from "@/lib/news-gist";
+import { fetchRelatedNewsClient } from "@/lib/supabase-client";
 import { getTitle, getImageUrl } from "@/lib/news-utils";
 import { Link } from "@/i18n/navigation";
 import { NewsThumbnail } from "./news-thumbnail";
@@ -20,7 +21,8 @@ import { ArticleKicker } from "./article-kicker";
 import { ArticleBody, ArticleByline, KeyTerms } from "./article-body";
 
 interface NewsDetailModalProps {
-  news: NewsItem | null;
+  /** 가로채기 라우트가 서버에서 toPublicNewsItem() 으로 만든 기사(요지 포함, 번역 전문 없음) */
+  news: PublicNewsItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -28,41 +30,28 @@ interface NewsDetailModalProps {
 // 가로채기 라우트(@modal/(.)news/[id])에서만 쓰인다. 카드/리스트/관련기사 클릭은 모두
 // /news/[id] 링크 이동이며, 직접 접속 시에는 같은 데이터로 전체 페이지(NewsDetail)가 렌더된다.
 // 본문 렌더링은 전체 페이지와 같은 컴포넌트(ArticleByline/ArticleBody/KeyTerms)를 쓴다.
+// 본문(요약·인사이트·요지·핵심 용어)은 서버가 넘긴 news 로 바로 그린다. 예전에는 /api/news/[id] 를
+// 다시 불러 그동안 로딩 표시 → 본문으로 바뀌며 높이가 튀었다(Gate 3). 이제 관련 기사만 따로 불러온다.
 export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalProps) {
   const locale = useLocale();
   const t = useTranslations("detail");
-  const [detail, setDetail] = useState<NewsItem | null>(null);
   const [relatedNews, setRelatedNews] = useState<NewsItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
   const [relatedCount, setRelatedCount] = useState(2);
 
   useEffect(() => {
     // 관련 기사로 연속 이동할 때 늦게 도착한 이전 기사 응답이 덮어쓰지 않도록 한다.
     let cancelled = false;
     if (open && news) {
-      setLoading(true);
-      setError(false);
-      Promise.all([
-        fetchNewsDetailClient(news.id),
-        fetchRelatedNewsClient(news.category, news.id, 4),
-      ])
-        .then(([detailData, related]) => {
-          if (cancelled) return;
-          setDetail(detailData);
-          setRelatedNews(related);
+      fetchRelatedNewsClient(news.category, news.id, 4)
+        .then((related) => {
+          if (!cancelled) setRelatedNews(related);
         })
         .catch(() => {
-          if (!cancelled) setError(true);
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
+          if (!cancelled) setRelatedNews([]);
         });
     }
     if (!open) {
-      setDetail(null);
       setRelatedNews([]);
-      setError(false);
     }
     return () => {
       cancelled = true;
@@ -72,7 +61,7 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
 
   if (!news) return null;
 
-  const fullItem = detail ?? news;
+  const fullItem = news;
   const title = getTitle(fullItem, locale);
 
   return (
@@ -99,22 +88,8 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
             </DialogDescription>
           </DialogHeader>
 
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 py-8 text-ink-3">
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-              <span className="text-sm">{t("loading")}</span>
-            </div>
-          ) : error ? (
-            <div role="alert" className="flex flex-col items-center justify-center gap-1 py-8 text-center">
-              <span className="text-sm text-ink-2">{t("loadError")}</span>
-              <span className="text-xs text-ink-3">{t("loadErrorHint")}</span>
-            </div>
-          ) : (
-            <>
-              <ArticleBody news={fullItem} locale={locale} headingTag="h3" />
-              <KeyTerms terms={fullItem.key_terms} locale={locale} headingTag="h3" />
-            </>
-          )}
+          <ArticleBody news={fullItem} locale={locale} headingTag="h3" />
+          <KeyTerms terms={fullItem.key_terms} locale={locale} headingTag="h3" />
 
           {/* Related news */}
           {relatedNews.length > 0 && (

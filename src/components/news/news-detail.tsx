@@ -6,10 +6,10 @@ import { Link } from "@/i18n/navigation";
 import { ArrowLeft, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { NewsItem } from "@/lib/supabase";
+import type { PublicNewsItem } from "@/lib/news-gist";
 import {
   getTitle,
   getSummary,
-  getContent,
   getAiInsights,
   getImageUrl,
   getCategoryLabel,
@@ -22,7 +22,8 @@ import { ArticleKicker } from "./article-kicker";
 import { ArticleBody, ArticleByline, KeyTerms } from "./article-body";
 
 interface NewsDetailProps {
-  news: NewsItem;
+  /** 서버에서 toPublicNewsItem() 을 거친 기사(번역 전문 없음, gist 만) */
+  news: PublicNewsItem;
   relatedNews: NewsItem[];
 }
 
@@ -37,7 +38,6 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
 
   const title = getTitle(news, locale);
   const summary = getSummary(news, locale);
-  const content = getContent(news, locale);
   const aiInsights = getAiInsights(news, locale);
   const source = getSourceName(news.source_name);
   const hasKeyTerms = !!(news.key_terms && news.key_terms.length > 0);
@@ -45,7 +45,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
   const tocItems = [
     { id: "summary", label: t("tocSummary"), show: !!summary },
     { id: "insights", label: t("aiInsights"), show: !!aiInsights },
-    { id: "content", label: t("translatedBody"), show: !!content },
+    { id: "content", label: t("translatedGist"), show: !!news.gist },
     { id: "keywords", label: t("tocKeyTerms"), show: hasKeyTerms },
   ].filter((item) => item.show);
 

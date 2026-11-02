@@ -154,7 +154,7 @@ export function formatDateGroup(
   return `${EN_WEEKDAYS_SHORT[w]}, ${EN_MONTHS_LONG[m]} ${d}, ${y}`;
 }
 
-export function getTitle(item: NewsItem, locale: string): string {
+export function getTitle(item: Pick<NewsItem, "title_cn" | "title_kr" | "title_en">, locale: string): string {
   if (locale === "zh")
     return item.title_cn || item.title_kr || item.title_en || "";
   if (locale === "en")
@@ -162,7 +162,7 @@ export function getTitle(item: NewsItem, locale: string): string {
   return item.title_kr || item.title_en || item.title_cn || "";
 }
 
-export function getSummary(item: NewsItem, locale: string): string {
+export function getSummary(item: Pick<NewsItem, "summary_cn" | "summary_kr" | "summary_en">, locale: string): string {
   if (locale === "zh")
     return item.summary_cn || item.summary_kr || item.summary_en || "";
   if (locale === "en")
@@ -189,7 +189,9 @@ function stripHtml(html: string): string {
 }
 
 /**
- * 화면에 보여줄 본문. 우리가 만든 번역문(content_kr/content_en)만 반환한다.
+ * 번역 본문 전문. **서버 전용** — 화면·API 에는 이 값을 그대로 내보내지 않고
+ * src/lib/news-gist.ts 의 toPublicNewsItem/toGist 로 3~5문장 요지만 넘긴다(P0-7).
+ * 우리가 만든 번역문(content_kr/content_en)만 반환한다.
  * - zh: 원문(content_cn)을 재게시하지 않으므로 항상 "" (요약·인사이트·원문 링크로 대체)
  * - ko/en: 번역문이 없으면 "" — 예전처럼 content_cn 으로 폴백하지 않는다.
  */
@@ -201,7 +203,10 @@ export function getContent(item: NewsItem, locale: string): string {
   return stripHtml(raw);
 }
 
-export function getAiInsights(item: NewsItem, locale: string): string {
+export function getAiInsights(
+  item: Pick<NewsItem, "ai_insights_cn" | "ai_insights_kr" | "ai_insights_en">,
+  locale: string
+): string {
   if (locale === "zh")
     return item.ai_insights_cn || item.ai_insights_en || item.ai_insights_kr || "";
   if (locale === "en")

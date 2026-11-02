@@ -1,5 +1,6 @@
 import type { NewsItem } from "@/lib/supabase";
 import type { NewsDaysPage, NewsDayRest } from "@/lib/news-types";
+import type { PublicNewsItem } from "@/lib/news-gist";
 import { apiUrl } from "@/lib/api-path";
 import { filtersToParams, EMPTY_FILTERS, type NewsFilters } from "@/lib/news-query";
 
@@ -95,10 +96,12 @@ export async function fetchNewsFacetsClient(): Promise<{
   return res.json();
 }
 
+/** 공개 상세(요지 포함, 번역 전문 없음). locale 에 따라 요지 언어가 정해진다. */
 export async function fetchNewsDetailClient(
-  id: string
-): Promise<NewsItem | null> {
-  const res = await fetch(apiUrl(`/api/news/${id}`));
+  id: string,
+  locale: string
+): Promise<PublicNewsItem | null> {
+  const res = await fetch(apiUrl(`/api/news/${id}?locale=${encodeURIComponent(locale)}`));
   if (!res.ok) return null;
   return res.json();
 }
