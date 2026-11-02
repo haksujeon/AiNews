@@ -1,4 +1,5 @@
 import type { NewsItem } from "@/lib/supabase";
+import type { NewsDaysPage, NewsDayRest } from "@/lib/news-types";
 import { apiUrl } from "@/lib/api-path";
 import { filtersToParams, EMPTY_FILTERS, type NewsFilters } from "@/lib/news-query";
 
@@ -37,6 +38,48 @@ export async function fetchNewsPageClient(
     throw new NewsFetchError(res.status);
   }
   return data as NewsPageResult;
+}
+
+/**
+ * 날짜별 목록 한 페이지 (각 날의 주요 4건 + 그날 전체 건수). cursor 가 있으면 그 날짜 이전 날부터.
+ * 실패는 throw — 응답 본문의 error 는 화면에 쓰지 않는다(호출 측이 번역된 문구를 보여준다, Gate 4).
+ */
+export async function fetchNewsDaysClient(
+  cursor: string | null,
+  filters: NewsFilters,
+  locale: string,
+  signal?: AbortSignal
+): Promise<NewsDaysPage> {
+  const params = filtersToParams(filters);
+  if (cursor) params.set("cursor", cursor);
+  params.set("locale", locale);
+  const res = await fetch(apiUrl(`/api/news/days?${params.toString()}`), { signal });
+  if (!res.ok) throw new NewsFetchError(res.status);
+  const data = await res.json().catch(() => null);
+  if (!data || !Array.isArray(data.days) || typeof data.total !== "number") {
+    throw new NewsFetchError(res.status);
+  }
+  return data as NewsDaysPage;
+}
+
+/** 펼치기: 그날의 나머지 기사 (exclude = 이미 보이는 주요 기사 id) */
+export async function fetchNewsDayRestClient(
+  date: string,
+  exclude: string[],
+  filters: NewsFilters,
+  locale: string,
+  signal?: AbortSignal
+): Promise<NewsDayRest> {
+  const params = filtersToParams(filters);
+  if (exclude.length) params.set("exclude", exclude.join(","));
+  params.set("locale", locale);
+  const res = await fetch(apiUrl(`/api/news/days/${encodeURIComponent(date)}?${params.toString()}`), { signal });
+  if (!res.ok) throw new NewsFetchError(res.status);
+  const data = await res.json().catch(() => null);
+  if (!data || !Array.isArray(data.items) || typeof data.total !== "number") {
+    throw new NewsFetchError(res.status);
+  }
+  return data as NewsDayRest;
 }
 
 export function isAbortError(e: unknown): boolean {

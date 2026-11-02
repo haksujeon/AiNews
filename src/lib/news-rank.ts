@@ -200,3 +200,25 @@ export function splitDay<T extends RankableArticle>(
   });
   return { top, rest: [...rest, ...topSiblings] };
 }
+
+/**
+ * 발행된 브리핑 content.top_stories → 기사 id 별 순위(1부터).
+ * primary_ref 와 refs 모두 그 주요 기사의 순위를 받는다. 모양이 틀린 항목은 건너뛴다 (DB jsonb 라 any).
+ */
+export function citedRanksFromTopStories(topStories: unknown): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!Array.isArray(topStories)) return out;
+  topStories.forEach((st, i) => {
+    if (!st || typeof st !== "object") return;
+    const { rank, refs, primary_ref } = st as { rank?: unknown; refs?: unknown; primary_ref?: unknown };
+    const r = typeof rank === "number" && rank > 0 ? rank : i + 1;
+    const ids = [primary_ref, ...(Array.isArray(refs) ? refs : [])].filter(
+      (x): x is string => typeof x === "string" && !!x
+    );
+    for (const id of ids) {
+      const prev = out.get(id);
+      if (prev === undefined || r < prev) out.set(id, r);
+    }
+  });
+  return out;
+}

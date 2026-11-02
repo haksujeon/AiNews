@@ -28,3 +28,37 @@ export interface NewsItem {
 }
 
 export const NEWS_PAGE_SIZE = 30;
+
+/** 날짜별 목록: 한 번에 받는 날 수 (무한 스크롤 한 번 = 이만큼의 날) */
+export const NEWS_DAYS_PER_PAGE = 5;
+/** 날짜별 목록: 첫 화면에 보이는 그날의 주요 기사 수 (src/lib/news-rank.ts 의 DAY_TOP_COUNT 와 같다) */
+export const NEWS_DAY_TOP = 4;
+/** 펼치기 요청의 exclude 로 받을 수 있는 최대 id 수 */
+export const NEWS_DAY_EXCLUDE_MAX = 20;
+
+/** 목록 기사 + 같은 글(전재)을 실은 매체 수. 2 이상이면 "N개 매체 보도" */
+export interface RankedNewsItem extends NewsItem {
+  outlet_count: number;
+}
+
+/** 베이징 날짜(news_date) 하루치: 전체 건수 + 주요 기사 */
+export interface NewsDay {
+  date: string; // YYYY-MM-DD
+  total: number; // 그날(필터 적용) 전체 기사 수
+  top: RankedNewsItem[]; // 순위 상위 NEWS_DAY_TOP 묶음의 대표 기사
+}
+
+export interface NewsDaysPage {
+  days: NewsDay[];
+  /** 필터 조건에 맞는 전체 기사 수 (모든 날 합계) */
+  total: number;
+  /** 다음 페이지 요청에 쓸 커서(이 날짜보다 이전 날부터). 없으면 null */
+  nextCursor: string | null;
+}
+
+/** 펼치기: 그날의 나머지 기사 (순위 순) */
+export interface NewsDayRest {
+  date: string;
+  total: number;
+  items: RankedNewsItem[];
+}

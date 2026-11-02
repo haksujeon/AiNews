@@ -9,7 +9,21 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CandidateArticle } from "../../src/lib/briefing/types";
 import { selectCandidates } from "../../src/lib/briefing/select";
-import { rankStories, splitDay, type RankableArticle } from "../../src/lib/news-rank";
+import { citedRanksFromTopStories, rankStories, splitDay, type RankableArticle } from "../../src/lib/news-rank";
+
+test("citedRanksFromTopStories: primary_ref·refs 에 순위, 잘못된 모양은 무시", () => {
+  const m = citedRanksFromTopStories([
+    { rank: 1, primary_ref: "a", refs: ["a", "b"] },
+    { rank: 2, primary_ref: "c", refs: ["c", "b"] },
+    null,
+    { refs: "x" },
+  ]);
+  assert.equal(m.get("a"), 1);
+  assert.equal(m.get("b"), 1);
+  assert.equal(m.get("c"), 2);
+  assert.equal(m.size, 3);
+  assert.equal(citedRanksFromTopStories({ not: "array" }).size, 0);
+});
 
 const fixtures = join(__dirname, "..", "briefing", "fixtures");
 const articles: CandidateArticle[] = JSON.parse(readFileSync(join(fixtures, "articles-2026-10-13.json"), "utf8"));
