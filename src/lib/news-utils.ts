@@ -81,11 +81,13 @@ export function getImageUrl(item: Pick<NewsItem, "thumbnail_url" | "og_image_url
 }
 
 // ─── Category ─────────────────────────────────────────────
-// 카테고리는 색 배지 대신 작은 텍스트 라벨. 색이 전달하는 정보는 "AI 관련 여부" 하나뿐이다.
+// 카테고리는 색 배지 대신 작은 텍스트 라벨. 색이 전달하는 정보는 "범위 내(AI) 분류 여부" 하나뿐이다.
 const CATEGORY_LABELS: Record<string, Record<string, string>> = {
   "ai-tech":   { ko: "AI 기술", en: "AI Tech", zh: "AI技术" },
   "ai-product":{ ko: "AI 제품", en: "AI Products", zh: "AI产品" },
   "ai-biz":    { ko: "AI 비즈니스", en: "AI Business", zh: "AI商业" },
+  // 로봇 분류는 categories.ts PUBLIC_CATEGORIES 에 추가되면 공개된다(결정 D10). 라벨은 미리 둔다.
+  robotics:    { ko: "로봇", en: "Robotics", zh: "机器人" },
   politics:    { ko: "정치", en: "Politics", zh: "政治" },
   economy:     { ko: "경제", en: "Economy", zh: "经济" },
   society:     { ko: "사회", en: "Society", zh: "社会" },
@@ -97,9 +99,7 @@ export function getCategoryLabel(category: string, locale: string): string {
   return CATEGORY_LABELS[category]?.[locale] ?? category;
 }
 
-export function isAiCategory(category: string | null): boolean {
-  return !!category && category.startsWith("ai-");
-}
+// "범위 내(AI) 분류인지" 판정은 src/lib/categories.ts 의 isScopeCategory 하나로 한다 (예전 isAiCategory).
 
 // ─── Sentiment (상세 사이드에서 단어로만 표시) ─────────────
 export function getSentimentLabel(

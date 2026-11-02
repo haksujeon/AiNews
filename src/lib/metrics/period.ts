@@ -4,7 +4,8 @@
  *  - SQL 집계 함수(countBy / countByDay / termCounts / volumeSummary / dayBounds)는 Queryable 을 인자로 받는다.
  *    이 파일은 DB 풀을 import 하지 않는다 → 단위 테스트가 DATABASE_URL 없이 돌고, 통합 시험은 READ ONLY 트랜잭션 client 를 넘긴다.
  *  - 기사 단위 함수(entityMentions / chinaVsOverseas / moneyTable / crossSourceStories)는 불러온 행을 받는 순수 함수.
- *  - 모집단(population): 'all' = 공개 기사 전체(통계 페이지), 'ai' = 공개 기사 중 category LIKE 'ai-%'(브리핑·리포트).
+ *  - 모집단(population): 'all' = 공개 기사 전체(통계 페이지), 'ai' = 공개 기사 중 범위 내 분류(categories.ts scopeCategorySql, 브리핑·리포트).
+ *    범위 분류 목록이 바뀌면(로봇 추가 등) METRICS_VERSION 을 올린다.
  *  - 날짜 = news_date 의 UTC 날짜 = 베이징 날짜 (news_date 는 "베이징 날짜 00:00 UTC" 로 저장됨).
  *
  * 수치 규칙(설계 검토서 §1.4):
@@ -16,6 +17,7 @@
  */
 import { createHash } from "node:crypto";
 import { PUBLIC_NEWS_WHERE } from "../news-query";
+import { scopeCategorySql } from "../categories";
 import { rankStories, type RankableArticle } from "../news-rank";
 import { ENTITIES, findEntities } from "../briefing/entities";
 import { groupPeriodStories, isPolitical } from "../briefing/select";
@@ -56,7 +58,7 @@ export const METRICS_VERSION = "period-v1-2026-11-02";
 export const DAY_SQL = `(news_date AT TIME ZONE 'UTC')::date`;
 
 export function populationWhere(p: Population): string {
-  return p === "ai" ? `${PUBLIC_NEWS_WHERE} AND category LIKE 'ai-%'` : PUBLIC_NEWS_WHERE;
+  return p === "ai" ? `${PUBLIC_NEWS_WHERE} AND ${scopeCategorySql()}` : PUBLIC_NEWS_WHERE;
 }
 
 /** WHERE 절 (모집단 + 기간). values 는 $1.. 부터 */
@@ -210,7 +212,7 @@ export interface VolumeSummary {
   ai: number;
 }
 
-/** 총계·오늘·분야 수·매체 수·날짜 수·AI 분야 수 */
+/** 총계·오늘·분야 수·매체 수·날짜 수·범위 내(AI) 분야 수 */
 export async function volumeSummary(q: Queryable, opts: MetricOptions): Promise<VolumeSummary> {
   const { where, values } = whereOf(opts);
   const { rows } = await q.query(
@@ -219,7 +221,7 @@ export async function volumeSummary(q: Queryable, opts: MetricOptions): Promise<
             COUNT(DISTINCT category)::int                                         AS categories,
             COUNT(DISTINCT source_name)::int                                      AS sources,
             COUNT(DISTINCT ${DAY_SQL})::int                                       AS days,
-            COUNT(*) FILTER (WHERE category LIKE 'ai-%')::int                     AS ai
+            COUNT(*) FILTER (WHERE ${scopeCategorySql()})::int                     AS ai
        FROM ai_news_ex WHERE ${where}`,
     values
   );

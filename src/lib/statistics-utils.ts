@@ -1,3 +1,5 @@
+import { getCategoryLabel } from "./news-utils";
+
 export interface CategoryStat {
   name: string;
   label: string;
@@ -45,22 +47,13 @@ const CATEGORY_COLORS: Record<string, string> = {
   "ai-tech": "#06b6d4",
   "ai-product": "#3b82f6",
   "ai-biz": "#8b5cf6",
+  // 로봇(categories.ts 에 추가되면 공개): 기존 AI 색과 구분되는 앰버 계열
+  robotics: "#b45309",
   politics: "#ef4444",
   economy: "#f59e0b",
   society: "#10b981",
   culture: "#ec4899",
   tech: "#f97316",
-};
-
-const CATEGORY_LABELS: Record<string, Record<string, string>> = {
-  "ai-tech": { ko: "AI 기술", en: "AI Tech", zh: "AI技术" },
-  "ai-product": { ko: "AI 제품", en: "AI Products", zh: "AI产品" },
-  "ai-biz": { ko: "AI 비즈니스", en: "AI Business", zh: "AI商业" },
-  politics: { ko: "정치", en: "Politics", zh: "政治" },
-  economy: { ko: "경제", en: "Economy", zh: "经济" },
-  society: { ko: "사회", en: "Society", zh: "社会" },
-  culture: { ko: "문화", en: "Culture", zh: "文化" },
-  tech: { ko: "IT/과학", en: "Tech & Science", zh: "科技" },
 };
 
 const SENTIMENT_COLORS: Record<string, string> = {
@@ -93,7 +86,8 @@ export interface StatisticsData {
 export function toCategoryStats(rows: CountRow[], locale: string = "ko"): CategoryStat[] {
   return rows.map(({ name, value }) => ({
     name,
-    label: CATEGORY_LABELS[name]?.[locale] ?? name,
+    // 라벨은 목록·키커와 같은 표(news-utils getCategoryLabel)를 쓴다 (Gate 2)
+    label: getCategoryLabel(name, locale),
     value,
     color: CATEGORY_COLORS[name] || "#6b7280",
   }));

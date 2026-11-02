@@ -6,6 +6,7 @@ export type { RankedNewsItem, NewsDay, NewsDaysPage, NewsDayRest } from './news-
 import type { NewsItem, NewsDaysPage, NewsDayRest, RankedNewsItem } from './news-types';
 import { NEWS_PAGE_SIZE, NEWS_DAYS_PER_PAGE, NEWS_DAY_TOP } from './news-types';
 import { buildNewsWhere, EMPTY_FILTERS, PUBLIC_NEWS_WHERE, type NewsFilters } from './news-query';
+import { SCOPE_CATEGORIES, publicCategoriesOf } from './categories';
 import { citedRanksFromTopStories, splitDay, type DaySplit, type RankableArticle } from './news-rank';
 import { EDITION_TYPE } from './briefing/repository';
 import { buildWeeklyTrend, type StatisticsData } from './statistics-utils';
@@ -188,21 +189,30 @@ export async function fetchNewsDayRest(
   return { date, total: ordered.length, items };
 }
 
-/** 필터 드롭다운 선택지. 로드된 페이지가 아니라 테이블 전체에서 뽑는다. */
+/** 분류 칩을 내보낼 최소 공개 기사 수 (행 몇 건만 생긴 분류가 칩으로 튀어나오지 않게) */
+export const FACET_MIN_COUNT = 5;
+
+/**
+ * 필터 드롭다운 선택지. 로드된 페이지가 아니라 테이블 전체에서 뽑는다.
+ * 분류 = 공개 분류(categories.ts PUBLIC_CATEGORIES) ∩ DB 에 FACET_MIN_COUNT 건 이상 있는 분류, PUBLIC_CATEGORIES 순서.
+ * 국가는 값 그대로 — 1개 이하면 화면(news-filter)이 선택 칸을 그리지 않는다.
+ */
 export async function fetchNewsFacets(): Promise<{
   countries: string[];
   categories: string[];
 }> {
   const { rows } = await pool.query(
     `SELECT
-       ARRAY(SELECT DISTINCT country  FROM ai_news_ex
-             WHERE ${PUBLIC_NEWS_WHERE} AND country  IS NOT NULL ORDER BY country)  AS countries,
-       ARRAY(SELECT DISTINCT category FROM ai_news_ex
-             WHERE ${PUBLIC_NEWS_WHERE} AND category IS NOT NULL ORDER BY category) AS categories`
+       ARRAY(SELECT DISTINCT country FROM ai_news_ex
+             WHERE ${PUBLIC_NEWS_WHERE} AND country IS NOT NULL ORDER BY country) AS countries,
+       ARRAY(SELECT category FROM ai_news_ex
+             WHERE ${PUBLIC_NEWS_WHERE} AND category = ANY($1::text[])
+             GROUP BY category HAVING COUNT(*) >= $2) AS categories`,
+    [SCOPE_CATEGORIES, FACET_MIN_COUNT]
   );
   return {
     countries: rows[0]?.countries ?? [],
-    categories: rows[0]?.categories ?? [],
+    categories: publicCategoriesOf(rows[0]?.categories ?? []),
   };
 }
 
