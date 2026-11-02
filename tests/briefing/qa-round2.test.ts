@@ -144,12 +144,16 @@ test("round 2 재생성(10-28) 번역 오탐 회귀: 'Q3'·'score is 44, up 3 po
     ],
     ["칭화대 00후 창업자 기업들, 잇따라 투자 유치 (장셴 과학기술 1년 내 누적 10억 위안 이상)", "Tsinghua 00-born founders' companies raise funding (Zhangxian Technology accumulates over 1 billion yuan in one year)", "en"],
     ["마이크로소프트, 약 6만 명 대상 자발적 퇴사 프로그램 실시", "微软向约六万名员工推出自愿离职计划", "zh"],
+    ["1억 9천만 명", "1.9亿人", "zh"],
   ];
   for (const [ko, tr, target] of cases) {
     const base = { ...emptyContent(), headline: ko, lede: "l" };
     const got = checkTranslation(base, { ...base, headline: tr, lede: "l" }, target).filter((p) => p.startsWith("headline"));
     assert.deepEqual(got.filter((p) => /number|digits/.test(p)), [], `${tr}\n${got.join("\n")}`);
   }
+  // 작은 단위로 늘여 쓴 것은 여전히 위반 (5억 3,700만 → 53700万)
+  const big = { ...emptyContent(), headline: "5억 3,700만 명", lede: "l" };
+  assert.ok(checkTranslation(big, { ...big, headline: "53700万人" }, "zh").some((p) => /digits not verbatim/.test(p)));
   // 이름에 붙은 수는 여전히 본다: Genie 4 → Genie 3
   const base = { ...emptyContent(), headline: "구글 Genie 4 공개", lede: "l" };
   assert.ok(checkTranslation(base, { ...base, headline: "Google unveils Genie 3" }, "en").some((p) => /number set differs/.test(p)));

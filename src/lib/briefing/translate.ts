@@ -211,7 +211,15 @@ export function checkTranslation(ko: BriefingContent, tr: BriefingContent, targe
       // zh 는 억=亿·만=万 으로 단위가 1:1 이므로 자릿수 문자열까지 그대로여야 한다 (5억 3,700만 → 5亿3700万, 53700万 은 위반)
       const da = digitStrings(src);
       const db = digitStrings(out);
-      if ([...da].some((x) => !db.has(x)) || [...db].some((x) => !da.has(x)))
+      // 예외: ko 의 여러 단위 금액("1억 9천만")을 한 단위 소수("1.9亿")로 쓴 것은 같은 값 (round 2 재생성 09-16 zh) —
+      // "53700万" 처럼 더 작은 단위로 늘여 쓴 것은 여전히 위반
+      const koComposite = parseQuantities(src).filter((q) => q.scaled && /\d\s*[조억만천][^\d]*\d/.test(q.raw)).map((q) => canonicalValue(q.value));
+      const condensed = new Set(
+        parseQuantities(out)
+          .filter((q) => q.decimal && q.scaled && koComposite.includes(canonicalValue(q.value)))
+          .map((q) => q.raw.match(/\d[\d,]*(?:\.\d+)?/)?.[0]?.replace(/,/g, "") ?? "")
+      );
+      if ([...da].some((x) => !db.has(x)) || [...db].some((x) => !da.has(x) && !condensed.has(x)))
         problems.push(`${f.path}: digits not verbatim — Korean: "${src}" / yours: "${out}" (keep the same digits; 억→亿, 만→万, 조→万亿)`);
     }
   }
