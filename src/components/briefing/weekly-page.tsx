@@ -8,11 +8,12 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { PeriodicView } from "@/components/briefing/periodic-view";
 import { BriefingTabs, WEEKLY_PATH } from "@/components/briefing/briefing-tabs";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl, publishedLanguageAlternates } from "@/lib/site";
 import { isoWeekRange } from "@/lib/metrics/period";
 import { beijingToday } from "@/lib/briefing/generate";
 import { getPublishedWeekly, getPublishedWeeklyLocales, type PublicWeekly } from "@/lib/briefing/periodic/public";
 import { BRIEFING_PATH, safeJsonLd } from "@/lib/briefing/view";
+import { organizationLd } from "@/lib/seo/jsonld";
 import type { BriefingLocale } from "@/lib/briefing/types";
 
 /*
@@ -46,16 +47,14 @@ const resolve = cache(async function resolve(locale: string, week?: string): Pro
 });
 
 function alternates(week: string, locales: BriefingLocale[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const l of locales) out[LOCALE_HTML_LANG[l as Locale]] = absoluteUrl(l, weeklyPath(week));
-  if (locales.length) out["x-default"] = absoluteUrl(locales.includes("ko") ? "ko" : locales[0], weeklyPath(week));
-  return out;
+  return publishedLanguageAlternates(weeklyPath(week), locales);
 }
 
 /** NewsArticle: isBasedOn 인용 기사 상위 10건, creditText "AI 작성·편집자 검토" */
 export function weeklyJsonLd(w: PublicWeekly, opts: { brand: string; title: string; credit: string }) {
   const url = absoluteUrl(w.locale, weeklyPath(w.iso_week));
-  const org = { "@type": "Organization", name: opts.brand, url: absoluteUrl(w.locale) };
+  // 발행자는 레이아웃·기사 상세·데일리와 같은 organizationLd (Gate 2)
+  const org = organizationLd(w.locale, opts.brand);
   return {
     "@context": "https://schema.org",
     "@type": "NewsArticle",

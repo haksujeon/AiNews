@@ -2,7 +2,8 @@
  * 브리핑 화면용 순수 함수 (DB 없음). 공개 페이지·관리자 미리보기·메타데이터·JSON-LD 가 함께 쓴다.
  */
 import { getSourceName } from "@/lib/news-utils";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl, publishedLanguageAlternates } from "@/lib/site";
+import { ogImagePath, organizationLd, safeJsonLd } from "@/lib/seo/jsonld";
 import { LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
 import type { BriefingArticleRef, PublicBriefing } from "./public";
 import type { BriefingLocale, StoredBriefingContent } from "./types";
@@ -68,31 +69,25 @@ export function editorNoteData(b: PublicBriefing): { story: string; outlets: num
 
 /** hreflang: 발행된 언어판만 + x-default (ko 가 있으면 ko, 없으면 첫 언어) */
 export function briefingAlternates(date: string, locales: BriefingLocale[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const l of locales) out[LOCALE_HTML_LANG[l as Locale]] = absoluteUrl(l, briefingDatePath(date));
-  if (locales.length) out["x-default"] = absoluteUrl(locales.includes("ko") ? "ko" : locales[0], briefingDatePath(date));
-  return out;
+  return publishedLanguageAlternates(briefingDatePath(date), locales);
 }
 
-/** JSON 을 <script> 안에 넣을 때 '<' 를 이스케이프 (LLM 텍스트가 </script> 를 담아도 안전) */
-export function safeJsonLd(data: unknown): string {
-  return JSON.stringify(data)
-    .replace(/</g, "\\u003c")
-    .replace(new RegExp(String.fromCharCode(0x2028), "g"), "\\u2028")
-    .replace(new RegExp(String.fromCharCode(0x2029), "g"), "\\u2029");
-}
+/** JSON-LD 이스케이프는 src/lib/seo/jsonld.ts 로 옮겼다. 기존 import 경로를 위해 다시 내보낸다 */
+export { safeJsonLd };
 
 /** NewsArticle(author Organization, isBasedOn 인용 기사) + 주요 기사 ItemList */
 export function briefingJsonLd(b: PublicBriefing, opts: { brand: string; title: string }) {
   const url = absoluteUrl(b.locale, briefingDatePath(b.edition_date));
   const cited = Object.keys(b.articles).map((id) => absoluteUrl(b.locale, `/news/${id}`));
-  const org = { "@type": "Organization", name: opts.brand, url: absoluteUrl(b.locale) };
+  // 발행자는 레이아웃·기사 상세와 같은 organizationLd (Gate 2)
+  const org = organizationLd(b.locale, opts.brand);
   return [
     {
       "@context": "https://schema.org",
       "@type": "NewsArticle",
       headline: opts.title.slice(0, 110),
       description: b.content.lede,
+      image: [absoluteUrl(b.locale, ogImagePath(briefingDatePath(b.edition_date)))],
       datePublished: b.published_at || `${b.edition_date}T00:00:00+08:00`,
       dateModified: b.published_at || `${b.edition_date}T00:00:00+08:00`,
       inLanguage: LOCALE_HTML_LANG[b.locale as Locale],
