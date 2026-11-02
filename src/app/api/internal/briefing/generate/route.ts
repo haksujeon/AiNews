@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireIngestToken } from "@/lib/ingest-auth";
 import { generateBriefing, isValidEditionDate } from "@/lib/briefing/generate";
-import { scheduledRunEdition } from "@/lib/briefing/sla";
 
 // POST /api/internal/briefing/generate   인증: Authorization: Bearer <INGEST_TOKEN>
 // 호출자: n8n 워크플로 "AiNews briefing schedule" (수집 워크플로와 별개) — 매일 23:40 KST 생성, 00:30 KST 재시도.
@@ -30,17 +29,8 @@ export async function POST(request: NextRequest) {
 
   const body: unknown = await request.json().catch(() => ({}));
   const b = (body && typeof body === "object" ? body : {}) as { date?: unknown; force?: unknown; dryRun?: unknown };
-  const explicit = typeof b.date === "string" && b.date ? b.date : null;
-  const date = explicit ?? scheduledRunEdition(new Date());
-  if (!date) {
-    return NextResponse.json({
-      data: {
-        date: null, outcome: "skipped_weekend", mode: null, candidateCount: 0, inputHash: null, locales: [], totalCostUsd: 0,
-        message: "토요일 밤에는 생성하지 않습니다 — 일요일 밤에 토·일 주말 합본을 만듭니다",
-      },
-    });
-  }
-  if (!isValidEditionDate(date)) {
+  const date = typeof b.date === "string" && b.date ? b.date : undefined;
+  if (date !== undefined && !isValidEditionDate(date)) {
     return NextResponse.json({ error: { message: "date must be YYYY-MM-DD and not in the future (Beijing)" } }, { status: 400 });
   }
 

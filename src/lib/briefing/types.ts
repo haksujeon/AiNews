@@ -180,7 +180,7 @@ export interface LlmUsage {
 }
 
 export interface GenerateOptions {
-  date?: string; // YYYY-MM-DD (베이징). 없으면 오늘(베이징)
+  date?: string; // YYYY-MM-DD (베이징 판 날짜). 없으면 정기 일정(sla.ts scheduledRunEdition)
   force?: boolean;
   /** 테스트·CLI 용: LLM 을 부르지 않고 후보만 계산 */
   dryRun?: boolean;

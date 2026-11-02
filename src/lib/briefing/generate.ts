@@ -27,7 +27,7 @@ import { computeInputHash, editionModeFor, selectCandidates } from "./select";
 import { HEADLINE_MAX, citedRefs, contextFromGroups, dropFatalItems, normalizeContent, validateKo } from "./validate";
 import { translateBriefing } from "./translate";
 import { finishGenerating, insertBriefing, latestBriefing, loadCandidateArticles, withDateLock } from "./repository";
-import { editionPeriod, weekday } from "./sla";
+import { editionPeriod, scheduledRunEdition, weekday } from "./sla";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_COST = Number(process.env.BRIEFING_MAX_COST_USD || "0.10");
@@ -191,7 +191,15 @@ async function generateKo(dateLabel: string, mode: EditionMode, groups: Candidat
 }
 
 export async function generateBriefing(opts: GenerateOptions = {}): Promise<GenerateResult> {
-  const date = opts.date ?? beijingToday();
+  // 날짜를 주지 않으면 정기 일정(sla.ts)대로: 월~금 = 베이징 오늘, 일요일 = 토요일 합본, 토요일 = 생성 안 함.
+  // n8n 라우트·CLI 가 모두 이 기본값을 쓴다 (Gate 2).
+  const date = opts.date ?? scheduledRunEdition(new Date());
+  if (!date) {
+    return {
+      date: beijingToday(), outcome: "skipped_weekend", mode: null, candidateCount: 0, inputHash: null, locales: [], totalCostUsd: 0,
+      message: "토요일 밤에는 생성하지 않습니다 — 일요일 밤에 토·일 주말 합본을 만듭니다",
+    };
+  }
   if (!isValidEditionDate(date)) {
     return { date, outcome: "failed", mode: null, candidateCount: 0, inputHash: null, locales: [], totalCostUsd: 0, message: "날짜 형식이 틀렸거나 미래 날짜입니다" };
   }
