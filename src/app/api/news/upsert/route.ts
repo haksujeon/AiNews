@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { requireIngestToken } from '@/lib/ingest-auth';
 import { scheduleRelatedCompute } from '@/lib/related';
+import { sanitizeRegionFields } from '@/lib/region';
 
 // POST /api/news/upsert
 // n8n 워크플로우에서 호출: 뉴스 아이템 upsert
@@ -14,16 +15,30 @@ import { scheduleRelatedCompute } from '@/lib/related';
 //  - source_url 이 없고 id 만 있으면 기존처럼 ON CONFLICT (id).
 //  - 갱신 시 빈 값('' / NULL / 빈 key_terms 배열)은 기존 값을 덮어쓰지 않는다
 //    (번역·인사이트 LLM 실패로 빈 문자열이 와도 이미 번역된 내용을 지우지 않기 위함).
+//
+// 대상 지역 (2026-11-02, src/lib/region.ts): n8n 분류기가 subject_region / region_tags / region_version 을 보낸다.
+//  - normalizeRegion 으로 다듬는다(TW·HK → CN + 태그, 모르는 코드 버림). 대표 지역이 틀리면 세 열 모두 버린다
+//    — CHECK 제약 위반으로 요청 전체가 500 이 되지 않도록.
+//  - region_tags 는 text[] 라 JSON 문자열이 아니라 JS 배열로 넘긴다. 빈 배열은 기존 태그를 덮어쓰지 않는다.
 
 const TEXT_COLS = new Set([
   'source_name','source_url','title_cn','title_kr','title_en',
   'summary_cn','summary_kr','summary_en','content_cn','content_kr','content_en',
   'ai_insights_cn','ai_insights_kr','ai_insights_en',
   'sentiment','category','thumbnail_url','og_image_url','country',
+  'subject_region','region_version',
 ]);
+
+/** text[] 열 — JSON 문자열이 아니라 배열 그대로 pg 에 넘긴다 */
+const TEXT_ARRAY_COLS = new Set(['region_tags']);
+
 
 function updateExpr(k: string): string {
   if (TEXT_COLS.has(k)) return `"${k}" = COALESCE(NULLIF(EXCLUDED."${k}", ''), ai_news_ex."${k}")`;
+  if (k === 'region_tags') {
+    return `"region_tags" = CASE WHEN EXCLUDED."region_tags" IS NULL OR EXCLUDED."region_tags" = '{}'::text[]
+                               THEN ai_news_ex."region_tags" ELSE EXCLUDED."region_tags" END`;
+  }
   if (k === 'key_terms') {
     return `"key_terms" = CASE WHEN EXCLUDED."key_terms" IS NULL OR EXCLUDED."key_terms" = '[]'::jsonb
                               THEN ai_news_ex."key_terms" ELSE EXCLUDED."key_terms" END`;
@@ -45,6 +60,7 @@ export async function POST(request: NextRequest) {
       'summary_cn','summary_kr','summary_en','content_cn','content_kr','content_en',
       'ai_insights_cn','ai_insights_kr','ai_insights_en','key_terms',
       'sentiment','category','thumbnail_url','og_image_url','country','is_duplicate',
+      'subject_region','region_tags','region_version',
     ]);
 
     let upserted = 0;
@@ -58,6 +74,7 @@ export async function POST(request: NextRequest) {
       if (typeof item.source_url === 'string') {
         item.source_url = item.source_url.trim() || null;
       }
+      sanitizeRegionFields(item);
 
       const keys = Object.keys(item).filter(k => ALLOWED_COLS.has(k));
       if (!keys.length) continue;
@@ -72,6 +89,7 @@ export async function POST(request: NextRequest) {
         .join(', ');
       const vals = keys.map(k => {
         const v = item[k];
+        if (TEXT_ARRAY_COLS.has(k)) return v;
         return Array.isArray(v) || (v !== null && typeof v === 'object')
           ? JSON.stringify(v) : v;
       });

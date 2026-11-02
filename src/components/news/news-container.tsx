@@ -9,6 +9,8 @@ import { fetchNewsDaysClient, isAbortError } from "@/lib/supabase-client";
 import { formatDateGroup } from "@/lib/news-utils";
 import type { DateRange } from "@/lib/news-utils";
 import type { NewsFilters } from "@/lib/news-query";
+import type { RegionChip } from "@/lib/region";
+import type { RegionCounts } from "@/lib/metrics/period";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Button } from "@/components/ui/button";
 import { NewsFilter } from "./news-filter";
@@ -19,7 +21,9 @@ interface NewsContainerProps {
   /** 서버가 렌더한 첫 페이지 (최근 NEWS_DAYS_PER_PAGE 일, 날마다 주요 4건) */
   initialPage: NewsDaysPage;
   /** 테이블 전체 기준 필터 선택지 */
-  facets?: { countries: string[]; categories: string[] };
+  facets?: { countries: string[]; categories: string[]; regions?: RegionCounts };
+  /** 주소의 ?region= (서버가 이 칩으로 첫 페이지를 걸러 보냈다) */
+  initialRegion?: RegionChip;
   isLoading?: boolean;
 }
 
@@ -29,7 +33,7 @@ interface NewsContainerProps {
 //
 // 기사 상세는 카드/리스트 항목의 링크(/news/[id])로 연다.
 // 소프트 이동이면 @modal/(.)news/[id] 가 모달로 가로채고, 직접 접속이면 전체 페이지가 뜬다.
-export function NewsContainer({ initialPage, facets, isLoading = false }: NewsContainerProps) {
+export function NewsContainer({ initialPage, facets, initialRegion = "ALL", isLoading = false }: NewsContainerProps) {
   const locale = useLocale();
   const t = useTranslations("list");
   const tc = useTranslations("common");
@@ -45,6 +49,7 @@ export function NewsContainer({ initialPage, facets, isLoading = false }: NewsCo
   const [reloadToken, setReloadToken] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCountry, setSelectedCountry] = useState("ALL");
+  const [selectedRegion, setSelectedRegion] = useState<RegionChip>(initialRegion);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<DateRange>({});
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -61,18 +66,20 @@ export function NewsContainer({ initialPage, facets, isLoading = false }: NewsCo
     () => ({
       q: debouncedQuery,
       country: selectedCountry,
+      region: selectedRegion,
       categories: selectedCategories,
       from: dateRange.from ?? "",
       to: dateRange.to ?? "",
     }),
-    [debouncedQuery, selectedCountry, selectedCategories, dateRange.from, dateRange.to]
+    [debouncedQuery, selectedCountry, selectedRegion, selectedCategories, dateRange.from, dateRange.to]
   );
 
   // 필터가 바뀌면 서버에서 첫 페이지를 다시 받아온다.
-  // 초기 렌더(필터 없음)는 서버 컴포넌트가 이미 준 데이터를 쓰므로 건너뛴다.
+  // 초기 렌더(필터 없음 + 주소의 지역 칩)는 서버 컴포넌트가 이미 준 데이터를 쓰므로 건너뛴다.
   const isInitialFilters =
     !filters.q &&
     filters.country === "ALL" &&
+    filters.region === initialRegion &&
     filters.categories.length === 0 &&
     !filters.from &&
     !filters.to;
@@ -171,14 +178,27 @@ export function NewsContainer({ initialPage, facets, isLoading = false }: NewsCo
   };
 
   // 필터 선택지는 서버가 테이블 전체에서 뽑아 넘겨준 값을 쓴다.
-  const countries = facets?.countries ?? [];
   const categories = facets?.categories ?? [];
 
-  const filterKey = `${selectedCategories.join(",")}-${selectedCountry}-${debouncedQuery}-${dateRange.from || ""}-${dateRange.to || ""}`;
+  const filterKey = `${selectedCategories.join(",")}-${selectedCountry}-${selectedRegion}-${debouncedQuery}-${dateRange.from || ""}-${dateRange.to || ""}`;
+
+  // 지역 칩은 주소(?region=)에 남겨 공유·새로고침에도 유지한다 (다른 필터는 지금처럼 화면 상태만)
+  const handleRegionChange = useCallback((region: RegionChip) => {
+    setSelectedRegion(region);
+    try {
+      const url = new URL(window.location.href);
+      if (region === "ALL") url.searchParams.delete("region");
+      else url.searchParams.set("region", region);
+      window.history.replaceState(window.history.state, "", url.toString());
+    } catch {
+      /* 주소 갱신 실패는 무시 — 목록 필터는 그대로 동작한다 */
+    }
+  }, []);
 
   const handleReset = () => {
     setSearchQuery("");
     setSelectedCountry("ALL");
+    handleRegionChange("ALL");
     setSelectedCategories([]);
     setDateRange({});
   };
@@ -193,13 +213,13 @@ export function NewsContainer({ initialPage, facets, isLoading = false }: NewsCo
         <NewsFilter
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          selectedCountry={selectedCountry}
-          onCountryChange={setSelectedCountry}
+          selectedRegion={selectedRegion}
+          onRegionChange={handleRegionChange}
+          regionCounts={facets?.regions}
           selectedCategories={selectedCategories}
           onCategoriesChange={setSelectedCategories}
           dateRange={dateRange}
           onDateRangeChange={setDateRange}
-          countries={countries}
           categories={categories}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
@@ -216,13 +236,13 @@ export function NewsContainer({ initialPage, facets, isLoading = false }: NewsCo
       <NewsFilter
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        selectedCountry={selectedCountry}
-        onCountryChange={setSelectedCountry}
+        selectedRegion={selectedRegion}
+        onRegionChange={handleRegionChange}
+        regionCounts={facets?.regions}
         selectedCategories={selectedCategories}
         onCategoriesChange={setSelectedCategories}
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
-        countries={countries}
         categories={categories}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}

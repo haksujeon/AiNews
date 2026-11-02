@@ -88,12 +88,26 @@ export function buildFacts(m: PeriodMetrics): Record<string, string> {
   for (const t of m.terms.top) F[`term.${t.term}`] = `${t.term} ${t.display}`;
   for (const t of m.terms.rising) F[`term.${t.term}.rise`] = `${t.term} ${t.prev}건→${t.cur}건`;
   for (const t of m.terms.falling) F[`term.${t.term}.fall`] = `${t.term} ${t.prev}건→${t.cur}건`;
+  // v3: 대표 지역 기준 (region_share). 예전 스냅숏(v2)은 언급 기준 china_vs_overseas.
+  const rs = m.region_share;
+  if (rs) {
+    F["region.cn"] = `대표 지역이 중국인 기사 ${rs.cur.cn_pct}%`;
+    F["region.us"] = `대표 지역이 미국인 기사 ${rs.cur.us_pct}%`;
+    F["region.other"] = `대표 지역이 그 밖(글로벌 포함)인 기사 ${rs.cur.other_pct}%`;
+    F["region.us_china"] = `미중이 함께 중심인 기사 ${rs.cur.us_china}건`;
+    if (rs.prev) {
+      F["region.cn.prev"] = `${W.prev} 중국 ${rs.prev.cn_pct}%`;
+      F["region.us.prev"] = `${W.prev} 미국 ${rs.prev.us_pct}%`;
+    }
+  }
   const cvo = m.china_vs_overseas;
-  F["cvo.china"] = `중국 실체가 나온 기사 ${cvo.cur.china_pct}%`;
-  F["cvo.foreign"] = `해외 실체가 나온 기사 ${cvo.cur.foreign_pct}%`;
-  if (cvo.prev) {
-    F["cvo.china.prev"] = `${W.prev} 중국 ${cvo.prev.china_pct}%`;
-    F["cvo.foreign.prev"] = `${W.prev} 해외 ${cvo.prev.foreign_pct}%`;
+  if (!rs && cvo) {
+    F["cvo.china"] = `중국 실체가 나온 기사 ${cvo.cur.china_pct}%`;
+    F["cvo.foreign"] = `해외 실체가 나온 기사 ${cvo.cur.foreign_pct}%`;
+    if (cvo.prev) {
+      F["cvo.china.prev"] = `${W.prev} 중국 ${cvo.prev.china_pct}%`;
+      F["cvo.foreign.prev"] = `${W.prev} 해외 ${cvo.prev.foreign_pct}%`;
+    }
   }
   F["stories.multi_source"] = `${m.stories.event_multi_source_count}건`;
   // 월간: 주별 궤적. 원 건수(.total)는 주 길이·수집 축소가 달라 비교용이 아니다 → 비교는 .weekday_avg / .per1k

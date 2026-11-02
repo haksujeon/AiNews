@@ -6,13 +6,6 @@ import { Search, X, Grid3X3, List, SlidersHorizontal, CalendarDays } from "lucid
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -25,7 +18,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { getCountryLabel, getCategoryLabel } from "@/lib/news-utils";
+import { getCategoryLabel } from "@/lib/news-utils";
+import { REGION_CHIPS, type RegionChip } from "@/lib/region";
+import type { RegionCounts } from "@/lib/metrics/period";
 import type { DateRange } from "@/lib/news-utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import type { DateRange as RdpDateRange } from "react-day-picker";
@@ -33,13 +28,14 @@ import type { DateRange as RdpDateRange } from "react-day-picker";
 interface NewsFilterProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
-  selectedCountry: string;
-  onCountryChange: (value: string) => void;
+  selectedRegion: RegionChip;
+  onRegionChange: (value: RegionChip) => void;
+  /** 지역 칩별 건수 (fetchNewsFacets). 판정된 기사가 하나도 없으면 칩을 그리지 않는다 */
+  regionCounts?: RegionCounts;
   selectedCategories: string[];
   onCategoriesChange: (value: string[]) => void;
   dateRange: DateRange;
   onDateRangeChange: (range: DateRange) => void;
-  countries: string[];
   categories: string[];
   viewMode: "grid" | "list";
   onViewModeChange: (mode: "grid" | "list") => void;
@@ -64,13 +60,13 @@ function formatShortDate(dateStr: string, locale: string): string {
 export function NewsFilter({
   searchQuery,
   onSearchChange,
-  selectedCountry,
-  onCountryChange,
+  selectedRegion,
+  onRegionChange,
+  regionCounts,
   selectedCategories,
   onCategoriesChange,
   dateRange,
   onDateRangeChange,
-  countries,
   categories,
   viewMode,
   onViewModeChange,
@@ -91,10 +87,11 @@ export function NewsFilter({
     }
   }, [debouncedSearch]);
 
-  // 고를 값이 하나뿐이면(지금은 CN 하나) 국가 선택 칸은 정보가 없으므로 그리지 않는다 (P0-5)
-  const showCountry = countries.length > 1;
+  // 지역 칩 (예전 국가 선택 칸을 대신한다 — 수집 매체가 모두 중국이라 '국가'는 정보가 없었다, P0-5).
+  // 기사 주체의 나라(subject_region)로 거른다. 판정된 기사가 없으면 칩을 그리지 않는다.
+  const showRegion = (regionCounts?.classified ?? 0) > 0 || selectedRegion !== "ALL";
   const hasDateFilter = !!dateRange.from || !!dateRange.to;
-  const hasActiveFilter = searchQuery || selectedCountry !== "ALL" || selectedCategories.length > 0 || hasDateFilter;
+  const hasActiveFilter = searchQuery || selectedRegion !== "ALL" || selectedCategories.length > 0 || hasDateFilter;
 
   const handleReset = () => {
     setLocalSearch("");
@@ -157,6 +154,40 @@ export function NewsFilter({
             `}
           >
             {getCategoryLabel(cat, locale)}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // 지역 칩: 하나만 고른다(전체 · 중국 · 미국 · 그 밖). 분류 칩과 같은 모양 — 잉크 바탕 = 선택.
+  // 렌더 중 컴포넌트를 새로 만들지 않도록 JSX 를 돌려주는 함수로 둔다.
+  const renderRegionChips = (isMobile = false) => (
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("region")} title={t("regionHint")}>
+      {REGION_CHIPS.map((r) => {
+        const isSelected = selectedRegion === r;
+        return (
+          <button
+            key={r}
+            type="button"
+            data-testid="region-chip"
+            data-region={r}
+            aria-pressed={isSelected}
+            onClick={() => {
+              onRegionChange(r);
+              if (isMobile) setIsSheetOpen(false);
+            }}
+            className={`
+              inline-flex items-center px-2.5 py-1 rounded-sm text-[13px] font-medium
+              transition-colors duration-150 border
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+              ${isSelected
+                ? "bg-ink text-background border-ink"
+                : "bg-transparent text-ink-2 border-rule hover:border-ink-3 hover:text-ink"
+              }
+            `}
+          >
+            {r === "ALL" ? t("regionAll") : t(`region${r}`)}
           </button>
         );
       })}
@@ -230,23 +261,10 @@ export function NewsFilter({
         <label className="text-sm font-medium">{t("dateRange")}</label>
         <DateRangePicker isMobile />
       </div>
-      {showCountry && (
+      {showRegion && (
         <div className="space-y-2">
-          <label className="text-sm font-medium">{t("country")}</label>
-          <Select value={selectedCountry} onValueChange={(value) => {
-            onCountryChange(value);
-            if (isMobile) setIsSheetOpen(false);
-          }}>
-            <SelectTrigger className="w-full" data-testid="country-select">
-              <SelectValue placeholder={t("allCountries")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">{t("allCountries")}</SelectItem>
-              {countries.map((code) => (
-                <SelectItem key={code} value={code}>{getCountryLabel(code, locale)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <label className="text-sm font-medium">{t("region")}</label>
+          {renderRegionChips(true)}
         </div>
       )}
       <div className="space-y-2">
@@ -304,20 +322,6 @@ export function NewsFilter({
 
           <DateRangePicker />
 
-          {showCountry && (
-            <Select value={selectedCountry} onValueChange={onCountryChange}>
-              <SelectTrigger className="w-[130px] h-8 text-xs border-0 bg-transparent shadow-none" data-testid="country-select">
-                <SelectValue placeholder={t("country")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">{t("allCountries")}</SelectItem>
-                {countries.map((code) => (
-                  <SelectItem key={code} value={code}>{getCountryLabel(code, locale)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
           {hasActiveFilter && (
             <Button variant="ghost" size="sm" className="h-7 text-xs text-ink-2" onClick={handleReset}>
               <X className="w-3 h-3 mr-1" />
@@ -355,8 +359,14 @@ export function NewsFilter({
         </div>
       </div>
 
-      {/* Desktop Category Chips */}
+      {/* Desktop Region + Category Chips */}
       <div className="hidden md:flex items-center gap-2 px-1">
+        {showRegion && (
+          <>
+            {renderRegionChips()}
+            <div className="w-px h-5 bg-rule" aria-hidden="true" />
+          </>
+        )}
         <CategoryChips />
         {selectedCategories.length > 0 && (
           <Button

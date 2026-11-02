@@ -30,7 +30,13 @@
     "resetDate": "날짜 초기화",
     "searchLabel": "기사 검색",
     "gridView": "그리드 보기",
-    "listView": "목록 보기"
+    "listView": "목록 보기",
+    "region": "지역",
+    "regionAll": "전체",
+    "regionCN": "중국",
+    "regionUS": "미국",
+    "regionOTHER": "그 밖",
+    "regionHint": "기사 주체의 나라로 거릅니다. 대만·홍콩은 중국에, 글로벌 기사는 그 밖에 들어갑니다."
   },
   "detail": {
     "backToList": "목록으로",
@@ -147,7 +153,12 @@
     "weeklyTotal": "주간 합계",
     "dailyAvg": "일 평균",
     "topKeywords": "주요 키워드 TOP 15",
-    "articles": "건"
+    "articles": "건",
+    "regionDistribution": "대상 지역 비중",
+    "regionNote": "지역 판정이 있는 기사 {classified}건 기준. 미중이 함께 중심인 기사 {uschina}건, 한국 관련 {korea}건, 미판정 {unclassified}건.",
+    "regionCN": "중국",
+    "regionUS": "미국",
+    "regionOTHER": "그 밖"
   },
   "meta": {
     "brand": "AI NEWS",
@@ -480,7 +491,14 @@
     "chartTopTerms": "많이 나온 용어 {count}개",
     "chartTopTermsDesc": "기사의 핵심 용어(key_terms) 기준, 기사당 1회.",
     "sentimentSubNoPrev": "AI 분류",
-    "termStatNoPrev": "{cur}건"
+    "termStatNoPrev": "{cur}건",
+    "chartRegion": "대표 지역별 기사 비중",
+    "chartRegionDesc": "이번 주 기사의 대표 지역은 중국 {cn}%, 미국 {us}%, 그 밖 {other}%였다. 지난주는 중국 {pcn}%, 미국 {pus}%.",
+    "chartRegionDescNoPrev": "기사의 대표 지역은 중국 {cn}%, 미국 {us}%, 그 밖 {other}%였다.",
+    "regionRowCn": "중국",
+    "regionRowUs": "미국",
+    "regionRowOther": "그 밖(글로벌 포함)",
+    "regionNote": "기사마다 대표 지역 하나로 셉니다(대만·홍콩은 중국). 미중이 함께 중심인 기사 {uschina}건, 지역 미판정 {unclassified}건은 비중에서 뺐습니다."
   },
   "seo": {
     "feedAllTitle": "AI NEWS — 최신 기사",
@@ -583,6 +601,7 @@
     "railWeeklies": "이번 달 주간 리포트",
     "weeklyOpen": "주간 보기",
     "weeklyNone": "리포트 없음",
-    "methodMonthly": "월간은 달을 ISO 주로 나눠(첫·마지막 주는 달 안으로 자름) 주별 평일 하루 평균과 기사 1천 건당 기업 언급을 계산합니다. 원 건수끼리 주를 비교하지 않습니다."
+    "methodMonthly": "월간은 달을 ISO 주로 나눠(첫·마지막 주는 달 안으로 자름) 주별 평일 하루 평균과 기사 1천 건당 기업 언급을 계산합니다. 원 건수끼리 주를 비교하지 않습니다.",
+    "chartRegionDesc": "이번 달 기사의 대표 지역은 중국 {cn}%, 미국 {us}%, 그 밖 {other}%였다. 지난달은 중국 {pcn}%, 미국 {pus}%."
   }
 }

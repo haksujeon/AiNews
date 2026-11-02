@@ -34,7 +34,7 @@ export function NewsListItem({ item, outletCount }: NewsListItemProps) {
       <article className="flex items-start gap-4 border-b border-rule py-4 sm:gap-6">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <ArticleKicker category={item.category} sourceName={item.source_name} locale={locale} />
+            <ArticleKicker category={item.category} sourceName={item.source_name} locale={locale} region={item.subject_region} regionTags={item.region_tags} />
             <OutletCount count={outletCount} />
           </div>
           <h2 className="text-[17px] font-semibold leading-[1.45] tracking-[-0.015em] text-ink decoration-1 underline-offset-[3px] group-hover:underline sm:text-lg">

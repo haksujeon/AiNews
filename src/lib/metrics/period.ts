@@ -4,6 +4,7 @@
  *  - SQL 집계 함수(countBy / countByDay / termCounts / volumeSummary / dayBounds)는 Queryable 을 인자로 받는다.
  *    이 파일은 DB 풀을 import 하지 않는다 → 단위 테스트가 DATABASE_URL 없이 돌고, 통합 시험은 READ ONLY 트랜잭션 client 를 넘긴다.
  *  - 기사 단위 함수(entityMentions / chinaVsOverseas / moneyTable / crossSourceStories)는 불러온 행을 받는 순수 함수.
+ *  - 지역 비중(regionCounts)은 SQL — 홈 지역 칩 건수·통계 페이지·주간/월간 리포트가 같은 함수를 쓴다 (src/lib/region.ts 의 칩 규칙).
  *  - 모집단(population): 'all' = 공개 기사 전체(통계 페이지), 'ai' = 공개 기사 중 범위 내 분류(categories.ts scopeCategorySql, 브리핑·리포트).
  *    범위 분류 목록이 바뀌면(로봇 추가 등) METRICS_VERSION 을 올린다.
  *  - 날짜 = news_date 의 UTC 날짜 = 베이징 날짜 (news_date 는 "베이징 날짜 00:00 UTC" 로 저장됨).
@@ -23,6 +24,7 @@ import { PUBLIC_NEWS_WHERE } from "../news-query";
 import { scopeCategorySql } from "../categories";
 import { rankStories, type RankableArticle } from "../news-rank";
 import { ENTITIES, findEntities } from "../briefing/entities";
+import { REGION_BADGE_SQL, SUBJECT_REGIONS, regionChipSql, type SubjectRegion } from "../region";
 import { groupPeriodStories, isPolitical } from "../briefing/select";
 import type { CandidateArticle, KeyTerm } from "../briefing/types";
 
@@ -56,7 +58,9 @@ export const MIN_COUNT_FOR_CHANGE = 5;
 export const TERM_MIN = 4;
 export const TERM_DELTA = 3;
 export const MISSING_RATIO = 0.5;
-export const METRICS_VERSION = "period-v2-2026-11-02";
+// v3 (2026-11-02): '중국 대 해외'를 언급 기준(chinaVsOverseas)에서 대표 지역 기준(region_share = regionCounts)으로 바꿈.
+//   예전 스냅숏(v2)은 china_vs_overseas 만 있고, 화면·지시문은 region_share 가 없으면 예전 지표를 그대로 보여 준다.
+export const METRICS_VERSION = "period-v3-2026-11-02";
 /** 보충 수집 때 매체별 하루 상한 (데이터 알림 문구) */
 export const BACKFILL_CAPS: Record<string, number> = { "36Kr": 12, ITHome: 6 };
 
@@ -367,6 +371,69 @@ export function toSentimentShare(rows: CountRow[]): SentimentShare[] {
 export function sentimentFlat(cur: SentimentShare[], prev: SentimentShare[] | null): boolean {
   if (!prev) return false;
   return cur.every((c) => Math.abs(c.share_pct - (prev.find((p) => p.name === c.name)?.share_pct ?? 0)) < 1);
+}
+
+// ───────────────────────── 대상 지역 비중 (SQL, 홈 칩·통계·리포트 공용)
+
+export interface RegionCounts {
+  /** 모집단 전체 (미판정 포함) */
+  total: number;
+  /** 대표 지역 판정이 있는 기사 */
+  classified: number;
+  /** 미판정(NULL) — '전체'에서만 보인다 */
+  unclassified: number;
+  by_region: Record<SubjectRegion, number>;
+  /** 칩 버킷 (regionChipSql 과 같은 규칙): 그 밖 = CN·US 가 아닌 나머지 (GLOBAL 포함) */
+  buckets: { CN: number; US: number; OTHER: number };
+  /** 태그 ⊇ {CN, US} */
+  us_china: number;
+  /** 'KR' ∈ 태그 */
+  korea: number;
+  /** 판정된 기사 중 비중 (%, 소수 1자리) */
+  cn_pct: number;
+  us_pct: number;
+  other_pct: number;
+  us_china_pct: number;
+  /** 모집단 중 미판정 비중 (%) */
+  unclassified_pct: number;
+}
+
+/** 대상 지역 건수·비중. 버킷은 regionChipSql(칩 필터)과 같은 조건으로 센다 → 칩을 눌렀을 때 건수와 같다 */
+export async function regionCounts(q: Queryable, opts: MetricOptions): Promise<RegionCounts> {
+  const { where, values } = whereOf(opts);
+  const per = SUBJECT_REGIONS.map((r) => `COUNT(*) FILTER (WHERE subject_region = '${r}')::int AS "r_${r}"`).join(",\n            ");
+  const { rows } = await q.query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE subject_region IS NULL)::int AS unclassified,
+            COUNT(*) FILTER (WHERE ${regionChipSql("CN")})::int AS b_cn,
+            COUNT(*) FILTER (WHERE ${regionChipSql("US")})::int AS b_us,
+            COUNT(*) FILTER (WHERE ${regionChipSql("OTHER")})::int AS b_other,
+            COUNT(*) FILTER (WHERE ${REGION_BADGE_SQL.us_china})::int AS us_china,
+            COUNT(*) FILTER (WHERE ${REGION_BADGE_SQL.korea})::int AS korea,
+            ${per}
+       FROM ai_news_ex WHERE ${where}`,
+    values
+  );
+  const r = (rows[0] ?? {}) as Record<string, number>;
+  const total = r.total ?? 0;
+  const unclassified = r.unclassified ?? 0;
+  const classified = total - unclassified;
+  const by_region = Object.fromEntries(SUBJECT_REGIONS.map((c) => [c, r[`r_${c}`] ?? 0])) as Record<SubjectRegion, number>;
+  const buckets = { CN: r.b_cn ?? 0, US: r.b_us ?? 0, OTHER: r.b_other ?? 0 };
+  return {
+    total,
+    classified,
+    unclassified,
+    by_region,
+    buckets,
+    us_china: r.us_china ?? 0,
+    korea: r.korea ?? 0,
+    cn_pct: sharePct(buckets.CN, classified),
+    us_pct: sharePct(buckets.US, classified),
+    other_pct: sharePct(buckets.OTHER, classified),
+    us_china_pct: sharePct(r.us_china ?? 0, classified),
+    unclassified_pct: sharePct(unclassified, total),
+  };
 }
 
 // ───────────────────────── 결손일 · 같은 요일 비교 (순수)
@@ -731,7 +798,8 @@ export function termMovement(cur: TermCount[], prev: TermCount[] | null, top = 1
 
 // ───────────────────────── 중국 대 해외 (순수)
 
-const CHINA_PLACE_RE = /중국|中国|国产|베이징|상하이|선전|항저우/;
+// '선전'은 宣传(홍보·선전)과 겹쳐 뺐다 — 深圳 은 원문·'선전시'로 잡는다 (지역 분류 보고서 §1). 예전 스냅숏 재현용 지표.
+const CHINA_PLACE_RE = /중국|中国|国产|베이징|상하이|선전시|深圳|항저우/;
 
 export interface ChinaVsOverseas {
   total: number;
@@ -745,7 +813,10 @@ export interface ChinaVsOverseas {
   foreign_pct: number;
 }
 
-/** 기사 단위: 중국 실체(chinese=true) 또는 중국 지명 → 중국, 해외 실체 → 해외. 둘 다면 양쪽 모두 */
+/**
+ * (예전 지표, METRICS_VERSION v2 까지) 기사 단위: 중국 실체(chinese=true) 또는 중국 지명 → 중국, 해외 실체 → 해외. 둘 다면 양쪽 모두.
+ * v3 부터 리포트는 대표 지역 기준 region_share(regionCounts)를 쓴다. 이 함수는 예전 스냅숏과의 비교·시험용으로 남긴다.
+ */
 export function chinaVsOverseas(arts: PeriodArticle[]): ChinaVsOverseas {
   let cn = 0;
   let fo = 0;
@@ -946,7 +1017,10 @@ export interface PeriodMetrics {
   sentiment: { cur: SentimentShare[]; prev: SentimentShare[] | null; flat: boolean };
   entities: EntityMention[];
   terms: { top: TermMetric[]; rising: TermMetric[]; falling: TermMetric[] };
-  china_vs_overseas: { cur: ChinaVsOverseas; prev: ChinaVsOverseas | null };
+  /** v2 까지의 언급 기준 지표 — 예전 스냅숏에만 있다 (v3 부터 계산하지 않음) */
+  china_vs_overseas?: { cur: ChinaVsOverseas; prev: ChinaVsOverseas | null };
+  /** v3: 대표 지역 기준 비중 (regionCounts — 홈 칩·통계 페이지와 같은 함수) */
+  region_share?: { cur: RegionCounts; prev: RegionCounts | null };
   money_table: MoneyRow[];
   stories: {
     group_count: number;
@@ -1020,6 +1094,8 @@ export async function computePeriodMetrics(
   const sentPrev = prev ? await countBy(q, "sentiment", prev) : null;
   const termCur = await termCounts(q, { ...cur, pinyin: true });
   const termPrev = prev ? await termCounts(q, { ...prev, pinyin: true }) : null;
+  const regionCur = await regionCounts(q, cur);
+  const regionPrev = prev ? await regionCounts(q, prev) : null;
 
   const baseline = baselineFrom(baseSeries, since, end);
   const curDays = fillDays(start, end, await countByDay(q, cur));
@@ -1065,7 +1141,7 @@ export async function computePeriodMetrics(
     sentiment: { cur: sentC, prev: sentP, flat: sentimentFlat(sentC, sentP) },
     entities,
     terms: termMovement(termCur, termPrev),
-    china_vs_overseas: { cur: chinaVsOverseas(arts), prev: prevArts ? chinaVsOverseas(prevArts) : null },
+    region_share: { cur: regionCur, prev: regionPrev },
     money_table: moneyTable(arts),
     stories: {
       group_count: stories.length,
@@ -1078,7 +1154,8 @@ export async function computePeriodMetrics(
     fingerprint: periodFingerprint(
       [...curDays, ...(prev ? prevDaily.map((d) => ({ date: d.day, count: d.count })) : [])],
       [...arts, ...(prevArts ?? [])],
-      `${population}|${start}|${end}|${opts.prevStart ?? ""}|${opts.prevEnd ?? ""}`
+      // 지역 판정(백필·재분류)이 바뀌면 지문도 바뀌게 지역 건수를 넣는다
+      `${population}|${start}|${end}|${opts.prevStart ?? ""}|${opts.prevEnd ?? ""}|region:${JSON.stringify([regionCur.by_region, regionCur.us_china, regionPrev?.by_region ?? null])}`
     ),
   };
   return { metrics, stories, articles: arts };

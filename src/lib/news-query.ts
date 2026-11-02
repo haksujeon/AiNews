@@ -7,10 +7,12 @@
  * 이제 모든 필터는 전체 테이블을 대상으로 SQL에서 처리한다.
  */
 import { isPublicCategory } from "./categories";
+import { parseRegionChip, regionChipSql, type RegionChip } from "./region";
 
 export interface NewsFilters {
   q: string;
-  country: string;      // "ALL" = 전체
+  country: string;      // "ALL" = 전체 (예전 국가 선택 — 화면에서는 지역 칩으로 바뀜, API 호환용)
+  region: RegionChip;   // 대상 지역 칩: ALL · CN · US · OTHER (src/lib/region.ts)
   categories: string[]; // 빈 배열 = 전체
   from: string;         // YYYY-MM-DD, "" = 제한 없음
   to: string;           // YYYY-MM-DD, "" = 제한 없음
@@ -19,6 +21,7 @@ export interface NewsFilters {
 export const EMPTY_FILTERS: NewsFilters = {
   q: "",
   country: "ALL",
+  region: "ALL",
   categories: [],
   from: "",
   to: "",
@@ -52,6 +55,7 @@ export function parseFilters(params: URLSearchParams): NewsFilters {
   return {
     q: (params.get("q") ?? "").trim().slice(0, 100),
     country: (params.get("country") ?? "ALL").trim() || "ALL",
+    region: parseRegionChip(params.get("region")),
     categories: (params.get("categories") ?? "")
       .split(",")
       .map((c) => c.trim())
@@ -67,6 +71,7 @@ export function filtersToParams(filters: NewsFilters): URLSearchParams {
   const p = new URLSearchParams();
   if (filters.q) p.set("q", filters.q);
   if (filters.country && filters.country !== "ALL") p.set("country", filters.country);
+  if (filters.region && filters.region !== "ALL") p.set("region", filters.region);
   if (filters.categories.length) p.set("categories", filters.categories.join(","));
   if (filters.from) p.set("from", filters.from);
   if (filters.to) p.set("to", filters.to);
@@ -75,7 +80,7 @@ export function filtersToParams(filters: NewsFilters): URLSearchParams {
 
 export function hasActiveFilters(f: NewsFilters): boolean {
   return Boolean(
-    f.q || (f.country && f.country !== "ALL") || f.categories.length || f.from || f.to
+    f.q || (f.country && f.country !== "ALL") || (f.region && f.region !== "ALL") || f.categories.length || f.from || f.to
   );
 }
 
@@ -110,6 +115,10 @@ export function buildNewsWhere(
     values.push(filters.country);
     clauses.push(`country = $${i}`);
   }
+
+  // 지역 칩: 상수 조각만 붙는다(값은 parseRegionChip 이 네 가지로 제한)
+  const regionClause = filters.region ? regionChipSql(filters.region) : null;
+  if (regionClause) clauses.push(regionClause);
 
   if (filters.categories.length) {
     i += 1;

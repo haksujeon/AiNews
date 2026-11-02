@@ -95,6 +95,8 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
   const top = m.entities[0];
   const termKey = c.term?.term;
   const term = m.terms.top.find((x) => x.term === termKey) ?? m.terms.top[0];
+  // v3 스냅숏은 대표 지역 비중(region_share), v2 이전 스냅숏은 언급 기준(china_vs_overseas)
+  const rs = m.region_share;
   const cvo = m.china_vs_overseas;
   const visible = new Set(report.snapshot_visible_ids);
   const money = m.money_table.filter((r) => visible.has(r.id));
@@ -574,54 +576,99 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                 <Sources refs={c.china_lens.refs} briefing={report} className="mt-2" />
               </>
             )}
-            <ChartFigure
-              testId="chart-china"
-              title={t("chartChina")}
-              desc={
-                cvo.prev
-                  ? tp("chartChinaDesc", { foreign: cvo.cur.foreign_pct, china: cvo.cur.china_pct, pforeign: cvo.prev.foreign_pct, pchina: cvo.prev.china_pct })
-                  : t("chartChinaDescNoPrev", { foreign: cvo.cur.foreign_pct, china: cvo.cur.china_pct })
-              }
-              tableLabel={t("tableView")}
-              note={c.china_lens ? t("chinaNote") : `${t("chinaNote")} ${t("chinaLensDropped")}`}
-              render={(W, ids) =>
-                cvo.prev ? (
-                  <Dumbbell
-                    W={W}
-                    ids={ids}
-                    unit="%"
+            {rs ? (
+              // v3 스냅숏: 대표 지역 기준 (region_share = regionCounts, 홈 지역 칩·통계 페이지와 같은 함수)
+              <ChartFigure
+                testId="chart-china"
+                title={t("chartRegion")}
+                desc={
+                  rs.prev
+                    ? tp("chartRegionDesc", { cn: rs.cur.cn_pct, us: rs.cur.us_pct, other: rs.cur.other_pct, pcn: rs.prev.cn_pct, pus: rs.prev.us_pct })
+                    : t("chartRegionDescNoPrev", { cn: rs.cur.cn_pct, us: rs.cur.us_pct, other: rs.cur.other_pct })
+                }
+                tableLabel={t("tableView")}
+                note={`${t("regionNote", { uschina: rs.cur.us_china, unclassified: rs.cur.unclassified })}${c.china_lens ? "" : ` ${t("chinaLensDropped")}`}`}
+                render={(W, ids) => {
+                  const rows = [
+                    { key: "cn", label: t("regionRowCn"), cur: rs.cur.cn_pct, prev: rs.prev?.cn_pct ?? 0 },
+                    { key: "us", label: t("regionRowUs"), cur: rs.cur.us_pct, prev: rs.prev?.us_pct ?? 0 },
+                    { key: "ot", label: t("regionRowOther"), cur: rs.cur.other_pct, prev: rs.prev?.other_pct ?? 0 },
+                  ];
+                  return rs.prev ? (
+                    <Dumbbell
+                      W={W}
+                      ids={ids}
+                      unit="%"
+                      rows={rows.map((r) => {
+                        const d = Math.round((r.cur - r.prev) * 10) / 10;
+                        return { ...r, chg: `${d > 0 ? "+" : ""}${d}%p`, tip: `${r.label}: ${r.prev}% → ${r.cur}%` };
+                      })}
+                    />
+                  ) : (
+                    <BarsTick W={W} ids={ids} noPrev unit="%" step={25} rows={rows.map((r) => ({ ...r, prev: 0, tip: `${r.label}: ${r.cur}%` }))} />
+                  );
+                }}
+                table={
+                  <DataTable
+                    head={[t("colGroup"), tp("legendPrev"), tp("legendCur")]}
                     rows={[
-                      { key: "cn", label: t("chinaRowCn"), prev: cvo.prev.china_pct, cur: cvo.cur.china_pct },
-                      { key: "fo", label: t("chinaRowFo"), prev: cvo.prev.foreign_pct, cur: cvo.cur.foreign_pct },
-                    ].map((r) => {
-                      const d = Math.round((r.cur - r.prev) * 10) / 10;
-                      return { ...r, chg: `${d > 0 ? "+" : ""}${d}%p`, tip: `${r.label}: ${r.prev}% → ${r.cur}%` };
-                    })}
-                  />
-                ) : (
-                  <BarsTick
-                    W={W}
-                    ids={ids}
-                    noPrev
-                    unit="%"
-                    step={25}
-                    rows={[
-                      { key: "cn", label: t("chinaRowCn"), cur: cvo.cur.china_pct, prev: 0, tip: `${t("chinaRowCn")}: ${cvo.cur.china_pct}%` },
-                      { key: "fo", label: t("chinaRowFo"), cur: cvo.cur.foreign_pct, prev: 0, tip: `${t("chinaRowFo")}: ${cvo.cur.foreign_pct}%` },
+                      [t("regionRowCn"), rs.prev ? `${rs.prev.cn_pct}%` : "—", `${rs.cur.cn_pct}%`],
+                      [t("regionRowUs"), rs.prev ? `${rs.prev.us_pct}%` : "—", `${rs.cur.us_pct}%`],
+                      [t("regionRowOther"), rs.prev ? `${rs.prev.other_pct}%` : "—", `${rs.cur.other_pct}%`],
                     ]}
                   />
-                )
-              }
-              table={
-                <DataTable
-                  head={[t("colGroup"), tp("legendPrev"), tp("legendCur")]}
-                  rows={[
-                    [t("chinaRowCn"), cvo.prev ? `${cvo.prev.china_pct}%` : "—", `${cvo.cur.china_pct}%`],
-                    [t("chinaRowFo"), cvo.prev ? `${cvo.prev.foreign_pct}%` : "—", `${cvo.cur.foreign_pct}%`],
-                  ]}
-                />
-              }
-            />
+                }
+              />
+            ) : cvo ? (
+              <ChartFigure
+                testId="chart-china"
+                title={t("chartChina")}
+                desc={
+                  cvo.prev
+                    ? tp("chartChinaDesc", { foreign: cvo.cur.foreign_pct, china: cvo.cur.china_pct, pforeign: cvo.prev.foreign_pct, pchina: cvo.prev.china_pct })
+                    : t("chartChinaDescNoPrev", { foreign: cvo.cur.foreign_pct, china: cvo.cur.china_pct })
+                }
+                tableLabel={t("tableView")}
+                note={c.china_lens ? t("chinaNote") : `${t("chinaNote")} ${t("chinaLensDropped")}`}
+                render={(W, ids) =>
+                  cvo.prev ? (
+                    <Dumbbell
+                      W={W}
+                      ids={ids}
+                      unit="%"
+                      rows={[
+                        { key: "cn", label: t("chinaRowCn"), prev: cvo.prev.china_pct, cur: cvo.cur.china_pct },
+                        { key: "fo", label: t("chinaRowFo"), prev: cvo.prev.foreign_pct, cur: cvo.cur.foreign_pct },
+                      ].map((r) => {
+                        const d = Math.round((r.cur - r.prev) * 10) / 10;
+                        return { ...r, chg: `${d > 0 ? "+" : ""}${d}%p`, tip: `${r.label}: ${r.prev}% → ${r.cur}%` };
+                      })}
+                    />
+                  ) : (
+                    <BarsTick
+                      W={W}
+                      ids={ids}
+                      noPrev
+                      unit="%"
+                      step={25}
+                      rows={[
+                        { key: "cn", label: t("chinaRowCn"), cur: cvo.cur.china_pct, prev: 0, tip: `${t("chinaRowCn")}: ${cvo.cur.china_pct}%` },
+                        { key: "fo", label: t("chinaRowFo"), cur: cvo.cur.foreign_pct, prev: 0, tip: `${t("chinaRowFo")}: ${cvo.cur.foreign_pct}%` },
+                      ]}
+                    />
+                  )
+                }
+                table={
+                  <DataTable
+                    head={[t("colGroup"), tp("legendPrev"), tp("legendCur")]}
+                    rows={[
+                      [t("chinaRowCn"), cvo.prev ? `${cvo.prev.china_pct}%` : "—", `${cvo.cur.china_pct}%`],
+                      [t("chinaRowFo"), cvo.prev ? `${cvo.prev.foreign_pct}%` : "—", `${cvo.cur.foreign_pct}%`],
+                    ]}
+                  />
+                }
+              />
+            ) : null}
           </section>
 
           {/* ── 움직인 기업 ── */}

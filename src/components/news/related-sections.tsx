@@ -48,7 +48,7 @@ export function RelatedSectionsView({ sections, locale, variant, headingTag = "h
                   {gapLabel(item.gap)}
                 </span>
               )}
-              <ArticleKicker category={item.category} sourceName={item.source_name} locale={locale} />
+              <ArticleKicker category={item.category} sourceName={item.source_name} locale={locale} region={item.subject_region} regionTags={item.region_tags} />
             </span>
             <span
               className={cn(

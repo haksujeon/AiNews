@@ -1,4 +1,5 @@
 import { getCategoryLabel } from "./news-utils";
+import type { RegionCounts } from "./metrics/period";
 
 export interface CategoryStat {
   name: string;
@@ -81,6 +82,8 @@ export interface StatisticsData {
   /** 기사 없는 날은 0 으로 채운 연속 일자 (YYYY-MM-DD 오름차순) */
   daily: DailyVolume[];
   weekly: WeeklyTrend[];
+  /** 대상 지역 비중 — 홈 지역 칩·주간/월간 리포트와 같은 regionCounts (src/lib/metrics/period.ts) */
+  regions: RegionCounts;
 }
 
 export function toCategoryStats(rows: CountRow[], locale: string = "ko"): CategoryStat[] {

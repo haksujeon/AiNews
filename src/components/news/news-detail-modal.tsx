@@ -73,7 +73,7 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
 
         <div className="space-y-6 p-5 sm:p-8">
           <DialogHeader className="gap-3 text-left sm:text-left">
-            <ArticleKicker category={fullItem.category} sourceName={fullItem.source_name} locale={locale} className="pr-8" />
+            <ArticleKicker category={fullItem.category} sourceName={fullItem.source_name} locale={locale} region={fullItem.subject_region} regionTags={fullItem.region_tags} className="pr-8" />
             <DialogTitle className="pr-8 text-2xl font-bold leading-[1.3] tracking-[-0.02em] text-ink sm:text-[30px]">
               {title}
             </DialogTitle>
