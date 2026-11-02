@@ -30,6 +30,7 @@ import {
   directionFlips,
   dropConflictSentences,
   prevPairConflicts,
+  summedAmount,
   volumeWowUnadjusted,
   pruneArcRefs,
   revertFlips,
@@ -308,6 +309,9 @@ test("W42 헤드라인 '에이전트·구체지능 열풍 속 …' / W41 '자금
   assert.ok(changeUnbacked(ED("w41_bp1"), []));
   assert.ok(!changeUnbacked(ED("w42_headline"), ["term.智能体.rise"]));
   assert.ok(!changeUnbacked("확산 방지 대책을 내놓았다", []));
+  // W44 v10 movers 오탐: "시총 3,000억 달러가 증발" 은 금액 합산이 아니다
+  assert.equal(summedAmount("Gemini 4 Carbon을 발표해 지능 지수 1위에 올랐지만 실적 발표 후 시총 3,000억 달러가 증발했다."), false);
+  assert.ok(summedAmount("세 거래를 모두 합쳐 총 50억 달러"));
   // 추세 표현(열풍·쏠림 …)은 기사 숫자가 같은 문장에 있어도 증감 지표가 있어야 한다 (수량 증감만 기사 숫자로 뒷받침)
   assert.ok(changeUnbacked("AI 열풍 속 딥시크 1000억 위안 융자", [], "딥시크 1000억 위안 융자 라운드"));
   assert.ok(!changeUnbacked("딥시크 융자는 1000억 위안으로 늘었다", [], "딥시크 1000억 위안 융자 라운드"));

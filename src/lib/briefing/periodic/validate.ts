@@ -253,6 +253,11 @@ export function prevPairConflicts(text: string, metrics: string[], facts: Record
 }
 
 const RANK_RE = /가장 큰|최대 규모|가장 많은/;
+/** 금액 합산 표현 ("시총 3,000억 달러" 의 시가총액은 합산이 아니다) */
+export function summedAmount(text: string): boolean {
+  return /합계|(?<![시가])총\s?\d|모두 합쳐|합산/.test(text);
+}
+
 /** 위안과 달러 금액을 한 문장에서 서열로 비교 */
 export function crossCurrencyRank(text: string): boolean {
   return RANK_RE.test(text) && /위안/.test(text) && /달러/.test(text);
@@ -457,7 +462,8 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
     if (changeUnbacked(u.text, u.metrics, u.refs.map((r) => ctx.sourceText.get(r) ?? "").join(" ")))
       push("fatal", "change_unbacked", u.path, "증감 주장에 증감 지표 없음");
     for (const d of prevPairConflicts(u.text, u.metrics, F)) push("fatal", "direction_conflict", u.path, d);
-    if (/합계|총\s?\d|모두 합쳐|합산/.test(u.text)) push("fatal", "summed_amount", u.path, "금액 합산 표현");
+    // "시총 3,000억 달러"(시가총액)는 합산이 아니다 (round 2 재생성 W44 v10 movers 오탐)
+    if (summedAmount(u.text)) push("fatal", "summed_amount", u.path, "금액 합산 표현");
 
     if (!u.headline) {
       const refGround = u.refs.map((r) => ctx.sourceText.get(r) ?? "").join(" ");
