@@ -299,7 +299,8 @@ const MENTION_RE = /언급|기사|보도|다뤄|다룬|등장/;
 
 /** 문장의 증감이 근거 기사의 숫자로 뒷받침되나 (언급 이야기가 아니고, 증감 숫자 — %·배 — 가 근거 텍스트에 있음) */
 export function sourcedChange(sentence: string, ground: string): boolean {
-  if (!ground || MENTION_RE.test(sentence)) return false;
+  // 언급 수 이야기("언급이 늘었다·기사 수·보도량")만 뺀다 — "늘었다는 보도가 이어졌다" 는 기사 사실을 전한 말
+  if (!ground || /언급|기사\s?수|보도량|다뤄|다룬|등장/.test(sentence)) return false;
   const nums = sentence.match(/\d[\d,.]*\s?(?:%|배|(?:조|억|만)?\s?(?:위안|달러))/g) ?? [];
   const g = norm(ground);
   return nums.some((n) => g.includes(norm(n)));
