@@ -507,7 +507,8 @@ export function subjectMissingFromRefs(subject: string, refs: string[], ctx: Pic
     .map((t) => t.replace(/[은는이가의]$/, ""))
     .filter((t) => t.length >= 2);
   if (!toks.length) return false;
-  const hay = srcs.join(" ").replace(/\s/g, "");
+  // 결정적 한자 정리(glossKoHan)가 subject 를 바꿨을 수 있어 정리한 근거 텍스트도 본다 ("B站" → "빌리빌리")
+  const hay = srcs.map((s) => `${s} ${glossHanText(s)}`).join(" ").replace(/\s/g, "");
   return !toks.some((t) => hay.includes(t));
 }
 

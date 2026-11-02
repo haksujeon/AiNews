@@ -417,7 +417,8 @@ function fallbackOutcome(
     edits.push({ action: "repair", path: "headline", reason: `대체 짧은 판: ${reason}`, before: cur.content.headline, after: sf.content.headline, round: "fallback" });
     validation.edits = edits;
     validation.fallback = "short";
-    validation.final = { ...sf.report, warn: [...sf.report.warn, { level: "warn", rule: "fallback_short", path: "headline", detail: `대체 짧은 판 — ${reason}` }] };
+    const kept = cur.report.warn.filter((w) => w.rule === "dropped_key_story");
+    validation.final = { ...sf.report, warn: [...sf.report.warn, ...kept, { level: "warn", rule: "fallback_short", path: "headline", detail: `대체 짧은 판 — ${reason}` }] };
     return { status: "draft", content: sf.content, validation, usages, mode: "short" };
   }
   const hl = headlinesEdition(groups, editionDate);

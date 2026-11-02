@@ -16,6 +16,7 @@ import {
   glossKoHan,
   localFixes,
   mergeDuplicateItems,
+  subjectMissingFromRefs,
   normalizeContent,
   validateKo,
   type ValidationContext,
@@ -179,6 +180,9 @@ test("10-27: '캡컷(剪映 국제판)' 한자 2자 — 괄호 안 한자를 지
   const b = glossKoHan({ ...c, headline: "B站 AI 무한 경기장 출범…GPT-6 Astra 1위", top_stories: [{ ...c.top_stories[0], subject: "B站" }] });
   assert.equal(b.content.headline, "빌리빌리 AI 무한 경기장 출범…GPT-6 Astra 1위");
   assert.equal(b.content.top_stories[0].subject, "빌리빌리");
+  // 정리한 subject 가 근거 기사(원문 표기 B站)에 없다고 주요 기사를 지우지 않는다 (round 2 재생성 09-16 v3 회귀)
+  assert.equal(subjectMissingFromRefs("빌리빌리", ["A01"], { sourceText: new Map([["A01", "B站 AI 무한 경기장 출범"]]) }), false);
+  assert.equal(subjectMissingFromRefs("바이두", ["A01"], { sourceText: new Map([["A01", "B站 AI 무한 경기장 출범"]]) }), true);
 });
 
 test("섹션 한 줄 76/70자 — 통째 삭제 대신 절 경계에서 자르고 기록을 남긴다", () => {
