@@ -340,6 +340,7 @@
     "dataQualityBody": "이 판의 기간에 수집 미완 날짜({days})가 있습니다. 2026-10-13 이전은 보충 수집(매체별 하루 상한)이라 기사 수가 실제보다 적고, 그 밖의 날은 부분 수집입니다. 이 날들은 같은 요일 비교·평균에서 뺐지만, 수집 보충이 끝나면 수치가 바뀔 수 있습니다. 확인한 뒤에만 발행할 수 있습니다.",
     "dataQualityAck": "데이터 알림을 확인했고 이대로 발행합니다",
     "fallbacks": "결정적 문장으로 대체한 필드: {items}",
+    "fallbackEdition": "대체 판({mode}): {reason}",
     "weeklyEditNote": "주간 리포트는 아직 인라인 수정을 지원하지 않습니다. 고칠 곳이 있으면 다시 생성하거나 발행하지 마십시오.",
     "confirmPublishWeekly": "{week} 주간 리포트 ko v{version} 을 발행할까요? 같은 주의 기존 발행본은 교체됩니다.",
     "confirmWithdrawWeekly": "{week} 주간 리포트 발행본을 철회할까요?",

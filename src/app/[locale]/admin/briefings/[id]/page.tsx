@@ -55,6 +55,9 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
     dropped_items?: string[];
     fallbacks?: string[];
     used?: string;
+    /** 생성이 끝내 실패해 내린 대체 판 (short = 검증 통과 주요 기사 짧은 판, headlines = 제목만 판) */
+    fallback?: string;
+    fallback_reason?: string;
   };
   const fatal = v.final?.fatal ?? [];
   const warn = v.final?.warn ?? [];
@@ -122,6 +125,11 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
               )}
               {v.dropped_items?.length ? <p className="mt-2 text-xs text-ink-3">{t("droppedItems", { items: v.dropped_items.join(", ") })}</p> : null}
               {v.fallbacks?.length ? <p className="mt-1 text-xs text-ink-3">{t("fallbacks", { items: v.fallbacks.join(", ") })}</p> : null}
+              {v.fallback ? (
+                <p className="mt-1 text-xs font-semibold text-destructive" data-testid="admin-briefing-fallback">
+                  {t("fallbackEdition", { mode: v.fallback, reason: v.fallback_reason ?? "" })}
+                </p>
+              ) : null}
             </section>
             {row.locale === "ko" && !weekly && (
               <section>

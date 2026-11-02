@@ -18,7 +18,8 @@ export type BriefingStatus =
   | "withdrawn";
 
 /** §1.2 물량 규칙: ≥6 정상 판, 3~5 짧은 판, <3 생략 */
-export type EditionMode = "normal" | "short" | "skipped";
+/** headlines = 생성이 끝내 실패한 날의 제목만 판 (fallback.ts — LLM 문장 없음, ko 만) */
+export type EditionMode = "normal" | "short" | "skipped" | "headlines";
 
 export const SECTION_CODES = [
   "models",

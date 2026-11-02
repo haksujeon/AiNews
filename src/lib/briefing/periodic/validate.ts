@@ -35,6 +35,7 @@
 import type { ValidationIssue } from "../types";
 import { ENTITIES, entityMentioned, findEntities, properNouns } from "../entities";
 import { HAN_RE, NUM_RE, norm } from "../validate";
+import { maskGroundedQuantities } from "../quantity";
 import {
   claimIssues,
   entityNotInOriginal,
@@ -69,6 +70,9 @@ export interface PeriodicValidationContext {
   /** 매체 수 상위 사건(1·2위)의 기사 id, S id → 기사 id (top_event_missing 경고) */
   topEvents?: string[][];
   poolIds?: Map<string, string[]>;
+  /** (월간) 주 키 → 기간, S id → 사건 날짜들. month_arc 의 refs 는 그 주의 사건만 (arc_week_mismatch) */
+  weekRanges?: Map<string, { start: string; end: string }>;
+  sidDays?: Map<string, string[]>;
 }
 
 /** 지표 용어(중국어) → 본문에 쓰는 한국어 표기. 방향 검사·순위 검사가 "에이전트 언급이 늘었다" 를 智能体 로 읽게 한다 */
@@ -203,7 +207,8 @@ export function volumeWeekUnadjusted(text: string, metrics: string[]): boolean {
   );
 }
 
-const CHANGE_RE = /크게 늘|늘었다|증가했|급증|줄었다|감소했|급감/;
+// 2026-11-02 재감사: W42 헤드라인 '열풍', W41 '확산·몰리는' 이 증감 지표 없이 통과했다 → 증감·쏠림 표현을 넓힌다
+const CHANGE_RE = /크게 늘|늘었다|증가했|급증|줄었다|감소했|급감|열풍|(?<![가-힣])붐(?![가-힣])|붐을|쏠림|쏠리|확산(?!\s?(?:방지|억제))|몰리|몰려|몰린/;
 const CHANGE_METRIC_RE = /\.(rise|fall|chg)$|^week\.|^vol\.lfl/;
 /** 증감 주장인데 증감 지표가 없음 */
 export function changeUnbacked(text: string, metrics: string[]): boolean {
@@ -237,16 +242,18 @@ function metricTargetIn(k: string, sentence: string): boolean | null {
  * 인용 지표의 방향과 문장 표현의 방향이 반대. 지표 대상이 나오는 문장만 보고,
  * 대상이 어느 문장에도 없으면(예: 智能体 를 인용하고 "개인 에이전트 열풍" 이라고만 씀) 항목 전체를 본다.
  */
-export function directionConflicts(text: string, metrics: string[], facts: Record<string, string>): string[] {
+export function directionConflicts(text: string, metrics: string[], facts: Record<string, string>, ground = ""): string[] {
   const out: string[] = [];
-  const sentences = splitSentences(text);
+  // 언급 수 이야기가 아니고, 증감을 근거 기사의 숫자("호출량 +801%")로 말한 문장은 지표(언급 수)와 다른 사실이다 —
+  // 2026-11-02 재감사 W44: '딥시크 호출량 급증'(사실)을 ent.deepseek.chg(언급 −18%)와 충돌로 잡아 수리가 사실을 뒤집었다
+  const sentences = splitSentences(text).filter((s) => !sourcedChange(s, ground));
   for (const k of metrics) {
     const v = facts[k] ?? "";
     const neg = k.endsWith(".fall") || (k.endsWith(".chg") && /-\d/.test(v));
     const pos = k.endsWith(".rise") || (k.endsWith(".chg") && /\+\d/.test(v));
     if (!neg && !pos) continue;
     const hit = sentences.filter((s) => metricTargetIn(k, s) === true);
-    const scope = hit.length ? hit.join(" ") : text;
+    const scope = hit.length ? hit.join(" ") : sentences.join(" ");
     if (neg && UP_RE.test(scope)) out.push(`${k}=${v} 인데 상승 표현`);
     if (pos && DOWN_RE.test(scope)) out.push(`${k}=${v} 인데 하락 표현`);
   }
@@ -254,6 +261,14 @@ export function directionConflicts(text: string, metrics: string[], facts: Recor
 }
 
 const MENTION_RE = /언급|기사|보도|다뤄|다룬|등장/;
+
+/** 문장의 증감이 근거 기사의 숫자로 뒷받침되나 (언급 이야기가 아니고, 증감 숫자 — %·배 — 가 근거 텍스트에 있음) */
+export function sourcedChange(sentence: string, ground: string): boolean {
+  if (!ground || MENTION_RE.test(sentence)) return false;
+  const nums = sentence.match(/\d[\d,.]*\s?(?:%|배)/g) ?? [];
+  const g = norm(ground);
+  return nums.some((n) => g.includes(norm(n)));
+}
 const CLAUSE_SPLIT = /,|，|(?<=[가-힣](?:고|며|지만|으나|는데|반면))\s/;
 
 /**
@@ -389,7 +404,8 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
 
     const groundText = [...u.refs.map((r) => ctx.sourceText.get(r) ?? ""), ...u.metrics.map((k) => F[k] ?? "")].join(" ");
     const pool = norm(groundText);
-    for (const m of stripPeriodLabels(u.text).match(NUM_RE) ?? []) {
+    // 같은 값의 금액·큰 수는 표기가 달라도 통과 (quantity.ts — 데일리와 같은 파서)
+    for (const m of maskGroundedQuantities(stripPeriodLabels(u.text), groundText).text.match(NUM_RE) ?? []) {
       numbersChecked++;
       const n = norm(m).replace(/[.]+$/, "");
       if (n && !pool.includes(n)) push("fatal", "number_not_in_source", u.path, `"${m}" 가 인용 기사·지표에 없음`);
@@ -404,7 +420,8 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
     if (/합계|총\s?\d|모두 합쳐|합산/.test(u.text)) push("fatal", "summed_amount", u.path, "금액 합산 표현");
 
     if (!u.headline) {
-      for (const d of directionConflicts(u.text, u.metrics, F)) push("fatal", "direction_conflict", u.path, d);
+      const refGround = u.refs.map((r) => ctx.sourceText.get(r) ?? "").join(" ");
+      for (const d of directionConflicts(u.text, u.metrics, F, refGround)) push("fatal", "direction_conflict", u.path, d);
       for (const k of irrelevantMetrics(u.text, u.metrics, ctx.entityNames, u.subject)) push("warn", "metric_relevance", u.path, `${k} 대상이 문장에 없음`);
     }
     // 인용하지 않은 지표와도 방향이 맞아야 한다 (dek·term·china_lens 포함)
@@ -430,6 +447,11 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
     (c.month_arc ?? []).forEach((b, i) => {
       if (!ctx.weekKeys!.has(b.week)) push("fatal", "unknown_week", `month_arc[${i}]`, b.week || "(없음)");
     });
+  // 월간 month_arc: 그 주의 사건만 근거로 (2026-11-02 재감사: W43 문장 근거 16건 중 15건이 W44 S-1 기사)
+  (c.month_arc ?? []).forEach((b, i) => {
+    const off = arcOffWeekRefs(b, ctx);
+    if (off.length) push("fatal", "arc_week_mismatch", `month_arc[${i}]`, `${off.join(",")} 는 ${b.week} 밖의 사건`);
+  });
   const cn = chinaCentricCount(c, ctx);
   if (cn < Math.min(2, c.big_picture.length))
     push("fatal", "china_centric", "big_picture", `중국 주체 흐름 ${cn}개 (흐름 ${c.big_picture.length}개 중 2개 이상 필요)`);
@@ -443,6 +465,156 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
   }
 
   return { fatal: dedupe(fatal), warn: dedupe(warn), stats: { bigPicture: c.big_picture.length, chinaCentric: cn, numbersChecked } };
+}
+
+/** month_arc 한 칸의 refs 중 그 주에 날짜가 하나도 없는 사건 (주 기간·사건 날짜를 모르면 빈 배열) */
+export function arcOffWeekRefs(b: { week: string; refs: string[] }, ctx: Pick<PeriodicValidationContext, "weekRanges" | "sidDays">): string[] {
+  const w = ctx.weekRanges?.get(b.week);
+  if (!w || !ctx.sidDays) return [];
+  return b.refs.filter((r) => {
+    const days = ctx.sidDays!.get(r);
+    return days !== undefined && !days.some((d) => d >= w.start && d <= w.end);
+  });
+}
+
+/** 주간·월간 생성 감사 기록 (데일리 validate.ts ContentEdit 와 같은 모양) */
+export interface PeriodicEdit {
+  action: "trim" | "gloss" | "sentence_delete" | "ref_strip" | "repair" | "drop" | "fallback" | "flip_rejected";
+  path: string;
+  reason: string;
+  before: unknown;
+  after: unknown;
+  round?: string;
+}
+
+/** month_arc 의 주 밖 refs 를 결정적으로 뗀다 (남는 ref 가 없으면 그대로 — 검증이 치명으로 잡아 그 칸을 뺀다) */
+export function pruneArcRefs(c: WeeklyContent, ctx: Pick<PeriodicValidationContext, "weekRanges" | "sidDays">): { content: WeeklyContent; edits: PeriodicEdit[] } {
+  const out = structuredClone(c);
+  const edits: PeriodicEdit[] = [];
+  out.month_arc = (out.month_arc ?? []).map((b, i) => {
+    const off = arcOffWeekRefs(b, ctx);
+    const keep = b.refs.filter((r) => !off.includes(r));
+    if (!off.length || !keep.length) return b;
+    edits.push({ action: "ref_strip", path: `month_arc[${i}]`, reason: `arc_week_mismatch: ${off.join(",")} 는 ${b.week} 밖`, before: b.refs, after: keep });
+    return { ...b, refs: keep };
+  });
+  return { content: out, edits };
+}
+
+// ───────────────────────── 방향 충돌: 사실을 뒤집지 않는다
+
+/** 증감 방향 (+1 상승 / −1 하락 / 0 없음·둘 다) */
+function directionOf(s: string): number {
+  const up = UP_RE.test(s);
+  const down = DOWN_RE.test(s);
+  return up === down ? 0 : up ? 1 : -1;
+}
+
+/** 칸(항목 위치)의 본문 텍스트 */
+export function periodicText(c: WeeklyContent, item: string): string | undefined {
+  const m = item.match(/^(big_picture|movers|watch_next|month_arc)\[(\d+)\]$/);
+  if (m) return (c[m[1] as "big_picture" | "movers" | "watch_next" | "month_arc"] ?? [])[Number(m[2])]?.text;
+  if (item === "money") return c.money?.text;
+  if (item === "china_lens") return c.china_lens?.text;
+  if (item === "term") return c.term?.why;
+  if (item === "dek") return c.dek;
+  return undefined;
+}
+
+function setPeriodicText(c: WeeklyContent, item: string, v: string): boolean {
+  const m = item.match(/^(big_picture|movers|watch_next|month_arc)\[(\d+)\]$/);
+  if (m) {
+    const x = (c[m[1] as "big_picture" | "movers" | "watch_next" | "month_arc"] ?? [])[Number(m[2])];
+    if (!x) return false;
+    x.text = v;
+    return true;
+  }
+  if (item === "money" && c.money) c.money.text = v;
+  else if (item === "china_lens" && c.china_lens) c.china_lens.text = v;
+  else if (item === "term" && c.term) c.term.why = v;
+  else if (item === "dek") c.dek = v;
+  else return false;
+  return true;
+}
+
+/**
+ * 방향 충돌(direction_conflict)이 난 칸에서 충돌 문장만 지운다 (수리 호출 전, 결정적).
+ * 수리에 맡기면 "호출량 급증" 을 "크게 줄었다" 로 뒤집었다 (W44) — 방향을 고쳐 쓰지 않고 그 문장을 뺀다. 문장이 하나뿐이면 그대로 둔다.
+ */
+export function dropConflictSentences(c: WeeklyContent, fatal: ValidationIssue[], facts: Record<string, string>): { content: WeeklyContent; edits: PeriodicEdit[] } {
+  const out = structuredClone(c);
+  const edits: PeriodicEdit[] = [];
+  for (const f of fatal.filter((x) => x.rule === "direction_conflict")) {
+    const item = itemOfPeriodic(f.path);
+    const text = periodicText(out, item);
+    if (!text) continue;
+    const key = f.detail.split("=")[0];
+    const sents = splitSentences(text);
+    if (sents.length < 2) continue;
+    const bad = sents.filter((s) => [...directionConflicts(s, [key], facts), ...uncitedDirectionConflicts(s, facts)].some((d) => d.startsWith(`${key}=`)));
+    const keep = sents.filter((s) => !bad.includes(s));
+    if (!bad.length || !keep.length) continue;
+    const next = keep.join(" ");
+    if (setPeriodicText(out, item, next)) edits.push({ action: "sentence_delete", path: item, reason: `direction_conflict: ${f.detail}`, before: text, after: next });
+  }
+  return { content: out, edits };
+}
+
+/**
+ * 수리본이 사실을 뒤집었나: 수리 전 문장의 증감 방향과, 같은 대상(고유명사 공유)을 말하는 수리 뒤 문장의 방향이 반대이고,
+ * 수리 뒤 문장이 지표 값(FACTS 문자열)을 그대로 인용하지 않았으면 뒤집기. 반환: 뒤집힌 칸 목록.
+ */
+export function directionFlips(before: WeeklyContent, after: WeeklyContent, facts: Record<string, string>): string[] {
+  const items = [
+    "dek",
+    "money",
+    "china_lens",
+    "term",
+    ...before.big_picture.map((_, i) => `big_picture[${i}]`),
+    ...before.movers.map((_, i) => `movers[${i}]`),
+    ...(before.month_arc ?? []).map((_, i) => `month_arc[${i}]`),
+  ];
+  const factValues = Object.values(facts).filter((v) => /\d/.test(v));
+  const flipped: string[] = [];
+  for (const item of items) {
+    const a = periodicText(before, item);
+    const b = periodicText(after, item);
+    if (!a || !b || a === b) continue;
+    const bs = splitSentences(b);
+    const hit = splitSentences(a).some((sa) => {
+      const da = directionOf(sa);
+      if (!da) return false;
+      const na = properNouns(sa).map((n) => n.label);
+      return bs.some((sb) => {
+        const db = directionOf(sb);
+        if (!db || db === da) return false;
+        return properNouns(sb).some((n) => na.includes(n.label)) && !factValues.some((v) => sb.includes(v));
+      });
+    });
+    if (hit) flipped.push(item);
+  }
+  return flipped;
+}
+
+/** 수리본에서 뒤집힌 칸을 수리 전 문장(충돌 문장은 지운 것)으로 되돌린다 */
+export function revertFlips(
+  before: WeeklyContent,
+  after: WeeklyContent,
+  flipped: string[],
+  fatal: ValidationIssue[],
+  facts: Record<string, string>
+): { content: WeeklyContent; edits: PeriodicEdit[] } {
+  const base = dropConflictSentences(before, fatal, facts).content;
+  const out = structuredClone(after);
+  const edits: PeriodicEdit[] = [];
+  for (const item of flipped) {
+    const orig = periodicText(base, item);
+    const repaired = periodicText(out, item);
+    if (orig === undefined || repaired === undefined) continue;
+    setPeriodicText(out, item, orig);
+    edits.push({ action: "flip_rejected", path: item, reason: "수리본이 증감 방향을 뒤집음 (지표 값 인용 없음) — 수리 전 문장으로 되돌림", before: repaired, after: orig });
+  }
+  return { content: out, edits };
 }
 
 /** 단위 하나의 rules.ts 규칙 (데일리와 같은 함수) */

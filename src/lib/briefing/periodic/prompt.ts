@@ -14,8 +14,10 @@ import type { PeriodicKind, StoryPoolItem, WeeklyContent } from "./types";
 // weekly v3 / monthly v2 (2026-11-02 편집 QA): 사건 단위 후보, MONEY 표에서 매출·가치·통화 불일치 행 제외,
 //   금액 서열 금지, "가장 많이" 는 지표 1위만, 매체 수 그대로, 수리 지시문 금지
 // weekly v4 / monthly v3: 중국 주체 = 근거 기사 대상 지역(subject_region) — STORIES 에 region(사건 기사 지역 다수결)·cn 표시
-export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v4-2026-11-02";
-export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v3-2026-11-02";
+// weekly v5 / monthly v4 (재감사 round 2): MONEY 의 같은 거래(통화만 다름)는 한 행, 기간 밖 거래 제외(지표 v4),
+//   월간 WEEK_STORIES — month_arc 의 refs 는 그 주의 사건만, 증감·쏠림 표현('열풍·확산·몰리')도 증감 지표 필요
+export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v5-2026-11-02";
+export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v4-2026-11-02";
 export const WEEKLY_HEADLINE_MAX = 36;
 export const WEEKLY_STORY_LIMIT = 50;
 export const MONTHLY_STORY_LIMIT = 60;
@@ -163,8 +165,18 @@ export function buildStoryPool(stories: PoolStory[], money: PeriodMetrics["money
   }
   for (const r of money) {
     if (seen.has(r.id)) continue;
-    pool.push({ ids: [r.id], title_kr: r.title_kr, summary_kr: "", sources: [r.source], days: [r.day], entities: r.entities });
+    // 같은 거래를 다른 통화로 쓴 기사(same_deal)도 같은 후보로 (한 거래 = 한 S id)
+    const same = (r.same_deal ?? []).filter((x) => !seen.has(x.id));
+    pool.push({
+      ids: [r.id, ...same.map((x) => x.id)],
+      title_kr: r.title_kr,
+      summary_kr: "",
+      sources: [...new Set([r.source, ...same.map((x) => x.source)])],
+      days: [...new Set([r.day, ...same.map((x) => x.day)])].sort(),
+      entities: r.entities,
+    });
     seen.add(r.id);
+    same.forEach((x) => seen.add(x.id));
   }
   return pool.map((p, i) => ({ ...p, sid: `S${String(i + 1).padStart(2, "0")}` }));
 }
@@ -174,7 +186,7 @@ function schema(kind: PeriodicKind, weekKeys: string[]): string {
   const arc =
     kind === "monthly"
       ? `
- "month_arc": [ {"week":"${weekKeys.join("|")}","text":"그 주의 흐름 한 문장 90자 이내","refs":["S.."],"metrics":["week.W.. 키"]} ],  // 주마다 1개, ${weekKeys.length}개`
+ "month_arc": [ {"week":"${weekKeys.join("|")}","text":"그 주의 흐름 한 문장 90자 이내","refs":["WEEK_STORIES 에서 그 주의 S.. 만"],"metrics":["week.W.. 키"]} ],  // 주마다 1개, ${weekKeys.length}개`
       : "";
   return `{
  "headline": "${W.cur}를 한 줄로, 공백 포함 ${WEEKLY_HEADLINE_MAX}자 이내 (엄수)",
@@ -220,6 +232,10 @@ ${volumeRule}
 16. "두 매체가 전했다" 처럼 매체 수를 말할 때는 refs 의 sources 수 그대로 씁니다. china_lens 에서 "국내 기업 위주·해외 기업 위주" 는 cvo.china / cvo.foreign 값이 큰 쪽으로만 씁니다.
 17. "주도·주류·재편·가열·이동" 같은 추세 단정과 "최초·최대·역대" 는 기사에 그 표현이 있을 때만, 기사가 "전망·가능성·중 하나" 로 한정했으면 한정을 그대로 씁니다.
 18. STORIES 는 사건 단위입니다(같은 사건의 여러 날·여러 글이 한 id). 매체 수(sources)가 가장 많은 사건 1·2위는 big_picture 나 movers 에 반영합니다. 같은 사건을 두 항목에 나눠 쓰지 마십시오.
+19. "열풍·붐·쏠림·확산·몰리다" 도 증감 주장입니다 — 증감 FACTS 키(.chg/.rise/.fall/vol.lfl_change/week.*)가 없으면 쓰지 마십시오. 기사의 숫자("호출량 801% 급증")로 말하는 증감은 그 기사 표현 그대로 쓰고, 언급 수 지표와 섞지 마십시오.
+20. MONEY 의 한 행은 거래 하나입니다. "(= …, 같은 거래)" 로 붙은 다른 통화 금액은 같은 거래이므로 두 거래로 나열하지 마십시오.${
+    kind === "monthly" ? "\n21. month_arc 의 각 주 refs 에는 WEEK_STORIES 에 그 주로 나온 S id 만 넣습니다(다른 주 사건 금지)." : ""
+  }
 
 출력: 아래 스키마의 JSON 하나만. 코드 펜스·설명 금지.
 ${schema(kind, weekKeys)}`;
@@ -301,15 +317,21 @@ export function buildPeriodicUserPrompt(
         `${w.key} | ${w.start}~${w.end} | ${w.days}일 중 완전 ${w.complete_days}일 | ${w.coverage === "full" ? "완전" : w.coverage === "reduced" ? "축소 수집" : "부분 수집 포함"}`
     )
     .join("\n");
+  // 월간: 주마다 그 주에 날짜가 있는 사건 (month_arc refs 는 여기서만)
+  const weekStories = (m.weeks ?? [])
+    .map((w) => `${w.key}: ${pool.filter((p) => p.days.some((d) => d >= w.start && d <= w.end)).map((p) => p.sid).join(", ") || "(없음)"}`)
+    .join("\n");
   return `PERIOD: ${period}
-DATA_QUALITY: ${dataQualityLine(m)}${weeks ? `\nWEEKS:\n${weeks}` : ""}
+DATA_QUALITY: ${dataQualityLine(m)}${weeks ? `\nWEEKS:\n${weeks}` : ""}${weekStories ? `\nWEEK_STORIES (month_arc 의 주별 refs 후보):\n${weekStories}` : ""}
 FACTS (key = 값 문자열):
 ${Object.entries(facts)
   .map(([k, x]) => `${k} = ${x}`)
   .join("\n")}
 
 MONEY (제목에 나온 거래 금액, 합산·크기 비교 금지):
-${kept.map((r) => `${sidOf.get(r.id) ?? "?"} | ${r.day} | ${r.kind} | ${r.amount} | ${r.title_kr}`).join("\n")}${moneyNote}
+${kept
+  .map((r) => `${sidOf.get(r.id) ?? "?"} | ${r.day} | ${r.kind} | ${r.amount}${r.same_deal?.length ? ` (= ${r.same_deal.map((x) => x.amount).join(", ")}, 같은 거래)` : ""} | ${r.title_kr}`)
+  .join("\n")}${moneyNote}
 
 STORIES (${pool.length}건, sources = 함께 다룬 매체):
 ${pool

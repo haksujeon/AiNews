@@ -82,8 +82,51 @@ ENTITIES.push(
   { key: "baai", chinese: true, tier: 0.5, aliases: ["智源研究院", "北京智源", /\bBAAI\b/, "지위안연구원", "지위안 연구원"] },
   { key: "iluvatar", chinese: true, tier: 0.5, aliases: ["天数智芯", "Iluvatar", "톈수즈신"] },
   { key: "moore_threads", chinese: true, tier: 0.5, aliases: ["摩尔线程", "Moore Threads", "모어스레드", "무어스레드"] },
-  { key: "xunce", chinese: true, tier: 0.5, aliases: ["迅策", "쉰처"] }
+  { key: "xunce", chinese: true, tier: 0.5, aliases: ["迅策", "쉰처"] },
+  // 2026-11-02 재감사(round 2): en 번역 'Zhiyi Power'(→ LimX Dynamics). 한국어 표기는 기사마다 달라 둘 다 둔다
+  { key: "limx", chinese: true, tier: 0.5, aliases: ["逐际动力", "LimX Dynamics", "LimX", "즈지동력", "즈지 동력", "지지동력"] }
 );
+// 기존 줄을 고치지 않고 덧붙인다: 텐셴수(天数智芯, 기사 표기), 오픈 표기 JD, BAAI 영문 이름
+ENTITIES.find((e) => e.key === "iluvatar")?.aliases.push("텐셴수");
+ENTITIES.find((e) => e.key === "jd")?.aliases.push(/\bJD\b/);
+ENTITIES.find((e) => e.key === "baai")?.aliases.push("Beijing Academy of Artificial Intelligence");
+
+/**
+ * 번역 이름표 (한국어 · 영어 · 중국어). 번역기에 NAME_GLOSSARY 로 주고, 번역본의 이름을 이것과 대조한다 (translate.ts checkNames).
+ * 실체(ENTITIES)는 별칭에서 자동으로 만든다(한글 별칭 = ko, 라틴 = en, 한자 = zh). 실체가 아닌 제품 이름은 아래 PRODUCT_NAMES 에 손으로 둔다.
+ * 2026-11-02 재감사: 10-29 en 'Tianhai 300'(天垓300 → Tiangai), 07-15 en 'Zhiyi Power'(逐际动力 → LimX Dynamics).
+ */
+export interface NameEntry {
+  key: string;
+  ko: string[];
+  en: string[];
+  zh: string[];
+}
+
+export const PRODUCT_NAMES: NameEntry[] = [
+  { key: "tiangai", ko: ["천가오", "톈가이"], en: ["Tiangai"], zh: ["天垓"] },
+  { key: "feishu", ko: ["페이수", "페이슈"], en: ["Feishu", "Lark"], zh: ["飞书"] },
+];
+
+const HAN = /[\u3400-\u9fff]/;
+const HANGUL = /[가-힣]/;
+/** 실체 → 이름표 한 줄 (정규식 별칭은 표기 대조에만 쓰고 이름표에는 넣지 않는다) */
+export function nameEntryOf(e: Entity): NameEntry {
+  const strs = e.aliases.filter((a): a is string => typeof a === "string");
+  return {
+    key: e.key,
+    ko: strs.filter((a) => HANGUL.test(a)),
+    en: strs.filter((a) => !HAN.test(a) && !HANGUL.test(a)),
+    zh: strs.filter((a) => HAN.test(a)),
+  };
+}
+
+/** 텍스트(ko)에 나오는 이름표 항목: 실체 + 제품 이름 */
+export function nameEntriesIn(koText: string): { entry: NameEntry; entity: Entity | null }[] {
+  const out: { entry: NameEntry; entity: Entity | null }[] = findEntities(koText).map((e) => ({ entry: nameEntryOf(e), entity: e }));
+  for (const p of PRODUCT_NAMES) if (p.ko.some((k) => koText.includes(k)) || p.zh.some((z) => koText.includes(z))) out.push({ entry: p, entity: null });
+  return out;
+}
 
 function aliasMatches(alias: string | RegExp, text: string): boolean {
   if (typeof alias === "string") return text.includes(alias);
