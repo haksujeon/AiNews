@@ -9,6 +9,7 @@ import { buildNewsWhere, EMPTY_FILTERS, PUBLIC_NEWS_WHERE, type NewsFilters } fr
 import { citedRanksFromTopStories, splitDay, type DaySplit, type RankableArticle } from './news-rank';
 import { EDITION_TYPE } from './briefing/repository';
 import { buildWeeklyTrend, type StatisticsData } from './statistics-utils';
+import { addDays, countBy, countByDay, dayBounds, fillDays, mondayOf, termCounts, volumeSummary } from './metrics/period';
 
 const LIST_FIELDS = `id,
   to_char(created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
@@ -215,78 +216,29 @@ export async function fetchNewsList(): Promise<NewsItem[]> {
  * "총 뉴스"가 1000 으로 고정되고(홈은 ~5400) 차트도 그 1000행 기간만 보였다.
  * 이제 공개 조건(PUBLIC_NEWS_WHERE) 전체를 SQL 로 집계해 홈 총계와 같은 모집단을 쓴다.
  * 날짜 키는 기존 표시와 같게 news_date 의 UTC 날짜를 쓴다.
+ *
+ * 집계 함수는 주간·월간 리포트와 같은 src/lib/metrics/period.ts 를 쓴다 (Gate 2). 통계 페이지 모집단 = 'all'(공개 전체),
+ * 리포트 모집단 = 'ai'. 기간 없이 부르면 전체 기간.
  */
 export async function fetchNewsStatistics(): Promise<StatisticsData> {
-  const DAY = `(news_date AT TIME ZONE 'UTC')::date`;
-  const TODAY = `(now() AT TIME ZONE 'UTC')::date`;
+  const all = { population: "all" as const };
+  // 일별 건수: 최근 STATS_DAILY_WINDOW_DAYS 일(주간 집계가 깔끔하도록 월요일부터 시작),
+  // 데이터가 그보다 짧으면 첫 기사 날짜부터. 끝은 오늘과 마지막 기사 날짜 중 늦은 날. 기사 없는 날은 0.
+  const bounds = await dayBounds(pool, "all");
+  const endDay = bounds.last && bounds.last > bounds.today ? bounds.last : bounds.today;
+  const windowMonday = mondayOf(addDays(endDay, -(STATS_DAILY_WINDOW_DAYS - 1)));
+  const startDay = bounds.first && bounds.first > windowMonday ? bounds.first : windowMonday;
 
-  const [kpiRes, catRes, sentRes, srcRes, kwRes, dailyRes] = await Promise.all([
-    pool.query(
-      `SELECT COUNT(*)::int                                          AS total,
-              COUNT(*) FILTER (WHERE ${DAY} = ${TODAY})::int          AS today,
-              COUNT(DISTINCT category)::int                          AS categories,
-              COUNT(DISTINCT source_name)::int                       AS sources,
-              COUNT(DISTINCT ${DAY})::int                            AS days,
-              COUNT(*) FILTER (WHERE category LIKE 'ai-%')::int      AS ai
-         FROM ai_news_ex WHERE ${PUBLIC_NEWS_WHERE}`
-    ),
-    pool.query(
-      `SELECT COALESCE(category, 'other') AS name, COUNT(*)::int AS value
-         FROM ai_news_ex WHERE ${PUBLIC_NEWS_WHERE}
-        GROUP BY 1 ORDER BY value DESC, name`
-    ),
-    pool.query(
-      `SELECT COALESCE(sentiment, 'neutral') AS name, COUNT(*)::int AS value
-         FROM ai_news_ex WHERE ${PUBLIC_NEWS_WHERE}
-        GROUP BY 1 ORDER BY value DESC, name`
-    ),
-    pool.query(
-      `SELECT COALESCE(source_name, 'Unknown') AS name, COUNT(*)::int AS value
-         FROM ai_news_ex WHERE ${PUBLIC_NEWS_WHERE}
-        GROUP BY 1 ORDER BY value DESC, name LIMIT 10`
-    ),
-    // 기사 1건에 같은 용어가 여러 번 있어도 1회로 센다(기존 클라이언트 계산과 달리 중복 가산 방지).
-    pool.query(
-      `SELECT kt.term, COUNT(DISTINCT n.id)::int AS count
-         FROM (SELECT id, key_terms FROM ai_news_ex WHERE ${PUBLIC_NEWS_WHERE}) n
-         CROSS JOIN LATERAL jsonb_array_elements(
-           CASE WHEN jsonb_typeof(n.key_terms) = 'array' THEN n.key_terms ELSE '[]'::jsonb END
-         ) AS e
-         CROSS JOIN LATERAL (SELECT NULLIF(btrim(e->>'term'), '') AS term) kt
-        WHERE kt.term IS NOT NULL
-        GROUP BY kt.term ORDER BY count DESC, kt.term LIMIT 15`
-    ),
-    // 일별 건수: 기사가 없는 날도 0 으로 채워 차트에서 공백이 보이게 한다.
-    // 구간은 최근 STATS_DAILY_WINDOW_DAYS 일(주간 집계가 깔끔하도록 월요일부터 시작),
-    // 데이터가 그보다 짧으면 첫 기사 날짜부터.
-    pool.query(
-      `WITH bounds AS (
-         SELECT GREATEST(${TODAY}, MAX(${DAY})) AS end_day,
-                MIN(${DAY})                     AS first_day
-           FROM ai_news_ex WHERE ${PUBLIC_NEWS_WHERE}
-       ), win AS (
-         SELECT GREATEST(first_day,
-                  date_trunc('week', end_day - ($1::int - 1))::date) AS start_day,
-                end_day
-           FROM bounds WHERE first_day IS NOT NULL
-       ), counts AS (
-         SELECT ${DAY} AS day, COUNT(*)::int AS count
-           FROM ai_news_ex, win
-          WHERE ${PUBLIC_NEWS_WHERE}
-            AND news_date >= win.start_day::timestamp AT TIME ZONE 'UTC'
-          GROUP BY 1
-       )
-       SELECT to_char(d::date, 'YYYY-MM-DD') AS date, COALESCE(c.count, 0)::int AS count
-         FROM win
-        CROSS JOIN LATERAL generate_series(win.start_day, win.end_day, interval '1 day') AS d
-         LEFT JOIN counts c ON c.day = d::date
-        ORDER BY d`,
-      [STATS_DAILY_WINDOW_DAYS]
-    ),
+  const [k, categories, sentiments, sources, keywords, sparseDaily] = await Promise.all([
+    volumeSummary(pool, all),
+    countBy(pool, "category", all),
+    countBy(pool, "sentiment", all),
+    countBy(pool, "source_name", { ...all, limit: 10 }),
+    // 기사 1건에 같은 용어가 여러 번 있어도 1회로 센다
+    termCounts(pool, { ...all, limit: 15 }),
+    bounds.first ? countByDay(pool, { ...all, range: { start: startDay } }) : Promise.resolve([]),
   ]);
-
-  const k = kpiRes.rows[0] ?? { total: 0, today: 0, categories: 0, sources: 0, days: 0, ai: 0 };
-  const daily = dailyRes.rows as { date: string; count: number }[];
+  const daily = bounds.first ? fillDays(startDay, endDay, sparseDaily) : [];
 
   return {
     kpis: {
@@ -297,10 +249,10 @@ export async function fetchNewsStatistics(): Promise<StatisticsData> {
       avgPerDay: k.days > 0 ? Math.round((k.total / k.days) * 10) / 10 : 0,
       aiRatio: k.total > 0 ? Math.round((k.ai / k.total) * 100) : 0,
     },
-    categories: catRes.rows,
-    sentiments: sentRes.rows,
-    sources: srcRes.rows,
-    keywords: kwRes.rows,
+    categories,
+    sentiments,
+    sources,
+    keywords: keywords.map(({ term, count }) => ({ term, count })),
     daily,
     weekly: buildWeeklyTrend(daily),
   };

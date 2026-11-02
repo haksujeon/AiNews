@@ -87,7 +87,7 @@ export function isChineseSubject(text: string): boolean {
  * refs 관련성 검사용 고유명사 토큰.
  * 이름표에 있는 실체 + 이름표에 없는 라틴 문자 고유명사(대문자나 숫자를 포함한 토큰).
  */
-const LATIN_STOP = new Set([
+export const LATIN_STOP = new Set([
   "AI", "AGI", "ASI", "GPU", "GPUs", "CPU", "NPU", "TPU", "API", "APIs", "LLM", "LLMs", "App", "IPO", "CEO", "CTO",
   "CFO", "VC", "PR", "PRs", "EA", "MW", "GW", "KW", "TB", "GB", "PB", "SaaS", "B2B", "B2C", "OS", "UI", "UX", "AR",
   "VR", "XR", "PC", "IT", "R&D", "DRAM", "HBM", "NAND", "SoC", "RL", "RAG", "MoE", "SOTA", "US", "USA", "EU", "UN",
