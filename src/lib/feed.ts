@@ -7,6 +7,7 @@
 import { routing, type Locale } from "@/i18n/routing";
 import { clipText } from "@/lib/seo/text";
 import { rootUrl } from "@/lib/site";
+import { SCOPE_CATEGORIES } from "@/lib/categories";
 
 /** 피드 하나에 넣는 최대 항목 수 */
 export const FEED_MAX_ITEMS = 50;
@@ -14,11 +15,11 @@ export const FEED_MAX_ITEMS = 50;
 export const FEED_DESCRIPTION_MAX = 300;
 
 /**
- * 분류 피드를 여는 분류. AI 3분류만 — 나머지(경제·사회 등)는 건수가 적고 범위 밖이다.
- * TODO(P0-5 병합 시): news-query 의 PUBLIC_CATEGORIES 로 바꾼다(같은 목록 = 같은 상수, Gate 2).
+ * 분류 피드를 여는 분류 = 공개 범위 분류(categories.ts 의 SCOPE_CATEGORIES). 필터 칩과 같은 목록 (Gate 2).
+ * 공개 분류가 늘면(예: robotics) 피드도 자동으로 열린다.
  */
-export const FEED_CATEGORIES = ["ai-tech", "ai-product", "ai-biz"] as const;
-export type FeedCategory = (typeof FEED_CATEGORIES)[number];
+export const FEED_CATEGORIES: readonly string[] = SCOPE_CATEGORIES;
+export type FeedCategory = string;
 
 export type FeedKind = { kind: "all" } | { kind: "briefing" } | { kind: "category"; category: FeedCategory };
 
@@ -42,7 +43,7 @@ export function parseFeedSlug(locale: string, slug: string[]): FeedKind | null {
   if (slug.length === 1 && slug[0] === "briefing.xml") return { kind: "briefing" };
   if (slug.length === 2 && slug[0] === "category" && slug[1].endsWith(".xml")) {
     const cat = slug[1].slice(0, -4);
-    if ((FEED_CATEGORIES as readonly string[]).includes(cat)) return { kind: "category", category: cat as FeedCategory };
+    if (FEED_CATEGORIES.includes(cat)) return { kind: "category", category: cat };
   }
   return null;
 }
