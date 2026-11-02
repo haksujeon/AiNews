@@ -10,7 +10,9 @@
     "retry": "다시 시도",
     "brandTagline": "중국 AI 브리핑",
     "sourcesLabel": "출처",
-    "briefing": "브리핑"
+    "briefing": "브리핑",
+    "aiImageLabel": "AI 생성 이미지",
+    "aiImageLabelShort": "AI 생성"
   },
   "filter": {
     "searchPlaceholder": "기사 제목, 내용으로 검색...",
