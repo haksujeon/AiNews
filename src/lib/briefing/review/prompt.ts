@@ -11,7 +11,7 @@ import type { Segment } from "./types";
 import type { Hint } from "./hints";
 import type { GenLog } from "./evidence";
 
-export const REVIEW_PROMPT_VERSION = "review-v6.1-2026-11-02";
+export const REVIEW_PROMPT_VERSION = "review-v6.2-2026-11-02";
 
 export function buildReviewSystemPrompt(editionType: EditionType, withTranslations: boolean): string {
   const periodic = isPeriodic(editionType);

@@ -186,7 +186,7 @@ async function main() {
       `## 사람 오류 재현율`,
       `| 묶음 | 전체 (사람/찾음/%) | 1차 13판 | 재감사 11판 |`,
       `|---|---|---|---|`,
-      ...summary.recall.all.map((g, i) => `| ${g.group} | ${g.human}/${g.found} ${g.recall ?? "—"}% (라벨 일치 ${g.exact}) | ${summary.recall.first[i].human}/${summary.recall.first[i].found} ${summary.recall.first[i].recall ?? "—"}% | ${summary.recall.v2[i].human}/${summary.recall.v2[i].found} ${summary.recall.v2[i].recall ?? "—"}% |`),
+      ...summary.recall.all.map((g, i) => `| ${g.group} | ${g.human}/${g.found} ${g.recall ?? "—"}% (라벨 일치 ${g.exact}, 막는 라벨로 찾음 ${g.blocking} ${g.blockingRecall ?? "—"}%) | ${summary.recall.first[i].human}/${summary.recall.first[i].found} ${summary.recall.first[i].recall ?? "—"}% | ${summary.recall.v2[i].human}/${summary.recall.v2[i].found} ${summary.recall.v2[i].recall ?? "—"}% |`),
       ``,
       `거짓 경보(사람 오류가 없는 항목에 붙인 오류): 전체 ${summary.falseAlarm.all.unmatched}/${summary.falseAlarm.all.reviewerErrors} (${summary.falseAlarm.all.rate}%), 1차 ${summary.falseAlarm.first.rate}%, 재감사 ${summary.falseAlarm.v2.rate}%`,
       ``,

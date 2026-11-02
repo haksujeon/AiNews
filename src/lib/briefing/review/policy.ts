@@ -3,7 +3,8 @@
  * 순수 함수 — 조건마다 통과 여부를 남겨 관리자 화면의 "자동 발행 판정"에 그대로 보인다.
  *
  * 기본값 (환경 변수로 조정, 보정 결과는 ainews-reports/p0-plan/P0-PLAN.md D8):
- *  - BRIEFING_AUTO_PUBLISH=on|off        (기본 on — 끄면 판정만 기록하고 발행하지 않는다 = 관리자 발행으로 되돌림)
+ *  - BRIEFING_AUTO_PUBLISH=on|off        (기본 off — 켜야 AI 검토 통과 판을 발행한다. 꺼져 있으면 판정만 기록·알림 = 관리자 발행)
+ *    보정 v6 에서 목표 3(사실 오류 재현율 ≥ 80%)을 못 채워(77.5%, 막는 라벨 기준 60%) 기본값을 off 로 둔다. 켜는 것은 사용자 승인 뒤.
  *  - 판정 PASS (코드 기준표 판정과 모델 판정 중 엄격한 쪽)
  *  - wrong · number-unit · misattributed 0건, overclaim ≤ 1, unsupported ≤ 0
  *  - 점수 ≥ 9.0 (데일리) / ≥ 7.5 (주간·월간)   BRIEFING_REVIEW_MIN_SCORE_DAILY / _PERIODIC
@@ -21,7 +22,7 @@ import type { ReviewResult } from "./types";
 
 export interface ReviewPolicy {
   autoPublish: boolean;
-  /** 제목만 판 자동 발행 (autoPublish 가 꺼지면 함께 꺼진다) */
+  /** 제목만 판 자동 발행 — AI 검토와 무관하므로 별도 스위치 (기본 on) */
   autoPublishHeadlines: boolean;
   minScore: { daily: number; periodic: number };
   maxOverclaim: number;
@@ -37,9 +38,9 @@ const num = (v: string | undefined, d: number) => {
 };
 
 export function policyFromEnv(env: Record<string, string | undefined> = process.env): ReviewPolicy {
-  const flag = (env.BRIEFING_AUTO_PUBLISH ?? "on").trim().toLowerCase();
+  const flag = (env.BRIEFING_AUTO_PUBLISH ?? "off").trim().toLowerCase();
   return {
-    autoPublish: !["off", "0", "false", "no"].includes(flag),
+    autoPublish: ["on", "1", "true", "yes"].includes(flag),
     autoPublishHeadlines: !["off", "0", "false", "no"].includes((env.BRIEFING_AUTO_PUBLISH_HEADLINES ?? "on").trim().toLowerCase()),
     minScore: { daily: num(env.BRIEFING_REVIEW_MIN_SCORE_DAILY, 9), periodic: num(env.BRIEFING_REVIEW_MIN_SCORE_PERIODIC, 7.5) },
     maxOverclaim: num(env.BRIEFING_REVIEW_MAX_OVERCLAIM, 1),
@@ -145,7 +146,8 @@ export function decideHeadlines(
   add("notice", HEADLINES_NOTICE_RE.test(String(input.content.lede ?? "")), "요약 없음 안내 문장");
   if (input.publishable) add("publishable", input.publishable.ok, input.publishable.detail);
   const eligible = checks.every((c) => c.ok);
-  const publish = eligible && policy.autoPublish;
+  // 제목만 판은 LLM 문장이 없어 AI 검토 스위치와 무관 — 정책 검사(headlines_policy)가 곧 스위치
+  const publish = eligible;
   const failed = checks.filter((c) => !c.ok).map((c) => c.detail);
   return {
     eligible,

@@ -88,7 +88,7 @@ const fixable = (i: ReviewInput) =>
     },
     { fixes: [{ s: "S01", a: "replace", t: "즈푸, GLM-6 공개", e: "智谱发布GLM-6" }], verdict: "FIXABLE" }
   );
-const policy = policyFromEnv({});
+const policy = policyFromEnv({ BRIEFING_AUTO_PUBLISH: "on" });
 
 test("PASS → 검토한 정확한 행(id·version)으로 자동 발행, 결정 기록", async () => {
   const h = harness([pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
@@ -173,7 +173,11 @@ test("제목만 판(mode headlines) → AI 검토 없이 결정적 조건으로 
   assert.match(r.message, /대체 판 제목만: 3회 실패/);
   assert.equal(r.notify, true);
   const off = harness([], new Map([[row.id, inp]]));
-  await runReviewPipeline({ briefingId: row.id, policy: policyFromEnv({ BRIEFING_AUTO_PUBLISH_HEADLINES: "off" }) }, off.deps);
+  await runReviewPipeline({ briefingId: row.id, policy: policyFromEnv({ BRIEFING_AUTO_PUBLISH: "on", BRIEFING_AUTO_PUBLISH_HEADLINES: "off" }) }, off.deps);
+  // AI 검토 스위치가 꺼져 있어도(기본) 제목만 판은 발행한다 — LLM 문장이 없다
+  const def = harness([], new Map([[row.id, inp]]));
+  await runReviewPipeline({ briefingId: row.id, policy: policyFromEnv({}) }, def.deps);
+  assert.deepEqual(def.published, [{ id: "hl-1", version: 3 }]);
   assert.equal(off.published.length, 0);
   assert.equal(off.decisions.at(-1)!.decision.action, "hold");
 });

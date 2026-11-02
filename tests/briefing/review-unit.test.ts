@@ -124,7 +124,7 @@ test("stricter / verdictOfRecommendation", () => {
 
 // ───────────────────────── 정책 결정표
 
-const policy = policyFromEnv({});
+const policy = policyFromEnv({ BRIEFING_AUTO_PUBLISH: "on" });
 const counts = (o: Partial<Record<string, number>> = {}) => ({ correct: 30, unsupported: 0, wrong: 0, misattributed: 0, overclaim: 0, "number-unit": 0, total: 30, ...o });
 const base = (o: Partial<DecisionInput> = {}, r: Partial<ReviewResult> = {}): DecisionInput => ({
   review: { status: "done", verdict: "PASS", score: 9, counts: counts(), translation: [], ...r } as DecisionInput["review"],
@@ -136,7 +136,9 @@ const base = (o: Partial<DecisionInput> = {}, r: Partial<ReviewResult> = {}): De
   ...o,
 });
 
-test("policyFromEnv: 기본값과 스위치", () => {
+test("policyFromEnv: 기본값과 스위치 (자동 발행 기본 off — 보정 목표 3 미달)", () => {
+  assert.equal(policyFromEnv({}).autoPublish, false);
+  assert.equal(policyFromEnv({}).autoPublishHeadlines, true);
   assert.equal(policy.autoPublish, true);
   assert.deepEqual(policy.minScore, { daily: 9, periodic: 7.5 });
   assert.equal(policy.maxOverclaim, 1);

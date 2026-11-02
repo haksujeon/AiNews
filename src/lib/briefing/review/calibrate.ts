@@ -85,6 +85,9 @@ export interface RecallRow {
   found: number;
   exact: number;
   recall: number | null;
+  /** 검토가 막는 라벨(wrong·number-unit·misattributed·unsupported)로 찾은 수 — overclaim 으로 찾은 것은 정책상 1건까지 통과하므로 따로 */
+  blocking: number;
+  blockingRecall: number | null;
 }
 
 const FACT_LABELS = ["wrong", "number-unit", "misattributed", "unsupported"];
@@ -98,7 +101,11 @@ export function recallTable(cmps: EditionComparison[]): RecallRow[] {
   return groups.map(([group, f]) => {
     const hs = cmps.flatMap((c) => c.humanErrors).filter((h) => f(h.claim.label));
     const found = hs.filter((h) => h.found).length;
-    return { group, human: hs.length, found, exact: hs.filter((h) => h.exactLabel).length, recall: hs.length ? Math.round((found / hs.length) * 1000) / 10 : null };
+    const blocking = hs.filter((h) => h.found && h.matchedLabel !== null && FACT_LABELS.includes(h.matchedLabel)).length;
+    return {
+      group, human: hs.length, found, exact: hs.filter((h) => h.exactLabel).length, recall: hs.length ? Math.round((found / hs.length) * 1000) / 10 : null,
+      blocking, blockingRecall: hs.length ? Math.round((blocking / hs.length) * 1000) / 10 : null,
+    };
   });
 }
 
