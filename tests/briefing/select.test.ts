@@ -72,7 +72,8 @@ test("상위 40개, A01 부터 점수 내림차순, 전재 묶음은 매체 수�
   for (let i = 1; i < sel.groups.length; i++) assert.ok(sel.groups[i - 1].score >= sel.groups[i].score);
   const multi = sel.groups.find((g) => g.sources.length > 1);
   assert.ok(multi, "전재 묶음이 상위 40 안에 있어야 함");
-  assert.equal(multi!.scoreDetail.coverage, 3 * Math.log2(1 + multi!.sources.length));
+  // 2026-11-02: 매체 수 가중 3 → 4 (COVERAGE_WEIGHT)
+  assert.equal(multi!.scoreDetail.coverage, 4 * Math.log2(1 + multi!.sources.length));
 });
 
 test("물량 규칙: ≥6 정상, 3~5 짧은 판, <3 생략", () => {

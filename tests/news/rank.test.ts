@@ -33,7 +33,9 @@ function art(id: string, title_cn: string, source = "36Kr", extra: Partial<Ranka
   return { id, source_name: source, category: "ai-biz", title_cn, title_kr: id, summary_kr: "", ...extra };
 }
 
-test("브리핑 후보 선정: 공용 함수로 옮기기 전 결과(스냅숏)와 같다", () => {
+// 스냅숏은 2026-11-02 편집 QA 가중(매체 수 4·사건 단위 매체 수·해외 단일 매체 논문 감점·중국 주요 기업 큰 금액)으로 다시 찍었다.
+// 점수 공식을 바꾸면 이 스냅숏도 의도적으로 다시 찍는다 (input_hash 가 바뀌어 판이 다시 생성된다).
+test("브리핑 후보 선정: 스냅숏과 같다 (점수 공식이 바뀌면 의도적으로 갱신)", () => {
   const sel = selectCandidates(articles);
   const now = {
     totalGroups: sel.totalGroups,
@@ -93,13 +95,15 @@ test("splitDay: 발행된 브리핑의 주요 기사가 점수와 무관하게 �
     art("lo3", "城市地铁新线开通", "Huxiu", { category: "economy" }),
   ];
   const plain = splitDay(day).top.map((t) => t.item.id);
-  assert.deepEqual(plain.slice(0, 2), ["hi1", "hi2"]);
+  // 두 고득점 기사 순서는 가중(중국 주요 기업 + 큰 금액 cn_deal)에 따라 바뀔 수 있다 — 둘이 먼저인 것만 본다
+  assert.deepEqual([...plain.slice(0, 2)].sort(), ["hi1", "hi2"]);
   const cited = new Map([
     ["lo3", 1],
     ["lo1", 2],
   ]);
   const { top } = splitDay(day, { cited });
-  assert.deepEqual(top.map((t) => t.item.id), ["lo3", "lo1", "hi1", "hi2"]);
+  assert.deepEqual(top.map((t) => t.item.id).slice(0, 2), ["lo3", "lo1"]);
+  assert.deepEqual(top.map((t) => t.item.id).slice(2).sort(), ["hi1", "hi2"]);
 });
 
 test("splitDay: 인용 기사가 전재 형제여도 그 묶음 전체가 앞으로", () => {
