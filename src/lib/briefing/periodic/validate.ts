@@ -168,15 +168,37 @@ export function crossCurrencyRank(text: string): boolean {
 
 const UP_RE = /열풍|늘었|늘어|증가|확산|급증|쏠림|뛰어들/;
 const DOWN_RE = /줄었|줄어|감소|식었|급감/;
-/** 인용 지표의 방향과 문장 표현의 방향이 반대 */
+const splitSentences = (text: string) => text.split(/(?<=[.!?。！？])\s+/).filter((s) => s.trim());
+
+/** 지표의 대상(용어·기업·매체)이 나오는지. 대상이 없는 지표(vol.* 등)는 null */
+function metricTargetIn(k: string, sentence: string): boolean | null {
+  const [ns, id] = k.split(".");
+  if (!id) return null;
+  if (ns === "term") return sentence.includes(id);
+  if (ns === "ent") {
+    const e = ENTITIES.find((x) => x.key === id);
+    return e ? entityMentioned(e, sentence) : null;
+  }
+  if (ns === "src") return sentence.includes(id);
+  return null;
+}
+
+/**
+ * 인용 지표의 방향과 문장 표현의 방향이 반대. 지표 대상이 나오는 문장만 보고,
+ * 대상이 어느 문장에도 없으면(예: 智能体 를 인용하고 "개인 에이전트 열풍" 이라고만 씀) 항목 전체를 본다.
+ */
 export function directionConflicts(text: string, metrics: string[], facts: Record<string, string>): string[] {
   const out: string[] = [];
+  const sentences = splitSentences(text);
   for (const k of metrics) {
     const v = facts[k] ?? "";
     const neg = k.endsWith(".fall") || (k.endsWith(".chg") && /-\d/.test(v));
     const pos = k.endsWith(".rise") || (k.endsWith(".chg") && /\+\d/.test(v));
-    if (neg && UP_RE.test(text)) out.push(`${k}=${v} 인데 상승 표현`);
-    if (pos && DOWN_RE.test(text)) out.push(`${k}=${v} 인데 하락 표현`);
+    if (!neg && !pos) continue;
+    const hit = sentences.filter((s) => metricTargetIn(k, s) === true);
+    const scope = hit.length ? hit.join(" ") : text;
+    if (neg && UP_RE.test(scope)) out.push(`${k}=${v} 인데 상승 표현`);
+    if (pos && DOWN_RE.test(scope)) out.push(`${k}=${v} 인데 하락 표현`);
   }
   return out;
 }

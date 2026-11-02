@@ -7,6 +7,7 @@ import { isLocale } from "@/i18n/routing";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BriefingView } from "@/components/briefing/briefing-view";
+import { BriefingTabs } from "@/components/briefing/briefing-tabs";
 import { absoluteUrl } from "@/lib/site";
 import { formatDate } from "@/lib/news-utils";
 import { isValidEditionDate } from "@/lib/briefing/generate";
@@ -119,6 +120,7 @@ export async function BriefingPageContent({ locale, date }: { locale: string; da
     <div className="flex min-h-screen flex-col">
       <Header />
       <main id="main" className="container mx-auto flex-1 px-4">
+        <BriefingTabs current="daily" />
         {body}
       </main>
       <Footer />

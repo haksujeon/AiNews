@@ -33,13 +33,14 @@ function sectionLabel(t: Translator, code: string): string {
   return t.has(key as never) ? t(key as never) : code;
 }
 
-function Sources({
+/** 근거 기사 링크 줄. 데일리·주간 리포트가 같은 부품을 쓴다 (Gate 2) */
+export function Sources({
   refs,
   briefing,
   className,
 }: {
   refs: string[];
-  briefing: PublicBriefing;
+  briefing: Pick<PublicBriefing, "articles">;
   className?: string;
 }) {
   const t = useTranslations("briefing");

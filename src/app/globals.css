@@ -34,6 +34,7 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-chart-prev: var(--chart-prev);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -121,6 +122,8 @@
   --chart-3: #6f737c;
   --chart-4: #9a9da4;
   --chart-5: #c4c6ca;
+  /* 비교 기간(지난주) 회색: 종이 대비 3.34:1 (기존 chart-4 #9a9da4 는 2.62:1 로 미달) */
+  --chart-prev: #868a92;
   --sidebar: var(--paper);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--ink);
@@ -166,6 +169,8 @@
   --chart-3: #8e919a;
   --chart-4: #686c75;
   --chart-5: #45484e;
+  /* 비교 기간 회색: 다크 종이 대비 3.63:1 */
+  --chart-prev: #6b6f78;
   --sidebar: var(--paper);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--ink);
@@ -209,6 +214,49 @@
   p {
     text-wrap: pretty;
   }
+}
+
+/* ─── 주간·월간 리포트 차트 (인라인 SVG, src/components/briefing/charts) ─── */
+/* 표식만 색(이번 기간 청자 / 비교 기간 회색), 글자는 글자 색 토큰 */
+.pc-grid { stroke: var(--rule); stroke-width: 1; }
+.pc-cur { fill: var(--chart-1); }
+.pc-prev { fill: var(--chart-prev); }
+.pc-gap { stroke: var(--ink-3); stroke-width: 1; }
+.pc-hatch-bg { fill: var(--paper); }
+.pc-hatch-line { stroke: var(--ink-3); stroke-width: 1.5; }
+.pc-exp { stroke: var(--ink-3); stroke-width: 1; }
+.pc-db { stroke: var(--chart-prev); stroke-opacity: 0.45; stroke-width: 2; stroke-linecap: round; }
+.pc-dprev { fill: var(--chart-prev); stroke: var(--paper); stroke-width: 2; }
+.pc-dcur { fill: var(--chart-1); stroke: var(--paper); stroke-width: 2; }
+.pc-tick { stroke: var(--ink); stroke-width: 2; }
+.pc-t-axis { fill: var(--ink-3); font-size: 11px; }
+.pc-t-axis2 { fill: var(--ink-3); font-size: 10px; }
+.pc-t-label { fill: var(--ink); font-size: 13px; }
+.pc-t-han { fill: var(--ink); font-size: 15px; font-weight: 600; }
+.pc-t-py { fill: var(--ink-3); font-size: 10.5px; }
+.pc-t-val { fill: var(--ink-2); font-size: 12px; }
+.pc-t-chg { fill: var(--ink-3); }
+.pc-t-note { fill: var(--ink-2); font-size: 11px; }
+.pc-t-cn { fill: var(--jade); font-size: 10px; font-weight: 700; }
+.pc-hit:hover .pc-dcur,
+.pc-hit:hover .pc-cur { filter: brightness(1.15); }
+.pc-hit:hover .pc-t-label,
+.pc-hit:hover .pc-t-val { font-weight: 700; }
+.pc-swatch-gap { background: repeating-linear-gradient(45deg, var(--ink-3) 0 1px, transparent 1px 4px); }
+/* 640폭 SVG 를 좁은 칸(휴대폰·관리자 미리보기)에서 줄이면 글자가 6px 가까이 작아지므로 360폭 SVG 로 바꿔 끼운다.
+   기준은 화면이 아니라 그림 칸(figure 컨테이너) 폭 */
+.pc-only-m { display: none; }
+@container (max-width: 479px) {
+  .pc-only-d { display: none; }
+  .pc-only-m { display: block; }
+}
+@media (forced-colors: active) {
+  .pc-cur, .pc-dcur { fill: Highlight; }
+  .pc-prev, .pc-dprev { fill: GrayText; }
+  .pc-grid, .pc-db, .pc-exp, .pc-gap, .pc-hatch-line, .pc-tick { stroke: CanvasText; }
+  .pc-hatch-bg { fill: Canvas; }
+  .pc-t-axis, .pc-t-axis2, .pc-t-label, .pc-t-han, .pc-t-py, .pc-t-val, .pc-t-chg, .pc-t-note, .pc-t-cn { fill: CanvasText; }
+  .pc-swatch-gap { forced-color-adjust: none; background: repeating-linear-gradient(45deg, CanvasText 0 1px, Canvas 1px 4px); }
 }
 
 /* ─── 모션 줄이기: 남은 모달/시트/팝오버 애니메이션도 끈다 ─── */

@@ -23,6 +23,12 @@ interface Props {
   canPublish: boolean;
   canWithdraw: boolean;
   edit: { headline: string; lede: string; top_stories: StoryText[] } | null;
+  /** 판 유형 (기본 daily). 주간은 date = 그 주 월요일 */
+  editionType?: "daily" | "weekly";
+  /** 주간: ISO 주 (확인 문구용) */
+  week?: string;
+  /** 주간: 수집 미완 날짜 — 있으면 발행 전에 확인란을 선택해야 한다 */
+  dataQualityDays?: string[];
 }
 
 interface Issue {
@@ -38,12 +44,26 @@ const HEADLINE_MAX = 32;
  * 발행·철회는 기존 /api/admin/briefing/publish, 다시 생성은 /api/admin/briefing/regenerate,
  * 수정 저장은 /api/admin/briefing/edit (서버에서 같은 validator 로 재검증) 를 부른다.
  */
-export function BriefingReviewActions({ id, date, version, locale, canPublish, canWithdraw, edit }: Props) {
+export function BriefingReviewActions({
+  id,
+  date,
+  version,
+  locale,
+  canPublish,
+  canWithdraw,
+  edit,
+  editionType = "daily",
+  week,
+  dataQualityDays = [],
+}: Props) {
   const t = useTranslations("briefingAdmin");
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string; issues?: Issue[] } | null>(null);
   const [form, setForm] = useState(edit);
+  const [ack, setAck] = useState(false);
+  const weekly = editionType === "weekly";
+  const needsAck = weekly && dataQualityDays.length > 0;
 
   async function call(action: string, url: string, body: unknown, confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -76,22 +96,42 @@ export function BriefingReviewActions({ id, date, version, locale, canPublish, c
   }
 
   async function publish() {
-    const r = await call("publish", "/api/admin/briefing/publish", { date, version }, t("confirmPublish", { date, version }));
+    const r = await call(
+      "publish",
+      "/api/admin/briefing/publish",
+      { date, version, edition_type: editionType, acknowledgeDataQuality: needsAck ? ack : undefined },
+      weekly ? t("confirmPublishWeekly", { week: week ?? date, version }) : t("confirmPublish", { date, version })
+    );
     if (r) {
       setMessage({ kind: "ok", text: t("done") });
       router.refresh();
     }
   }
   async function withdraw() {
-    const r = await call("withdraw", "/api/admin/briefing/publish", { date, action: "withdraw" }, t("confirmWithdraw", { date }));
+    const r = await call(
+      "withdraw",
+      "/api/admin/briefing/publish",
+      { date, action: "withdraw", edition_type: editionType },
+      weekly ? t("confirmWithdrawWeekly", { week: week ?? date }) : t("confirmWithdraw", { date })
+    );
     if (r) {
       setMessage({ kind: "ok", text: t("done") });
       router.refresh();
     }
   }
   async function regenerate() {
-    const r = await call("regenerate", "/api/admin/briefing/regenerate", { date }, t("confirmRegenerate", { date }));
-    if (r) {
+    const r = await call(
+      "regenerate",
+      "/api/admin/briefing/regenerate",
+      { date, edition_type: editionType },
+      weekly ? t("confirmRegenerateWeekly", { week: week ?? date }) : t("confirmRegenerate", { date })
+    );
+    if (r && weekly) {
+      const summary = `${String(r.outcome ?? "")} v${String(r.version ?? "—")} ${String(r.status ?? "")}${typeof r.message === "string" && r.message ? ` (${r.message})` : ""}`;
+      setMessage({ kind: r.outcome === "failed" ? "error" : "ok", text: summary.trim() });
+      router.push("/admin/briefings?type=weekly");
+      router.refresh();
+    } else if (r) {
       const locales = (r.locales as { locale: string; version: number; status: string; error?: string }[] | undefined) ?? [];
       const summary = locales.map((l) => `${l.locale} v${l.version} ${l.status}${l.error ? ` (${l.error})` : ""}`).join(" · ");
       setMessage({ kind: r.outcome === "failed" ? "error" : "ok", text: `${String(r.outcome ?? "")} ${summary}`.trim() });
@@ -122,9 +162,21 @@ export function BriefingReviewActions({ id, date, version, locale, canPublish, c
         <h2 id="actions-h" className="mb-2 border-b border-rule-strong pb-1.5 text-sm font-bold text-ink">
           {t("actions")}
         </h2>
+        {needsAck && (
+          <label className="mb-3 flex items-start gap-2 text-sm leading-snug text-ink" data-testid="admin-dq-ack">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-[var(--jade)]"
+              checked={ack}
+              onChange={(e) => setAck(e.target.checked)}
+              disabled={!canPublish}
+            />
+            <span>{t("dataQualityAck")}</span>
+          </label>
+        )}
         <div className="flex flex-wrap gap-2">
           {locale === "ko" && (
-            <Button onClick={publish} disabled={!canPublish || busy !== null} data-testid="admin-publish">
+            <Button onClick={publish} disabled={!canPublish || (needsAck && !ack) || busy !== null} data-testid="admin-publish">
               {busy === "publish" && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />}
               {t("publish")}
             </Button>
@@ -218,7 +270,7 @@ export function BriefingReviewActions({ id, date, version, locale, canPublish, c
           </div>
         </section>
       ) : (
-        locale !== "ko" && <p className="text-xs text-ink-3">{t("editOnlyKo")}</p>
+        (weekly ? <p className="text-xs leading-relaxed text-ink-3">{t("weeklyEditNote")}</p> : locale !== "ko" && <p className="text-xs text-ink-3">{t("editOnlyKo")}</p>)
       )}
     </div>
   );

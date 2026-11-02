@@ -4,11 +4,15 @@ import { Link } from "@/i18n/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { BriefingReviewActions } from "@/components/admin/briefing-review-actions";
 import { BriefingView } from "@/components/briefing/briefing-view";
+import { PeriodicView } from "@/components/briefing/periodic-view";
 import { getBriefingRow, translationsOf } from "@/lib/briefing/admin";
 import { getBriefingForReview } from "@/lib/briefing/public";
+import { getWeeklyForReview } from "@/lib/briefing/periodic/public";
+import type { StoredWeeklyContent } from "@/lib/briefing/periodic/types";
+import { isoWeekOf } from "@/lib/metrics/period";
 import type { StoredBriefingContent, ValidationIssue } from "@/lib/briefing/types";
 
-// 관리자 브리핑 상세: 검증 결과 + 작업 + 인라인 수정 + 공개 페이지와 같은 컴포넌트(BriefingView)로 그린 미리보기.
+// 관리자 브리핑 상세: 검증 결과 + 작업 + 인라인 수정 + 공개 페이지와 같은 컴포넌트(BriefingView / 주간은 PeriodicView)로 그린 미리보기.
 export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,18 +41,27 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
   const row = await getBriefingRow(id);
   if (!row) notFound();
   const t = await getTranslations({ locale, namespace: "briefingAdmin" });
-  const [preview, translations] = await Promise.all([getBriefingForReview(id), row.locale === "ko" ? translationsOf(id) : []]);
+  const weekly = row.edition_type === "weekly";
+  const [preview, weeklyPreview, translations] = await Promise.all([
+    weekly ? null : getBriefingForReview(id),
+    weekly ? getWeeklyForReview(id) : null,
+    row.locale === "ko" && !weekly ? translationsOf(id) : [],
+  ]);
 
   const v = (row.validation ?? {}) as {
     final?: { fatal?: ValidationIssue[]; warn?: ValidationIssue[] };
     problems?: string[];
     dropped_items?: string[];
+    fallbacks?: string[];
+    used?: string;
   };
   const fatal = v.final?.fatal ?? [];
   const warn = v.final?.warn ?? [];
   const problems = v.problems ?? [];
   const content = row.content as unknown as Partial<StoredBriefingContent>;
-  const editable = row.locale === "ko" && !!content.top_stories?.length && ["draft", "published", "superseded"].includes(row.status);
+  const editable = !weekly && row.locale === "ko" && !!content.top_stories?.length && ["draft", "published", "superseded"].includes(row.status);
+  const week = weekly ? ((content as unknown as Partial<StoredWeeklyContent>).meta?.iso_week ?? isoWeekOf(row.edition_date)) : "";
+  const dqDays = weekly ? ((content as unknown as Partial<StoredWeeklyContent>).meta?.data_quality?.incomplete_days ?? []) : [];
 
   return (
     <AdminShell>
@@ -57,7 +70,9 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
           {t("backToList")}
         </Link>
         <h1 className="mt-2 text-xl font-bold text-ink" data-testid="admin-briefing-title">
-          {t("detailTitle", { date: row.edition_date, locale: row.locale.toUpperCase(), version: row.version })}
+          {weekly
+            ? t("detailTitleWeekly", { week, locale: row.locale.toUpperCase(), version: row.version })
+            : t("detailTitle", { date: row.edition_date, locale: row.locale.toUpperCase(), version: row.version })}
         </h1>
         <p className="mt-1 text-xs text-ink-3">
           {t("meta", {
@@ -80,6 +95,12 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
                 </p>
               </section>
             )}
+            {dqDays.length > 0 && (
+              <section role="note" className="border-l-[3px] border-ink-3 bg-surface px-3 py-2" data-testid="admin-data-quality">
+                <h2 className="text-xs font-semibold text-ink">{t("dataQualityTitle")}</h2>
+                <p className="mt-0.5 text-sm leading-relaxed text-ink-2">{t("dataQualityBody", { days: dqDays.join(", ") })}</p>
+              </section>
+            )}
             <section>
               <h2 className="border-b border-rule-strong pb-1.5 text-sm font-bold text-ink">{t("validationTitle")}</h2>
               {!fatal.length && !warn.length && !problems.length ? (
@@ -96,8 +117,9 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
                 </>
               )}
               {v.dropped_items?.length ? <p className="mt-2 text-xs text-ink-3">{t("droppedItems", { items: v.dropped_items.join(", ") })}</p> : null}
+              {v.fallbacks?.length ? <p className="mt-1 text-xs text-ink-3">{t("fallbacks", { items: v.fallbacks.join(", ") })}</p> : null}
             </section>
-            {row.locale === "ko" && (
+            {row.locale === "ko" && !weekly && (
               <section>
                 <h2 className="border-b border-rule-strong pb-1.5 text-sm font-bold text-ink">{t("translations")}</h2>
                 {translations.length ? (
@@ -123,6 +145,9 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
               locale={row.locale}
               canPublish={row.locale === "ko" && row.status === "draft" && !fatal.length}
               canWithdraw={row.status === "published"}
+              editionType={weekly ? "weekly" : "daily"}
+              week={week || undefined}
+              dataQualityDays={dqDays}
               edit={
                 editable
                   ? {
@@ -136,8 +161,18 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
           </div>
 
           <section className="min-w-0 lg:order-1" aria-label={t("preview")}>
-            <p className="border-b border-rule pb-1.5 text-xs font-semibold text-ink-3">{t("preview")}</p>
-            {preview ? <BriefingView briefing={preview} /> : <p className="py-8 text-sm text-ink-3">{t("notRenderable")}</p>}
+            <p className="border-b border-rule pb-1.5 text-xs font-semibold text-ink-3">{weekly ? t("previewWeekly") : t("preview")}</p>
+            {weekly ? (
+              weeklyPreview ? (
+                <PeriodicView weekly={weeklyPreview} />
+              ) : (
+                <p className="py-8 text-sm text-ink-3">{t("notRenderable")}</p>
+              )
+            ) : preview ? (
+              <BriefingView briefing={preview} />
+            ) : (
+              <p className="py-8 text-sm text-ink-3">{t("notRenderable")}</p>
+            )}
           </section>
         </div>
       </div>
