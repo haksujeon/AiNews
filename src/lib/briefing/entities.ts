@@ -88,6 +88,11 @@ ENTITIES.push(
 );
 // 기존 줄을 고치지 않고 덧붙인다: 텐셴수(天数智芯, 기사 표기), 오픈 표기 JD, BAAI 영문 이름
 ENTITIES.find((e) => e.key === "iluvatar")?.aliases.push("텐셴수");
+// "애플 인텔리전스"(Apple Intelligence)의 "인텔" 은 인텔이 아니다 (round 2 재생성 10-31: zh 번역 이름표 오탐)
+{
+  const intel = ENTITIES.find((e) => e.key === "intel");
+  if (intel) intel.aliases = intel.aliases.map((a) => (a === "인텔" ? /인텔(?!리전스|리젠스)/ : a));
+}
 ENTITIES.find((e) => e.key === "jd")?.aliases.push(/\bJD\b/);
 ENTITIES.find((e) => e.key === "baai")?.aliases.push("Beijing Academy of Artificial Intelligence");
 

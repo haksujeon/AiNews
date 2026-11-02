@@ -125,7 +125,9 @@ function shapeOf(c: BriefingContent): string {
 const lc = (s: string) => s.toLowerCase();
 /** 한국어 별칭이 낱말 앞에서 시작하나 ("공통의" 의 "통의" 는 알리바바 통의가 아님) */
 function koAliasAt(alias: string, text: string): boolean {
-  return new RegExp(`(?<![가-힣])${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text);
+  // 낱말 하나로 쓰였나: 앞은 한글이 아니고, 뒤는 한글이 아니거나 조사만 ("애플 인텔리전스" 의 "인텔" 은 인텔이 아님 — round 2 재생성 10-31 zh)
+  const esc = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![가-힣])${esc}(?:은|는|이|가|을|를|의|과|와|도|에서|에게|에|으로|로|만|까지|부터|처럼)?(?![가-힣])`).test(text);
 }
 
 /** 번역문이 이름표의 표기를 썼나 (en: 라틴 표기 또는 여러 낱말 표기의 4자 이상 낱말, zh: 한자·라틴 표기 또는 3자 이상 한자 이름의 앞 2자) */

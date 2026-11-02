@@ -170,6 +170,12 @@ test("10-29 en 'Tianhai 300'(ko 천가오300 = 天垓300 → Tiangai) / 07-15 en
   assert.deepEqual(nameIssues(ko2, en2.replace("Zhiyi Power's", "LimX Dynamics'"), "en"), []);
   // zh 는 한자 표기
   assert.deepEqual(nameIssues(ko.title, "国产GPU天垓300现场测试称快于H200", "zh"), []);
+  // round 2 재생성 10-31 zh 오탐: "애플 인텔리전스" 의 "인텔" 은 인텔이 아니다
+  assert.deepEqual(
+    nameIssues("애플 인텔리전스 중국판, 알리바바 치엔원 연동… 11월 4일 iOS 개발자 베타에서 테스트 시작", "苹果Apple智能中国版接入阿里千问，11月4日起向iOS开发者Beta版开放测试", "zh"),
+    []
+  );
+  assert.ok(nameIssues("인텔이 새 칩을 공개했다", "某公司发布新芯片", "zh").some((p) => /英特尔/.test(p)));
 });
 
 // ───────────────────────── §7-3 한자·길이: 삭제 전에 결정적으로
