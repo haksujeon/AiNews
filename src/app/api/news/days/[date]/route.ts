@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchNewsDayRest } from '@/lib/supabase';
-import { parseFilters } from '@/lib/news-query';
+import { isCalendarDate, parseFilters } from '@/lib/news-query';
 import { NEWS_DAY_EXCLUDE_MAX } from '@/lib/news-types';
 import { isLocale } from '@/i18n/routing';
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // GET /api/news/days/YYYY-MM-DD?exclude=id1,id2,…&locale=ko&q=&country=&categories=&from=&to=
@@ -14,8 +13,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 //   첫 화면 주요 4건의 다음 순위가 이어서 보이는 편이 자연스럽다.
 export async function GET(request: NextRequest, { params }: { params: Promise<{ date: string }> }) {
   const { date } = await params;
-  // 형식뿐 아니라 실제 달력 날짜인지도 본다 (2026-13-45 를 DB 로 보내면 500 이 된다)
-  if (!DATE_RE.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
+  // 형식뿐 아니라 실제 달력 날짜인지도 본다 (2026-02-30 을 DB 로 보내면 500 이 된다)
+  if (!isCalendarDate(date)) {
     return NextResponse.json({ error: 'invalid_date' }, { status: 400 });
   }
   const { searchParams } = new URL(request.url);

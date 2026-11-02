@@ -122,6 +122,36 @@ test.describe('홈 날짜별 목록 (주요 4건 + 펼치기)', () => {
     }
   });
 
+  test('펼치기 실패: 오류 안내 + 다시 시도로 복구', async ({ page }) => {
+    const DAY_API = /\/api\/news\/days\/\d{4}-\d{2}-\d{2}/;
+    await page.route(DAY_API, (route) => route.abort());
+    const day = await firstExpandableDay(page);
+    const toggle = day.getByTestId('news-day-toggle');
+    await toggle.click();
+    await expect(day.getByTestId('news-day-error')).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toHaveText(/더 보기/);
+    await page.unroute(DAY_API);
+    await day.getByTestId('news-day-error').getByRole('button', { name: /다시 시도/ }).click();
+    await expectExpandedFully(day);
+    await expect(day.getByTestId('news-day-error')).toHaveCount(0);
+  });
+
+  test('펼치기 로딩: aria-busy + 불러오는 중 문구', async ({ page }) => {
+    const DAY_API = /\/api\/news\/days\/\d{4}-\d{2}-\d{2}/;
+    await page.route(DAY_API, async (route) => {
+      await new Promise((r) => setTimeout(r, 800));
+      await route.continue();
+    });
+    const day = await firstExpandableDay(page);
+    const toggle = day.getByTestId('news-day-toggle');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-busy', 'true');
+    await expect(toggle).toHaveText(/불러오는 중/);
+    await expectExpandedFully(day);
+    await expect(toggle).not.toHaveAttribute('aria-busy', 'true');
+  });
+
   test('펼친 뒤 기사 모달을 열고 닫아도 펼침 유지', async ({ page }) => {
     const day = await firstExpandableDay(page);
     await day.getByTestId('news-day-toggle').click();

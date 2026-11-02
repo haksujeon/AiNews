@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchNewsDays } from '@/lib/supabase';
-import { parseFilters } from '@/lib/news-query';
+import { isCalendarDate, parseFilters } from '@/lib/news-query';
 import { NEWS_DAYS_PER_PAGE } from '@/lib/news-types';
 import { isLocale } from '@/i18n/routing';
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // GET /api/news/days?cursor=YYYY-MM-DD&limit=5&locale=ko&q=&country=&categories=&from=&to=
 // 응답: { days: [{ date, total, top: RankedNewsItem[] }], total, nextCursor }
@@ -14,9 +12,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const cursorParam = searchParams.get('cursor') ?? '';
-  // 형식뿐 아니라 실제 달력 날짜여야 커서로 쓴다 (2026-13-45 를 DB 로 보내면 500)
-  const cursor =
-    DATE_RE.test(cursorParam) && !Number.isNaN(Date.parse(`${cursorParam}T00:00:00Z`)) ? cursorParam : null;
+  // 형식뿐 아니라 실제 달력 날짜여야 커서로 쓴다 (2026-02-30 을 DB 로 보내면 500)
+  const cursor = isCalendarDate(cursorParam) ? cursorParam : null;
   const limit = Math.min(
     Math.max(parseInt(searchParams.get('limit') || String(NEWS_DAYS_PER_PAGE), 10) || NEWS_DAYS_PER_PAGE, 1),
     10
