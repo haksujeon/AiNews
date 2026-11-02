@@ -346,13 +346,20 @@ async function generateKo(
         { system, messages: [...messages, { role: "user", content: buildTargetedRepairPrompt(fields) }], maxTokens: 2000 },
         track
       );
-      const tr = applyTargetedRepair(cur.content, fields.map((f) => f.path), parseJsonContent(reply.content));
+      const raw = parseJsonContent(reply.content);
+      const asked = fields.map((f) => f.path);
+      const tr = applyTargetedRepair(cur.content, asked, raw);
       if (tr.edits.length) {
         const v = validateKo(prepare(tr.content, "targeted"), ctx);
         validation.targeted_repair = v.report;
-        if (unrecoverableCount(v.report) <= unrecoverableCount(cur.report) && v.report.fatal.length < cur.report.fatal.length) {
-          edits.push(...tr.edits);
-          cur = v;
+        // 칸마다 따로 받는다: 고친 칸에 치명이 남지 않은 것만 (09-16: 주목 기업 3칸은 고쳤는데 헤드라인이 33/32자가 돼 전체를 버렸다)
+        const stillBad = (p: string) => v.report.fatal.some((f) => f.path === p || f.path === p.replace(/\.why$/, "") || itemOf(f.path) === p);
+        const good = tr.edits.map((e) => e.path).filter((p) => !stillBad(p));
+        const partial = good.length === tr.edits.length ? { content: tr.content, edits: tr.edits } : applyTargetedRepair(cur.content, good, raw);
+        const pv = good.length === tr.edits.length ? v : validateKo(prepare(partial.content, "targeted"), ctx);
+        if (partial.edits.length && unrecoverableCount(pv.report) <= unrecoverableCount(cur.report) && pv.report.fatal.length < cur.report.fatal.length) {
+          edits.push(...partial.edits);
+          cur = pv;
         }
       }
     } catch (e) {

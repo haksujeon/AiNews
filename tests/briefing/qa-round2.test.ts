@@ -173,6 +173,10 @@ test("10-27: '캡컷(剪映 국제판)' 한자 2자 — 괄호 안 한자를 지
   assert.equal(g.content.top_stories[0].what, "바이트댄스가 캡컷(국제판)을 ChatGPT에 연동한다고 밝혔다.");
   assert.equal(g.edits[0].action, "gloss");
   assert.equal(glossKoHan({ ...c, top_stories: [{ ...c.top_stories[0], what: "剪映은 편집 앱이다. 千问 연동." }] }).content.top_stories[0].what, "젠잉은 편집 앱이다. 치엔원 연동.");
+  // round 2 재생성 09-16: 헤드라인 "B站 AI 무한 경기장 출범…" — 한자 '站' 하나로 판 전체가 대체 판이 됐다 (subject 도 같은 표기로)
+  const b = glossKoHan({ ...c, headline: "B站 AI 무한 경기장 출범…GPT-6 Astra 1위", top_stories: [{ ...c.top_stories[0], subject: "B站" }] });
+  assert.equal(b.content.headline, "빌리빌리 AI 무한 경기장 출범…GPT-6 Astra 1위");
+  assert.equal(b.content.top_stories[0].subject, "빌리빌리");
 });
 
 test("섹션 한 줄 76/70자 — 통째 삭제 대신 절 경계에서 자르고 기록을 남긴다", () => {

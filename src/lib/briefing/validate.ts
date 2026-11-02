@@ -240,7 +240,9 @@ export interface ContentEdit {
  */
 export function glossHanText(t: string): string {
   if (!/[\u3400-\u9fff\uf900-\ufaff]/.test(t)) return t;
-  return applyHanGlossary(dropHanInsideParens(t), HAN_GLOSSARY, { insideParens: true }).text;
+  // 라틴 글자가 붙은 이름 (한자 덩어리만으로는 뜻이 정해지지 않아 사전에 넣지 않는다): B站 = 빌리빌리 (09-16 헤드라인)
+  const named = t.replace(/B站/g, "빌리빌리");
+  return applyHanGlossary(dropHanInsideParens(named), HAN_GLOSSARY, { insideParens: true }).text;
 }
 
 export function glossKoHan(content: BriefingContent): { content: BriefingContent; edits: ContentEdit[] } {
@@ -257,6 +259,8 @@ export function glossKoHan(content: BriefingContent): { content: BriefingContent
     st.title = f(`top_stories[${i}].title`, st.title);
     st.what = f(`top_stories[${i}].what`, st.what);
     st.why = f(`top_stories[${i}].why`, st.why);
+    // subject 는 검증 대상 문장이 아니지만 헤드라인 = 1위 기사 판정에 쓰여 같은 표기로 맞춘다 (B站 → 빌리빌리)
+    st.subject = glossHanText(st.subject);
   });
   c.sections.forEach((sec, j) => sec.items.forEach((it, k) => (it.text = f(`sections[${j}].items[${k}]`, it.text))));
   c.key_numbers.forEach((k, i) => (k.label = f(`key_numbers[${i}]`, k.label)));
