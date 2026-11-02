@@ -47,3 +47,4 @@ next-env.d.ts
 *.log
 *.tsbuildinfo
 /.playwright-mcp/
+/e2e/.fixtures/

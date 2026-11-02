@@ -10,7 +10,9 @@ import { VISIBLE_CATEGORIES, publicCategoriesOf } from './categories';
 import { LIST_FIELDS } from './news-fields';
 import { findRelated, type RelatedSections } from './related';
 import { citedRanksFromTopStories, splitDay, type DaySplit, type RankableArticle } from './news-rank';
-import { EDITION_TYPE } from './briefing/repository';
+import { loadDayEditionRows } from './briefing/public';
+import { pickLinkEdition, pickRankEdition, toDayBriefingRef, type DayBriefingRef } from './briefing/day-select';
+import { isEditionPending } from './briefing/sla';
 import { buildWeeklyTrend, type StatisticsData } from './statistics-utils';
 import { addDays, countBy, countByDay, dayBounds, fillDays, mondayOf, termCounts, volumeSummary } from './metrics/period';
 
@@ -65,18 +67,29 @@ const RANK_FIELDS = `id, source_name, category, title_cn, title_kr, summary_kr, 
 
 type RankRow = RankableArticle & { day: string };
 
-/** 그 날짜들의 발행 브리핑 주요 기사 순위. 화면 언어판 우선, 없으면 ko → 그 밖 언어판. 발행본만. */
-async function loadCitedRanks(dates: string[], locale: string): Promise<Map<string, Map<string, number>>> {
-  const out = new Map<string, Map<string, number>>();
+interface DayBriefing {
+  /** 순위용 판의 주요 기사 순위 (브리핑 인용 우선 규칙) */
+  cited?: Map<string, number>;
+  /** 날짜 옆 링크 (보는 언어판만) */
+  link: DayBriefingRef | null;
+}
+
+/**
+ * 그 날짜들의 발행 데일리 판 — 순위("주요 4건" 의 인용 우선)와 날짜 옆 브리핑 링크가 이 조회 하나를 쓴다 (Gate 2).
+ * 판이 덮는 기간(period_start~period_end)으로 맞추므로 일요일 묶음은 토요일 합본을 쓴다
+ * (예전 loadCitedRanks 는 edition_date 만 맞춰 일요일 묶음에 인용 우선 규칙이 빠졌다).
+ * 판 고르기 규칙은 briefing/day-select.ts.
+ */
+async function loadDayBriefings(dates: string[], locale: string): Promise<Map<string, DayBriefing>> {
+  const out = new Map<string, DayBriefing>();
   if (!dates.length) return out;
-  const { rows } = await pool.query(
-    `SELECT DISTINCT ON (edition_date) to_char(edition_date, 'YYYY-MM-DD') AS d, content->'top_stories' AS ts
-       FROM daily_briefings
-      WHERE status = 'published' AND edition_type = $1 AND edition_date = ANY($2::date[])
-      ORDER BY edition_date, (locale = $3) DESC, (locale = 'ko') DESC, locale`,
-    [EDITION_TYPE, dates, locale]
-  );
-  for (const r of rows) out.set(r.d, citedRanksFromTopStories(r.ts));
+  const sorted = [...dates].sort();
+  const rows = await loadDayEditionRows(sorted[0], sorted[sorted.length - 1]);
+  for (const d of dates) {
+    const rank = pickRankEdition(rows, d, locale);
+    const link = pickLinkEdition(rows, d, locale);
+    out.set(d, { cited: rank ? citedRanksFromTopStories(rank.top_stories) : undefined, link: link ? toDayBriefingRef(link) : null });
+  }
   return out;
 }
 
@@ -88,27 +101,27 @@ async function splitDays(
   filters: NewsFilters,
   locale: string,
   dates: string[]
-): Promise<Map<string, DaySplit<RankRow>>> {
+): Promise<{ splits: Map<string, DaySplit<RankRow>>; briefings: Map<string, DayBriefing> }> {
   const out = new Map<string, DaySplit<RankRow>>();
-  if (!dates.length) return out;
+  if (!dates.length) return { splits: out, briefings: new Map() };
   const { where, values } = buildNewsWhere(filters);
   const n = values.length;
-  const [{ rows }, cited] = await Promise.all([
+  const [{ rows }, briefings] = await Promise.all([
     pool.query(
       `SELECT ${RANK_FIELDS} FROM ai_news_ex
         WHERE ${where} AND ${DAY_RANGE(`$${n + 1}`, `$${n + 2}`)}
         ORDER BY id`,
       [...values, dates[dates.length - 1], dates[0]]
     ),
-    loadCitedRanks(dates, locale),
+    loadDayBriefings(dates, locale),
   ]);
   const byDay = new Map<string, RankRow[]>();
   for (const r of rows as RankRow[]) {
     if (!byDay.has(r.day)) byDay.set(r.day, []);
     byDay.get(r.day)!.push(r);
   }
-  for (const d of dates) out.set(d, splitDay(byDay.get(d) ?? [], { cited: cited.get(d), topCount: NEWS_DAY_TOP }));
-  return out;
+  for (const d of dates) out.set(d, splitDay(byDay.get(d) ?? [], { cited: briefings.get(d)?.cited, topCount: NEWS_DAY_TOP }));
+  return { splits: out, briefings };
 }
 
 /** id 목록 → 목록 필드 (주어진 순서 유지, 공개 조건 재확인) */
@@ -127,13 +140,16 @@ async function loadListItems(ranked: { item: RankRow; outletCount: number }[]): 
 
 /**
  * 날짜별 목록 한 페이지: 최신 날부터 limit 일. cursor(YYYY-MM-DD)가 있으면 그 날짜보다 이전 날부터.
- * 각 날은 { date, total, top(주요 4건) } — 나머지는 fetchNewsDayRest 로 펼칠 때 받는다.
+ * 각 날은 { date, total, top(주요 4건), briefing(그날 브리핑 링크), briefingPending } — 나머지는 fetchNewsDayRest 로 펼칠 때 받는다.
+ * 첫 화면(홈 서버 렌더)과 /api/news/days(무한 스크롤·필터)가 이 함수 하나를 쓴다 (Gate 2).
+ * now 는 "발행 예정" 판정 시각 (sla.ts isEditionPending). 시험에서만 넘긴다.
  */
 export async function fetchNewsDays(
   filters: NewsFilters = EMPTY_FILTERS,
   locale = "ko",
   cursor: string | null = null,
-  limit: number = NEWS_DAYS_PER_PAGE
+  limit: number = NEWS_DAYS_PER_PAGE,
+  now: Date = new Date()
 ): Promise<NewsDaysPage> {
   const { where, values } = buildNewsWhere(filters);
   const n = values.length;
@@ -150,7 +166,7 @@ export async function fetchNewsDays(
   const dayRows = daysRes.rows as { d: string; total: number }[];
   const hasMore = dayRows.length > limit;
   const pageDays = dayRows.slice(0, limit);
-  const splits = await splitDays(filters, locale, pageDays.map((r) => r.d));
+  const { splits, briefings } = await splitDays(filters, locale, pageDays.map((r) => r.d));
 
   const allTop = pageDays.flatMap((r) => splits.get(r.d)?.top ?? []);
   const items = await loadListItems(allTop);
@@ -161,6 +177,8 @@ export async function fetchNewsDays(
       date: r.d,
       total: r.total,
       top: (splits.get(r.d)?.top ?? []).flatMap((t) => (byId.has(t.item.id) ? [byId.get(t.item.id)!] : [])),
+      briefing: briefings.get(r.d)?.link ?? null,
+      briefingPending: !briefings.get(r.d)?.link && isEditionPending(r.d, now),
     })),
     total: countRes.rows[0]?.total ?? 0,
     nextCursor: hasMore && pageDays.length ? pageDays[pageDays.length - 1].d : null,
@@ -177,7 +195,7 @@ export async function fetchNewsDayRest(
   date: string,
   exclude: string[]
 ): Promise<NewsDayRest> {
-  const split = (await splitDays(filters, locale, [date])).get(date)!;
+  const split = (await splitDays(filters, locale, [date])).splits.get(date)!;
   const skip = new Set(exclude);
   const ordered = [...split.top, ...split.rest];
   const items = await loadListItems(ordered.filter((r) => !skip.has(r.item.id)));

@@ -1,3 +1,5 @@
+import type { DayBriefingRef } from "./briefing/day-select";
+
 export interface NewsItem {
   id: string;
   created_at: string;
@@ -46,6 +48,10 @@ export interface NewsDay {
   date: string; // YYYY-MM-DD
   total: number; // 그날(필터 적용) 전체 기사 수
   top: RankedNewsItem[]; // 순위 상위 NEWS_DAY_TOP 묶음의 대표 기사
+  /** 그날을 다루는 발행 데일리 판 (보는 언어판만, 일요일은 토요일 합본). 없으면 null */
+  briefing?: DayBriefingRef | null;
+  /** 판이 아직 없고 발행 마감 전 (sla.ts isEditionPending) — "브리핑 발행 예정" */
+  briefingPending?: boolean;
 }
 
 export interface NewsDaysPage {

@@ -1,6 +1,6 @@
 /**
  * 데일리 브리핑 발행 일정·SLA — 생성 스케줄(n8n), 생성 라우트의 기본 날짜, 관리자 SLA 띠, 상태 API(알림),
- * 홈 배너의 날짜 칩이 모두 이 파일의 규칙 하나를 쓴다 (Gate 2).
+ * 홈 배너의 날짜 칩, 홈 날짜 묶음의 "발행 예정" 표시가 모두 이 파일의 규칙 하나를 쓴다 (Gate 2).
  *
  * 일정 (KST 기준, 판 날짜는 베이징 날짜) — 2026-11-02 사용자 결정: 하루가 끝난 자정 뒤에 생성
  *  - 평일판 D(월~금): D+1 00:10 KST(= 베이징 D 23:10) 생성, 00:40 KST 재시도 → D+1 09:00 KST 까지 ko 발행.
@@ -125,6 +125,20 @@ export function runDayOf(now: Date): string {
 /** n8n 정기 실행(날짜를 주지 않은 생성 호출)이 만들 판. 토요일이 끝난 직후(일요일 00:10)면 null */
 export function scheduledRunEdition(now: Date): string | null {
   return scheduledEditionFor(runDayOf(now));
+}
+
+/** 기사 날짜(베이징) → 그 날짜를 다루는 정기 판. 일요일은 토요일 합본, 그 밖은 그날 */
+export function editionForNewsDay(day: string): string {
+  return weekday(day) === 0 ? addDays(day, -1) : day;
+}
+
+/**
+ * 홈 날짜 묶음의 "브리핑 발행 예정" 판정 (순수 함수): 그 날짜를 다루는 정기 판의 발행 마감(dueAtOf)이 아직 안 지났다.
+ * 발행본이 있는지는 따로 본다(있으면 링크). 오늘 묶음은 언제나 예정, 일요일 묶음은 월요일 09:00 KST 까지 예정.
+ * 화면 문구에 시각을 넣지 않는다 — 마감 날짜·요일이 판마다 달라서다.
+ */
+export function isEditionPending(day: string, now: Date): boolean {
+  return now.getTime() < dueAtOf(editionForNewsDay(day)).getTime();
 }
 
 /**
