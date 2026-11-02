@@ -9,7 +9,10 @@
  *  - 날짜 = news_date 의 UTC 날짜 = 베이징 날짜 (news_date 는 "베이징 날짜 00:00 UTC" 로 저장됨).
  *
  * 수치 규칙(설계 검토서 §1.4):
- *  - 결손일: 같은 요일군(평일/주말) 중앙값의 50% 미만. 기준선은 수집이 완전해진 2026-10-13 이후, 기간 끝에서 8주 이내.
+ *  - 결손일(incomplete) = 두 가지의 합:
+ *      (a) 축소 수집일(reduced, capped_backfill): COMPLETE_SINCE(2026-10-13) 이전 날짜. 보충 수집에 매체별 하루 상한
+ *          (36Kr ≤ 12건, ITHome ≤ 6건)이 걸려 있어 건수가 실제 보도량보다 훨씬 적다 — 건수와 상관없이 언제나 결손.
+ *      (b) 부분 수집일(partial): 같은 요일군(평일/주말) 중앙값의 50% 미만. 기준선은 COMPLETE_SINCE 이후, 기간 끝에서 8주 이내.
  *    중앙값은 정렬 후 floor(n/2) 번째(위쪽 중앙값) — 프로토타입과 같게 (W44 주말 중앙값 43).
  *  - 기사 수 증감은 같은 요일끼리, 양쪽 주 모두 완전한 요일만.
  *  - 증감 % 는 양쪽 모두 MIN_COUNT_FOR_CHANGE(5)건 이상일 때만.
@@ -53,7 +56,9 @@ export const MIN_COUNT_FOR_CHANGE = 5;
 export const TERM_MIN = 4;
 export const TERM_DELTA = 3;
 export const MISSING_RATIO = 0.5;
-export const METRICS_VERSION = "period-v1-2026-11-02";
+export const METRICS_VERSION = "period-v2-2026-11-02";
+/** 보충 수집 때 매체별 하루 상한 (데이터 알림 문구) */
+export const BACKFILL_CAPS: Record<string, number> = { "36Kr": 12, ITHome: 6 };
 
 export const DAY_SQL = `(news_date AT TIME ZONE 'UTC')::date`;
 
@@ -93,6 +98,11 @@ export function daysBetween(start: string, end: string): string[] {
   return out;
 }
 
+/** 베이징 날짜 (YYYY-MM-DD). 판 날짜·기간 끝 판정의 기준 */
+export function beijingDate(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
 /** 0=일 … 6=토 */
 export const weekdayOf = (day: string) => new Date(`${day}T00:00:00Z`).getUTCDay();
 export const isWeekend = (day: string) => {
@@ -128,6 +138,54 @@ export function isoWeekOf(day: string): string {
   const week1Monday = mondayOf(`${year}-01-04`);
   const w = Math.round((dayMs(mondayOf(day)) - dayMs(week1Monday)) / (7 * DAY_MS)) + 1;
   return `${year}-W${String(w).padStart(2, "0")}`;
+}
+
+const MONTH_RE = /^(\d{4})-(\d{2})$/;
+
+/** "2026-10" → { start: 10-01, end: 10-31 }. 형식이 틀리면 null */
+export function monthRange(month: string): { start: string; end: string } | null {
+  const m = MONTH_RE.exec(month);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  if (mo < 1 || mo > 12 || y < 2000) return null;
+  const start = `${m[1]}-${m[2]}-01`;
+  const next = mo === 12 ? `${y + 1}-01-01` : `${m[1]}-${String(mo + 1).padStart(2, "0")}-01`;
+  return { start, end: addDays(next, -1) };
+}
+
+/** 날짜 → "YYYY-MM" */
+export const monthOf = (day: string) => day.slice(0, 7);
+
+/** 그 달의 직전 달 "YYYY-MM" */
+export function prevMonth(month: string): string {
+  const r = monthRange(month);
+  if (!r) throw new Error(`월 형식이 틀렸습니다: ${month}`);
+  return monthOf(addDays(r.start, -1));
+}
+
+/** 축소 수집일(보충 수집 상한이 걸린 날)인가 */
+export const isReducedDay = (day: string) => day < COMPLETE_SINCE;
+
+export interface WeekSlice {
+  /** "W42" */
+  key: string;
+  iso_week: string;
+  /** 달 안으로 자른 범위 */
+  start: string;
+  end: string;
+}
+
+/** 달을 ISO 주로 나눈다 (첫·마지막 주는 달 안으로 자른다). 2026-10 → W40(10-01~04) … W44(10-26~31) */
+export function monthWeekSlices(start: string, end: string): WeekSlice[] {
+  const out: WeekSlice[] = [];
+  for (let mon = mondayOf(start); mon <= end; mon = addDays(mon, 7)) {
+    const iso = isoWeekOf(mon);
+    const s = mon < start ? start : mon;
+    const sun = addDays(mon, 6);
+    out.push({ key: iso.slice(5), iso_week: iso, start: s, end: sun > end ? end : sun });
+  }
+  return out;
 }
 
 // ───────────────────────── 증감·비율 (순수)
@@ -318,7 +376,12 @@ export interface DailyPoint {
   count: number;
   weekend: boolean;
   expected: number;
+  /** reduced || partial — 같은 요일 비교·하루 평균에서 뺀다 */
   incomplete: boolean;
+  /** 축소 수집일 (COMPLETE_SINCE 이전, 매체별 하루 상한) */
+  reduced?: boolean;
+  /** 부분 수집일 (같은 요일군 중앙값의 50% 미만) */
+  partial?: boolean;
 }
 
 export interface MissingDayBaseline {
@@ -339,12 +402,14 @@ export function baselineFrom(series: DayCount[], since: string, until: string): 
   };
 }
 
-/** 일별 건수에 결손일 판정을 붙인다: 같은 요일군 중앙값의 50% 미만 */
+/** 일별 건수에 결손일 판정을 붙인다: 축소 수집일(COMPLETE_SINCE 이전) 또는 같은 요일군 중앙값의 50% 미만 */
 export function detectMissingDays(series: DayCount[], baseline: MissingDayBaseline): DailyPoint[] {
   return series.map((d) => {
     const weekend = isWeekend(d.date);
     const expected = weekend ? baseline.weekend_median : baseline.weekday_median;
-    return { day: d.date, count: d.count, weekend, expected, incomplete: expected > 0 && d.count < expected * MISSING_RATIO };
+    const reduced = isReducedDay(d.date);
+    const partial = !reduced && expected > 0 && d.count < expected * MISSING_RATIO;
+    return { day: d.date, count: d.count, weekend, expected, incomplete: reduced || partial, reduced, partial };
   });
 }
 
@@ -382,6 +447,95 @@ export function sameWeekdayComparison(cur: DailyPoint[], prev: DailyPoint[]): Li
 export function avgPerCompleteDay(points: DailyPoint[]): number {
   const ok = points.filter((x) => !x.incomplete);
   return ok.length ? Math.round(ok.reduce((s, x) => s + x.count, 0) / ok.length) : 0;
+}
+
+export interface DayQuality {
+  incomplete_days: string[];
+  reduced_days: string[];
+  partial_days: string[];
+  /** 결손일의 건수·기대치 (데이터 알림 문구) */
+  days: { day: string; count: number; expected: number; reduced: boolean }[];
+}
+
+/** 결손일 판정 결과만 (데일리 판의 데이터 알림 — 주간·월간과 같은 detectMissingDays) */
+export function dayQualityOf(points: DailyPoint[]): DayQuality {
+  const bad = points.filter((d) => d.incomplete);
+  return {
+    incomplete_days: bad.map((d) => d.day),
+    reduced_days: bad.filter((d) => d.reduced).map((d) => d.day),
+    partial_days: bad.filter((d) => d.partial).map((d) => d.day),
+    days: bad.map((d) => ({ day: d.day, count: d.count, expected: d.expected, reduced: Boolean(d.reduced) })),
+  };
+}
+
+/**
+ * [start, end] 날짜의 수집 품질 (데일리 판). 기준선은 computePeriodMetrics 와 같다:
+ * COMPLETE_SINCE ~ end 중 end 에서 8주 이내의 같은 모집단 일별 건수.
+ */
+export async function periodDayQuality(q: Queryable, start: string, end: string, population: Population = "ai"): Promise<DayQuality> {
+  const eightWeeks = addDays(end, -55);
+  const since = eightWeeks > COMPLETE_SINCE ? eightWeeks : COMPLETE_SINCE;
+  const baseSeries = await countByDay(q, { population, range: { start: since, end } });
+  const cur = fillDays(start, end, await countByDay(q, { population, range: { start, end } }));
+  return dayQualityOf(detectMissingDays(cur, baselineFrom(baseSeries, since, end)));
+}
+
+// ───────────────────────── 월간: 주별 궤적 (순수)
+
+export interface MonthWeek extends WeekSlice {
+  days: number;
+  complete_days: number;
+  total: number;
+  /** 수집이 완전한 평일의 하루 평균. 완전한 평일이 없으면 null */
+  weekday_avg: number | null;
+  /** 결손일을 뺀 하루 평균. 완전한 날이 없으면 null */
+  avg_per_complete_day: number | null;
+  /** full = 결손 없음, reduced = 축소 수집일 포함, partial = 부분 수집일만 */
+  coverage: "full" | "reduced" | "partial";
+  reduced_days: string[];
+  partial_days: string[];
+  /** 그 주의 기업 언급 수 (월 상위 기업) */
+  entities: Record<string, number>;
+  /** 기사 1천 건당 언급 수 (주 길이·수집 축소와 무관하게 비교) */
+  entities_per_1k: Record<string, number>;
+}
+
+export const MONTH_WEEK_ENTITIES = 9;
+
+/** 달 안의 주별 기사 수·평일 평균·기업 언급(1천 건당). entityKeys = 월 상위 기업 */
+export function monthWeeks(daily: DailyPoint[], arts: PeriodArticle[], entityKeys: string[]): MonthWeek[] {
+  if (!daily.length) return [];
+  const slices = monthWeekSlices(daily[0].day, daily[daily.length - 1].day);
+  return slices.map((w) => {
+    const pts = daily.filter((d) => d.day >= w.start && d.day <= w.end);
+    const ok = pts.filter((d) => !d.incomplete);
+    const okWeekday = ok.filter((d) => !d.weekend);
+    const total = pts.reduce((s, d) => s + d.count, 0);
+    const wa = arts.filter((a) => a.day >= w.start && a.day <= w.end);
+    const tally = tallyEntities(wa);
+    const entities: Record<string, number> = {};
+    const per1k: Record<string, number> = {};
+    for (const k of entityKeys) {
+      const n = tally.get(k)?.n ?? 0;
+      entities[k] = n;
+      per1k[k] = wa.length ? Math.round((n / wa.length) * 1000) : 0;
+    }
+    const reduced = pts.filter((d) => d.reduced).map((d) => d.day);
+    const partial = pts.filter((d) => d.partial).map((d) => d.day);
+    return {
+      ...w,
+      days: pts.length,
+      complete_days: ok.length,
+      total,
+      weekday_avg: okWeekday.length ? Math.round(okWeekday.reduce((s, d) => s + d.count, 0) / okWeekday.length) : null,
+      avg_per_complete_day: ok.length ? Math.round(ok.reduce((s, d) => s + d.count, 0) / ok.length) : null,
+      coverage: reduced.length ? "reduced" : partial.length ? "partial" : "full",
+      reduced_days: reduced,
+      partial_days: partial,
+      entities,
+      entities_per_1k: per1k,
+    };
+  });
 }
 
 // ───────────────────────── 기사 행 (리포트용)
@@ -765,7 +919,12 @@ export interface PeriodMetrics {
   baseline: { start: string; end: string } | null;
   computed_at: string;
   data_quality: {
+    /** reduced_days ∪ partial_days (정렬) — 생성 차단·발행 확인·관리자 표시의 기준 */
     incomplete_days: string[];
+    /** 축소 수집일 (COMPLETE_SINCE 이전, 매체별 하루 상한) */
+    reduced_days: string[];
+    /** 부분 수집일 (같은 요일군 중앙값의 50% 미만) */
+    partial_days: string[];
     expected_weekday_median: number;
     expected_weekend_median: number;
     baseline_since: string;
@@ -797,6 +956,8 @@ export interface PeriodMetrics {
     /** 사건 단위 상위 (매체 2곳 이상 먼저) — 타임라인 */
     events_top: PeriodEventSummary[];
   };
+  /** 월간: 달 안의 주별 궤적 (주간에는 없음) */
+  weeks?: MonthWeek[];
   /** 지문: 일별 건수 + 기사 id·본문 지문 (같으면 같은 입력) */
   fingerprint: string;
 }
@@ -829,7 +990,16 @@ export function periodFingerprint(daily: DayCount[], arts: PeriodArticle[], extr
  */
 export async function computePeriodMetrics(
   q: Queryable,
-  opts: { kind: PeriodMetrics["kind"]; start: string; end: string; prevStart?: string; prevEnd?: string; population: Population }
+  opts: {
+    kind: PeriodMetrics["kind"];
+    start: string;
+    end: string;
+    prevStart?: string;
+    prevEnd?: string;
+    population: Population;
+    /** 같은 요일 비교 (기본 true). 월간은 두 달의 요일이 어긋나 false — 주별 평일 평균으로 본다 */
+    likeForLike?: boolean;
+  }
 ): Promise<PeriodInputs> {
   const { start, end, population } = opts;
   const cur: MetricOptions = { population, range: { start, end } };
@@ -855,13 +1025,14 @@ export async function computePeriodMetrics(
   const curDays = fillDays(start, end, await countByDay(q, cur));
   const daily = detectMissingDays(curDays, baseline);
   const prevDaily = prev ? detectMissingDays(fillDays(opts.prevStart!, opts.prevEnd!, await countByDay(q, prev)), baseline) : [];
-  const lfl = prev ? sameWeekdayComparison(daily, prevDaily) : null;
+  const lfl = prev && opts.likeForLike !== false ? sameWeekdayComparison(daily, prevDaily) : null;
   const sentC = toSentimentShare(sentCur);
   const sentP = sentPrev ? toSentimentShare(sentPrev) : null;
   const { stories, events } = crossSourceStories(arts);
   const total = arts.length;
   const prevTotal = prevArts ? prevArts.length : null;
 
+  const entities = entityMentions(arts, prevArts);
   const metrics: PeriodMetrics = {
     metrics_version: METRICS_VERSION,
     kind: opts.kind,
@@ -871,6 +1042,8 @@ export async function computePeriodMetrics(
     computed_at: new Date().toISOString(),
     data_quality: {
       incomplete_days: daily.filter((d) => d.incomplete).map((d) => d.day),
+      reduced_days: daily.filter((d) => d.reduced).map((d) => d.day),
+      partial_days: daily.filter((d) => d.partial).map((d) => d.day),
       expected_weekday_median: baseline.weekday_median,
       expected_weekend_median: baseline.weekend_median,
       baseline_since: baseline.since,
@@ -890,7 +1063,7 @@ export async function computePeriodMetrics(
     categories: compareGroups(catCur, catPrev),
     sources: compareGroups(srcCur, srcPrev),
     sentiment: { cur: sentC, prev: sentP, flat: sentimentFlat(sentC, sentP) },
-    entities: entityMentions(arts, prevArts),
+    entities,
     terms: termMovement(termCur, termPrev),
     china_vs_overseas: { cur: chinaVsOverseas(arts), prev: prevArts ? chinaVsOverseas(prevArts) : null },
     money_table: moneyTable(arts),
@@ -901,6 +1074,7 @@ export async function computePeriodMetrics(
       event_multi_source_count: events.filter((e) => e.sources.length >= 2).length,
       events_top: events.slice(0, 30),
     },
+    ...(opts.kind === "monthly" ? { weeks: monthWeeks(daily, arts, entities.slice(0, MONTH_WEEK_ENTITIES).map((e) => e.key)) } : {}),
     fingerprint: periodFingerprint(
       [...curDays, ...(prev ? prevDaily.map((d) => ({ date: d.day, count: d.count })) : [])],
       [...arts, ...(prevArts ?? [])],
