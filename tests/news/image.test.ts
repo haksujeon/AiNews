@@ -1,14 +1,23 @@
 /** 썸네일 판별(normalizeImageUrl / getImageUrl) 단위 테스트 — 실행: npm run test:unit */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getImageUrl, isRealImage, normalizeImageUrl } from "../../src/lib/news-utils";
+import { getImageUrl, isAiGeneratedImage, isRealImage, normalizeImageUrl } from "../../src/lib/news-utils";
 
-test("量子位 로고·기자 아바타(-100x100)·虎嗅 AI 커버는 이미지 없음", () => {
+test("量子位 로고·기자 아바타(-100x100)는 이미지 없음", () => {
   assert.equal(normalizeImageUrl("http://www.qbitai.com/wp-content/themes/liangziwei/imagesnew/head.jpg"), null);
   assert.equal(normalizeImageUrl("https://www.qbitai.com/wp-content/themes/liangziwei/imagesnew/head.jpg"), null);
   assert.equal(normalizeImageUrl("http://www.qbitai.com/wp-content/uploads/2026/10/avatar-100x100.jpg"), null);
   assert.equal(normalizeImageUrl("https://www.qbitai.com/wp-content/uploads/2026/10/avatar-100x100.png"), null);
-  assert.equal(normalizeImageUrl("https://img.huxiucdn.com/ai-general-cover/x.jpg"), null);
+});
+
+test("虎嗅 AI 생성 커버는 이미지로 쓰고(2026-11-02 정책) AI 생성으로 판별한다", () => {
+  const cover = "https://img.huxiucdn.com/ai/ai-general-cover/202611/02/41434-prod-nb2qn-general-1-1793549381002.png";
+  assert.equal(normalizeImageUrl(cover), cover);
+  assert.equal(isRealImage(cover), true);
+  assert.equal(getImageUrl({ thumbnail_url: cover, og_image_url: null }), cover);
+  assert.equal(isAiGeneratedImage(cover), true);
+  assert.equal(isAiGeneratedImage("https://img.huxiucdn.com/article/content/26-11-02/a.png"), false);
+  assert.equal(isAiGeneratedImage(null), false);
 });
 
 test("http 이미지: https 를 확인한 호스트만 올리고 나머지는 버린다", () => {

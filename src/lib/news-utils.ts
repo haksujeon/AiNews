@@ -32,11 +32,11 @@ export function getSourceName(sourceName: string | null | undefined): string {
 
 // ─── Thumbnail 정책 ───────────────────────────────────────
 // 이미지 없음으로 보는 것:
-//  - 虎嗅 AI 생성 커버(ai-general-cover)
 //  - 量子位 기본 로고(/wp-content/themes/liangziwei/imagesnew/head.jpg)
 //  - 量子位 기자 아바타(WordPress 썸네일 -100x100.jpg/png) — 기사 이미지가 없을 때 수집기가 집어 온다
+// 虎嗅 AI 생성 커버(ai-general-cover)는 2026-11-02 부터 쓴다. 본문 이미지가 없을 때만 수집기가 고르며,
+// 화면에서는 isAiGeneratedImage 로 판별해 "AI 생성 이미지" 라벨을 붙인다(NewsThumbnail).
 const PLACEHOLDER_IMAGE_PATTERNS: RegExp[] = [
-  /ai-general-cover/,
   /\/wp-content\/themes\/liangziwei\/imagesnew\/head\.jpg/,
   /-100x100\.(?:jpe?g|png)(?:[?#]|$)/i,
 ];
@@ -64,6 +64,11 @@ export function normalizeImageUrl(url: string | null | undefined): string | null
 
 export function isRealImage(url: string | null | undefined): url is string {
   return normalizeImageUrl(url) === url && !!url;
+}
+
+/** AI 가 만든 대표 이미지인지(虎嗅 AI 생성 커버). 화면에 보여 줄 때 라벨·대체 텍스트로 알린다. */
+export function isAiGeneratedImage(url: string | null | undefined): boolean {
+  return !!url && /\/ai-general-cover\//i.test(url);
 }
 
 /** 화면에 쓸 대표 이미지 URL. 없거나 플레이스홀더성 이미지면 null. */

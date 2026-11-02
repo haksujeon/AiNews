@@ -10,7 +10,9 @@
     "retry": "重试",
     "brandTagline": "中国 AI 简报",
     "sourcesLabel": "来源",
-    "briefing": "简报"
+    "briefing": "简报",
+    "aiImageLabel": "AI 生成图片",
+    "aiImageLabelShort": "AI 生成"
   },
   "filter": {
     "searchPlaceholder": "按标题或内容搜索...",

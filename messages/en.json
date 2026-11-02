@@ -10,7 +10,9 @@
     "retry": "Retry",
     "brandTagline": "China AI Briefing",
     "sourcesLabel": "Sources",
-    "briefing": "Briefing"
+    "briefing": "Briefing",
+    "aiImageLabel": "AI-generated image",
+    "aiImageLabelShort": "AI-generated"
   },
   "filter": {
     "searchPlaceholder": "Search by title or content...",

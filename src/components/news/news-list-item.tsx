@@ -49,6 +49,7 @@ export function NewsListItem({ item, outletCount }: NewsListItemProps) {
           alt=""
           className="aspect-[4/3] w-24 shrink-0 sm:w-40"
           sizes="(max-width: 640px) 96px, 160px"
+          compactLabel
         />
       </article>
     </Link>
