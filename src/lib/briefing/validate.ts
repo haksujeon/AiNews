@@ -32,6 +32,7 @@ import type {
   ValidationReport,
 } from "./types";
 import { entityMentioned, findEntities, isChineseSubject, properNouns } from "./entities";
+import { hanResidue } from "../text/han";
 
 export interface ValidationContext {
   /** 짧은 id → 근거 텍스트 (title_kr + summary_kr + insight_kr + title_cn, 전재 형제 포함) */
@@ -185,8 +186,8 @@ export function citedRefs(c: BriefingContent): string[] {
 
 // ───────────────────────── 숫자
 
-export const HAN_RE = /[㐀-鿿豈-﫿]/g;
-export const HANGUL_RE = /[가-힯ᄀ-ᇿ㄰-㆏]/;
+// 한자·한글 정규식의 원본은 src/lib/text/han.ts. 주간·월간 검증기(periodic/validate.ts)가 여기서 가져가므로 다시 내보낸다.
+export { HAN_RE, HANGUL_RE } from "../text/han";
 /** 문장 속 숫자 (주간·월간 검증기도 같은 정규식을 쓴다) */
 export const NUM_RE = /\d[\d,.]*/g;
 const NUM_UNIT_RE = /\d[\d,.]*\s?(?:%|위안|위|억|만|명|개|점|회|대|배|달러|MW|GW|B\b|년|월|일|시간|종|팀|건|곳|조)/g;
@@ -361,8 +362,9 @@ export function validateKo(
       const n = norm(m);
       if (!cited.includes(n)) fatal.push({ level: "fatal", rule: "number_unit_not_in_source", path: u.path, detail: `"${m.trim()}" (숫자+단위) 가 근거 기사에 없음` });
     }
-    const han = u.text.match(HAN_RE);
-    if (han) warn.push({ level: "warn", rule: "han_in_ko", path: u.path, detail: han.join("") });
+    // 브리핑 본문은 괄호 병기 한자도 한국어 표기로 바꾸게 한다 (수리 프롬프트가 detail 을 그대로 씀)
+    const han = hanResidue(u.text, { allowParenthetical: false });
+    if (han.tokens.length) warn.push({ level: "warn", rule: "han_in_ko", path: u.path, detail: han.tokens.join("") });
     const lim = LIMITS.find(([re]) => re.test(u.path))?.[1];
     if (lim && u.text.length > Math.round(lim * 1.15))
       warn.push({ level: "warn", rule: "length", path: u.path, detail: `${u.text.length}/${lim}자` });
