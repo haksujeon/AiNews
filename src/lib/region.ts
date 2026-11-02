@@ -40,7 +40,22 @@ export const REGION_VERSION = {
   rule: "rule-v1",
   llm: "llm-v1",
   n8n: "n8n-v1",
+  /** 일일 재판정(/api/internal/region/rejudge, src/lib/region-judge.ts) — 백필과 같은 규칙 → LLM 경로 */
+  rejudgeRule: "rejudge-rule-v1",
+  rejudgeLlm: "rejudge-llm-v1",
 } as const;
+
+/** 백필 방식(고신뢰 규칙 → LLM)으로 판정된 판본 — 재판정 대상에서 뺀다 (n8n-v1·NULL 만 다시 본다) */
+export const BACKFILL_METHOD_VERSIONS: readonly string[] = [REGION_VERSION.rule, REGION_VERSION.llm, REGION_VERSION.rejudgeRule, REGION_VERSION.rejudgeLlm];
+
+/**
+ * 중국 주체 지역인가 (브리핑 중국 중심 규칙). 대표 지역은 정규화 뒤 CN 이지만(대만·홍콩·마카오 → CN, 결정 2026-11-02),
+ * 원시 값이 들어와도 같은 답이 되게 TW/HK/MO 도 CN 으로 본다.
+ */
+export function isChinaRegion(subject: string | null | undefined): boolean {
+  const s = (subject ?? "").trim().toUpperCase();
+  return s === "CN" || s === "TW" || s === "HK" || s === "MO";
+}
 
 const isSubject = (s: string): s is SubjectRegion => (SUBJECT_REGIONS as readonly string[]).includes(s);
 const isTag = (s: string): s is RegionTag => (REGION_TAGS as readonly string[]).includes(s);
@@ -194,7 +209,7 @@ const EXTRA: Record<RawRegion, (string | RegExp)[]> = {
   CN: [/중국(?!어)/, "中国", "国产", "国内", "국산", /국내(?!외)/, "우리나라", "베이징", "상하이", "항저우", "광저우", "北京", "上海", "深圳", "杭州", "广州",
     "샤오펑", "小鹏", "리오토", "理想汽车", "니오", "蔚来", "吉利", "OPPO", "vivo", "아너", "荣耀", "레노버", "联想", "하이크비전",
     "모어스레드", "摩尔线程", "沐曦", "하이곤", "海光", "비런", "壁仞", "MiniMax", "Manus", "마누스", "핀둬둬", "拼多多", "테무", "Temu",
-    "쉬인", "Shein", "SHEIN", "틱톡", "TikTok", "抖音", "더우인", "DJI", "大疆", "CATL", "宁德", "Zeekr", "지커", "아이치이", "爱奇艺", "빌리빌리", "哔哩哔哩",
+    "쉬인", "Shein", "SHEIN", "틱톡", "TikTok", "抖音", "더우인", "DJI", "大疆", "CATL", "宁德", "Zeekr", "지커", "아이치이", "爱奇艺", "빌리빌리", "哔哩哔哩", "B站",
     "샤오홍슈", "小红书", "샤오훙슈", "위안", "亿元", "万元", "커촹반", "科创板", "홍콩", "香港", "港股", "푸단", "复旦", "저장대", "浙江", "중관촌", "中关村", "우수커지", "넷이즈", "网易", "치후360", "360集团", "滴滴", "디디", "Momenta", "华大", "중국과학", "인민", "习近平", "시진핑", "위안화"],
   US: ["미국", "美国", "실리콘밸리", "硅谷", "워싱턴", "트럼프", "特朗普", "아마존", "Amazon", "AWS", "亚马逊", "xAI", "Grok", "그록", "머스크", "马斯克",
     "퀄컴", "Qualcomm", "高通", "Perplexity", "퍼플렉시티", "오라클", "Oracle", "甲骨文", "Salesforce", "Cursor", "커서", "브로드컴", "Broadcom", "博通",
