@@ -35,6 +35,8 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
   const locale = useLocale();
   const t = useTranslations("detail");
   const [relatedCount, setRelatedCount] = useState(3);
+  // 관련 기사는 이제 관련 있는 것만 온다(0~4건, src/lib/related.ts). 표시 수·버튼·격자는 실제 건수를 넘지 않게
+  const shown = Math.min(relatedCount, relatedNews.length);
 
   const title = getTitle(news, locale);
   const summary = getSummary(news, locale);
@@ -124,32 +126,35 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
         <section className="mt-16">
           <div className="mb-6 flex items-center justify-between border-b border-rule-strong pb-2">
             <h2 className="text-lg font-bold text-ink">{t("relatedNews")}</h2>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                disabled={relatedCount <= 1}
-                onClick={() => setRelatedCount((c) => Math.max(1, c - 1))}
-                aria-label={t("fewerRelated")}
-              >
-                <Minus className="h-4 w-4" aria-hidden="true" />
-              </Button>
-              <span className="w-6 text-center text-sm text-ink-2" aria-live="polite">{relatedCount}</span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                disabled={relatedCount >= Math.min(4, relatedNews.length)}
-                onClick={() => setRelatedCount((c) => Math.min(4, relatedNews.length, c + 1))}
-                aria-label={t("moreRelated")}
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </div>
+            {relatedNews.length > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={shown <= 1}
+                  onClick={() => setRelatedCount(Math.max(1, shown - 1))}
+                  aria-label={t("fewerRelated")}
+                >
+                  <Minus className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <span className="w-6 text-center text-sm text-ink-2" aria-live="polite">{shown}</span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={shown >= Math.min(4, relatedNews.length)}
+                  onClick={() => setRelatedCount(Math.min(4, relatedNews.length, shown + 1))}
+                  aria-label={t("moreRelated")}
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </div>
+            )}
           </div>
           <div
             className={`grid gap-x-8 gap-y-6 ${
+              // 칸 수는 고른 표시 수(relatedCount) 기준 — 결과가 1건이어도 카드가 화면 폭 전체로 커지지 않게
               relatedCount === 1
                 ? "grid-cols-1"
                 : relatedCount === 2
@@ -159,7 +164,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
                     : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
             }`}
           >
-            {relatedNews.slice(0, relatedCount).map((item) => (
+            {relatedNews.slice(0, shown).map((item) => (
               <NewsCard key={item.id} item={item} />
             ))}
           </div>

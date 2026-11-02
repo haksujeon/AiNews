@@ -106,13 +106,12 @@ export async function fetchNewsDetailClient(
   return res.json();
 }
 
+/** 관련 기사 (상세 페이지와 같은 findRelated). 기준 기사 id 만으로 정해진다 */
 export async function fetchRelatedNewsClient(
-  category: string | null,
-  excludeId: string,
+  newsId: string,
   limit: number = 4
 ): Promise<NewsItem[]> {
-  const params = new URLSearchParams({ exclude: excludeId, limit: String(limit) });
-  if (category) params.set('category', category);
+  const params = new URLSearchParams({ id: newsId, limit: String(limit) });
   const res = await fetch(apiUrl(`/api/news/related?${params.toString()}`));
   if (!res.ok) return [];
   return res.json();

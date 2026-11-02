@@ -91,6 +91,8 @@ export function NewsFilter({
     }
   }, [debouncedSearch]);
 
+  // 고를 값이 하나뿐이면(지금은 CN 하나) 국가 선택 칸은 정보가 없으므로 그리지 않는다 (P0-5)
+  const showCountry = countries.length > 1;
   const hasDateFilter = !!dateRange.from || !!dateRange.to;
   const hasActiveFilter = searchQuery || selectedCountry !== "ALL" || selectedCategories.length > 0 || hasDateFilter;
 
@@ -140,6 +142,8 @@ export function NewsFilter({
           <button
             key={cat}
             type="button"
+            data-testid="category-chip"
+            data-category={cat}
             aria-pressed={isSelected}
             onClick={() => toggleCategory(cat)}
             className={`
@@ -226,23 +230,25 @@ export function NewsFilter({
         <label className="text-sm font-medium">{t("dateRange")}</label>
         <DateRangePicker isMobile />
       </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium">{t("country")}</label>
-        <Select value={selectedCountry} onValueChange={(value) => {
-          onCountryChange(value);
-          if (isMobile) setIsSheetOpen(false);
-        }}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder={t("allCountries")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">{t("allCountries")}</SelectItem>
-            {countries.map((code) => (
-              <SelectItem key={code} value={code}>{getCountryLabel(code, locale)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {showCountry && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">{t("country")}</label>
+          <Select value={selectedCountry} onValueChange={(value) => {
+            onCountryChange(value);
+            if (isMobile) setIsSheetOpen(false);
+          }}>
+            <SelectTrigger className="w-full" data-testid="country-select">
+              <SelectValue placeholder={t("allCountries")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">{t("allCountries")}</SelectItem>
+              {countries.map((code) => (
+                <SelectItem key={code} value={code}>{getCountryLabel(code, locale)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <div className="space-y-2">
         <label className="text-sm font-medium">{t("category")}</label>
         <CategoryChips />
@@ -298,17 +304,19 @@ export function NewsFilter({
 
           <DateRangePicker />
 
-          <Select value={selectedCountry} onValueChange={onCountryChange}>
-            <SelectTrigger className="w-[130px] h-8 text-xs border-0 bg-transparent shadow-none">
-              <SelectValue placeholder={t("country")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">{t("allCountries")}</SelectItem>
-              {countries.map((code) => (
-                <SelectItem key={code} value={code}>{getCountryLabel(code, locale)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {showCountry && (
+            <Select value={selectedCountry} onValueChange={onCountryChange}>
+              <SelectTrigger className="w-[130px] h-8 text-xs border-0 bg-transparent shadow-none" data-testid="country-select">
+                <SelectValue placeholder={t("country")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">{t("allCountries")}</SelectItem>
+                {countries.map((code) => (
+                  <SelectItem key={code} value={code}>{getCountryLabel(code, locale)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           {hasActiveFilter && (
             <Button variant="ghost" size="sm" className="h-7 text-xs text-ink-2" onClick={handleReset}>

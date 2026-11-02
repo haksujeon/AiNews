@@ -9,6 +9,7 @@
 import type { PoolClient } from "pg";
 import pool from "@/lib/db";
 import { PUBLIC_NEWS_WHERE } from "@/lib/news-query";
+import { scopeCategorySql } from "@/lib/categories";
 import type { BriefingLocale, BriefingStatus, CandidateArticle, EditionMode } from "./types";
 
 /** 판 유형. 데일리·주간·월간이 같은 테이블·상태 기계·관리자 화면을 쓴다 (Gate 2) */
@@ -62,7 +63,7 @@ export const ROW_COLUMNS = `id, edition_type, to_char(edition_date, 'YYYY-MM-DD'
   model, prompt_version, llm_request_ids, input_tokens, output_tokens, cost_usd, latency_ms, error, needs_review,
   edited_by, created_at, updated_at, published_at`;
 
-/** 그날(베이징 news_date) 공개 AI 기사. endDate 를 주면 date~endDate (주말 합본) */
+/** 그날(베이징 news_date) 공개 범위 내(AI) 기사 — 분류 목록은 categories.ts. endDate 를 주면 date~endDate (주말 합본) */
 export async function loadCandidateArticles(date: string, endDate: string = date): Promise<CandidateArticle[]> {
   const { rows } = await pool.query(
     `SELECT id, source_name, source_url, category,
@@ -71,7 +72,7 @@ export async function loadCandidateArticles(date: string, endDate: string = date
             COALESCE(key_terms, '[]'::jsonb) AS key_terms
        FROM ai_news_ex
       WHERE ${PUBLIC_NEWS_WHERE}
-        AND category LIKE 'ai-%'
+        AND ${scopeCategorySql()}
         AND news_date >= ($1::date)::timestamp AT TIME ZONE 'UTC'
         AND news_date <  ($2::date + 1)::timestamp AT TIME ZONE 'UTC'
       ORDER BY id`,

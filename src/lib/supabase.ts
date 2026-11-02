@@ -6,17 +6,13 @@ export type { RankedNewsItem, NewsDay, NewsDaysPage, NewsDayRest } from './news-
 import type { NewsItem, NewsDaysPage, NewsDayRest, RankedNewsItem } from './news-types';
 import { NEWS_PAGE_SIZE, NEWS_DAYS_PER_PAGE, NEWS_DAY_TOP } from './news-types';
 import { buildNewsWhere, EMPTY_FILTERS, PUBLIC_NEWS_WHERE, type NewsFilters } from './news-query';
+import { SCOPE_CATEGORIES, publicCategoriesOf } from './categories';
+import { LIST_FIELDS } from './news-fields';
+import { findRelated } from './related';
 import { citedRanksFromTopStories, splitDay, type DaySplit, type RankableArticle } from './news-rank';
 import { EDITION_TYPE } from './briefing/repository';
 import { buildWeeklyTrend, type StatisticsData } from './statistics-utils';
 import { addDays, countBy, countByDay, dayBounds, fillDays, mondayOf, termCounts, volumeSummary } from './metrics/period';
-
-const LIST_FIELDS = `id,
-  to_char(created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
-  source_name, source_url,
-  to_char(news_date::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS news_date,
-  title_cn, title_kr, title_en, summary_cn, summary_kr, summary_en,
-  sentiment, category, thumbnail_url, og_image_url, country`;
 
 // content_cn(원문 전문)은 의도적으로 제외한다 — 공개 페이지/RSC 페이로드에 실리지 않도록.
 // is_hidden 은 상세 페이지가 noindex 여부를 정하는 데 쓴다.
@@ -188,21 +184,30 @@ export async function fetchNewsDayRest(
   return { date, total: ordered.length, items };
 }
 
-/** 필터 드롭다운 선택지. 로드된 페이지가 아니라 테이블 전체에서 뽑는다. */
+/** 분류 칩을 내보낼 최소 공개 기사 수 (행 몇 건만 생긴 분류가 칩으로 튀어나오지 않게) */
+export const FACET_MIN_COUNT = 5;
+
+/**
+ * 필터 드롭다운 선택지. 로드된 페이지가 아니라 테이블 전체에서 뽑는다.
+ * 분류 = 공개 분류(categories.ts PUBLIC_CATEGORIES) ∩ DB 에 FACET_MIN_COUNT 건 이상 있는 분류, PUBLIC_CATEGORIES 순서.
+ * 국가는 값 그대로 — 1개 이하면 화면(news-filter)이 선택 칸을 그리지 않는다.
+ */
 export async function fetchNewsFacets(): Promise<{
   countries: string[];
   categories: string[];
 }> {
   const { rows } = await pool.query(
     `SELECT
-       ARRAY(SELECT DISTINCT country  FROM ai_news_ex
-             WHERE ${PUBLIC_NEWS_WHERE} AND country  IS NOT NULL ORDER BY country)  AS countries,
-       ARRAY(SELECT DISTINCT category FROM ai_news_ex
-             WHERE ${PUBLIC_NEWS_WHERE} AND category IS NOT NULL ORDER BY category) AS categories`
+       ARRAY(SELECT DISTINCT country FROM ai_news_ex
+             WHERE ${PUBLIC_NEWS_WHERE} AND country IS NOT NULL ORDER BY country) AS countries,
+       ARRAY(SELECT category FROM ai_news_ex
+             WHERE ${PUBLIC_NEWS_WHERE} AND category = ANY($1::text[])
+             GROUP BY category HAVING COUNT(*) >= $2) AS categories`,
+    [SCOPE_CATEGORIES, FACET_MIN_COUNT]
   );
   return {
     countries: rows[0]?.countries ?? [],
-    categories: rows[0]?.categories ?? [],
+    categories: publicCategoriesOf(rows[0]?.categories ?? []),
   };
 }
 
@@ -269,24 +274,14 @@ export const fetchNewsById = cache(async (id: string): Promise<NewsItem | null> 
   return rows[0] ?? null;
 });
 
+/**
+ * 상세 페이지 관련 기사. 모달(/api/news/related)과 같은 src/lib/related.ts findRelated 를 쓴다 (Gate 2).
+ * 예전 호출부 모양(newsId, country, category)을 그대로 받되, 순위는 기준 기사 id 만으로 정한다.
+ */
 export async function fetchRelatedNews(
   newsId: string,
-  country: string | null,
-  category: string | null
+  ..._legacy: (string | null)[]
 ): Promise<NewsItem[]> {
-  const values: unknown[] = [newsId];
-  let sql = `SELECT ${LIST_FIELDS} FROM ai_news_ex
-             WHERE id != $1 AND ${PUBLIC_NEWS_WHERE}`;
-  if (country) {
-    values.push(country);
-    sql += ` AND country = $${values.length}`;
-  }
-  if (category) {
-    values.push(category);
-    sql += ` AND category = $${values.length}`;
-  }
-  sql += ` ORDER BY news_date DESC LIMIT 4`;
-
-  const { rows } = await pool.query(sql, values);
-  return rows;
+  void _legacy;
+  return findRelated(newsId);
 }

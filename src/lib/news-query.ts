@@ -6,6 +6,8 @@
  * 검색이 고장난 것처럼 보였다. (2026-08-27 조사 P1-1)
  * 이제 모든 필터는 전체 테이블을 대상으로 SQL에서 처리한다.
  */
+import { isPublicCategory } from "./categories";
+
 export interface NewsFilters {
   q: string;
   country: string;      // "ALL" = 전체
@@ -40,7 +42,10 @@ export function isCalendarDate(s: string): boolean {
   return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
 }
 
-/** URLSearchParams → NewsFilters (API 라우트와 클라이언트가 공유) */
+/**
+ * URLSearchParams → NewsFilters (API 라우트와 클라이언트가 공유).
+ * 분류는 공개 분류(categories.ts)만 받는다 — 예전 링크의 economy 등은 조용히 버려 전체로 본다.
+ */
 export function parseFilters(params: URLSearchParams): NewsFilters {
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
@@ -50,7 +55,8 @@ export function parseFilters(params: URLSearchParams): NewsFilters {
     categories: (params.get("categories") ?? "")
       .split(",")
       .map((c) => c.trim())
-      .filter(Boolean),
+      .filter((c) => isPublicCategory(c))
+      .filter((c, i, a) => a.indexOf(c) === i),
     from: DATE_RE.test(from) ? from : "",
     to: DATE_RE.test(to) ? to : "",
   };

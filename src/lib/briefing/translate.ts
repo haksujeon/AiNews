@@ -15,7 +15,8 @@ import {
   buildTranslateSystemPrompt,
   buildTranslateUserPrompt,
 } from "./prompt";
-import { HAN_RE, HANGUL_RE, citedRefs, normalizeContent } from "./validate";
+import { citedRefs, normalizeContent } from "./validate";
+import { HANGUL_RE, hanResidue } from "../text/han";
 
 type Target = "en" | "zh";
 
@@ -135,7 +136,9 @@ export function checkTranslation(ko: BriefingContent, tr: BriefingContent, targe
       continue;
     }
     if (HANGUL_RE.test(out)) problems.push(`${f.path}: Hangul remains ("${out.slice(0, 60)}")`);
-    if (target === "en" && new RegExp(HAN_RE.source).test(out)) problems.push(`${f.path}: Chinese characters in English text`);
+    // en 은 괄호 병기 원어도 허용하지 않는다 (예전 규칙 그대로)
+    if (target === "en" && hanResidue(out, { allowParenthetical: false }).tokens.length)
+      problems.push(`${f.path}: Chinese characters in English text`);
     if (/\d{7,}/.test(out.replace(/,/g, "")) && !/\d{7,}/.test(src.replace(/,/g, "")))
       problems.push(`${f.path}: raw long number ("${out.match(/\d[\d,]{6,}/)?.[0]}") — write it as million/billion (en) or 万/亿 (zh)`);
     // 万→10k 식 축약 금지 (원문에 k 가 없을 때)
