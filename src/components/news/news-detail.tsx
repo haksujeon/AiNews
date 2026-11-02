@@ -66,7 +66,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
       <div className="grid gap-12 lg:grid-cols-[minmax(0,42rem)_300px] lg:justify-between">
         {/* 읽기 칼럼 */}
         <div className="min-w-0">
-          <ArticleKicker category={news.category} sourceName={news.source_name} locale={locale} className="mb-3" />
+          <ArticleKicker category={news.category} sourceName={news.source_name} locale={locale} region={news.subject_region} regionTags={news.region_tags} className="mb-3" />
           <h1 className="mb-6 text-[28px] font-bold leading-[1.25] tracking-[-0.022em] text-ink sm:text-[34px] lg:text-[40px]">
             {title}
           </h1>

@@ -14,6 +14,7 @@ import { DailyVolumeChart } from "./daily-volume-chart";
 import { SourceChart } from "./source-chart";
 import { KeywordChart } from "./keyword-chart";
 import { WeeklyTrendChart } from "./weekly-trend-chart";
+import { RegionChart } from "./region-chart";
 
 interface StatisticsContainerProps {
   /** 서버(SQL)에서 집계된 통계 — fetchNewsStatistics() */
@@ -47,6 +48,7 @@ export function StatisticsContainer({ stats }: StatisticsContainerProps) {
         <SentimentChart data={sentimentStats} />
         <SourceChart data={sourceStats} />
         <WeeklyTrendChart data={weeklyTrend} />
+        {stats.regions.classified > 0 && <RegionChart data={stats.regions} />}
       </div>
 
       {/* Keywords - full width */}

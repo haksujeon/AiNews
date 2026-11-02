@@ -14,7 +14,7 @@ import { loadDayEditionRows } from './briefing/public';
 import { pickLinkEdition, pickRankEdition, toDayBriefingRef, type DayBriefingRef } from './briefing/day-select';
 import { isEditionPending } from './briefing/sla';
 import { buildWeeklyTrend, type StatisticsData } from './statistics-utils';
-import { addDays, countBy, countByDay, dayBounds, fillDays, mondayOf, termCounts, volumeSummary } from './metrics/period';
+import { addDays, countBy, countByDay, dayBounds, fillDays, mondayOf, regionCounts, termCounts, volumeSummary, type RegionCounts } from './metrics/period';
 
 // content_cn(원문 전문)은 의도적으로 제외한다 — 공개 페이지/RSC 페이로드에 실리지 않도록.
 // is_hidden 은 상세 페이지가 noindex 여부를 정하는 데 쓴다.
@@ -205,15 +205,19 @@ export async function fetchNewsDayRest(
 /** 분류 칩을 내보낼 최소 공개 기사 수 (행 몇 건만 생긴 분류가 칩으로 튀어나오지 않게) */
 export const FACET_MIN_COUNT = 5;
 
+export interface NewsFacets {
+  countries: string[];
+  categories: string[];
+  /** 지역 칩별 공개 기사 수 (통계·주간 지표와 같은 regionCounts). 판정된 기사가 없으면 화면이 칩을 그리지 않는다 */
+  regions: RegionCounts;
+}
+
 /**
  * 필터 드롭다운 선택지. 로드된 페이지가 아니라 테이블 전체에서 뽑는다.
  * 분류 = 노출 분류(categories.ts VISIBLE_CATEGORIES = 범위 − 숨김) ∩ DB 에 FACET_MIN_COUNT 건 이상 있는 분류, PUBLIC_CATEGORIES 순서.
  * 국가는 값 그대로 — 1개 이하면 화면(news-filter)이 선택 칸을 그리지 않는다.
  */
-export async function fetchNewsFacets(): Promise<{
-  countries: string[];
-  categories: string[];
-}> {
+export async function fetchNewsFacets(): Promise<NewsFacets> {
   const { rows } = await pool.query(
     `SELECT
        ARRAY(SELECT DISTINCT country FROM ai_news_ex
@@ -226,6 +230,7 @@ export async function fetchNewsFacets(): Promise<{
   return {
     countries: rows[0]?.countries ?? [],
     categories: publicCategoriesOf(rows[0]?.categories ?? []),
+    regions: await regionCounts(pool, { population: "all" }),
   };
 }
 
@@ -252,7 +257,7 @@ export async function fetchNewsStatistics(): Promise<StatisticsData> {
   const windowMonday = mondayOf(addDays(endDay, -(STATS_DAILY_WINDOW_DAYS - 1)));
   const startDay = bounds.first && bounds.first > windowMonday ? bounds.first : windowMonday;
 
-  const [k, categories, sentiments, sources, keywords, sparseDaily] = await Promise.all([
+  const [k, categories, sentiments, sources, keywords, sparseDaily, regions] = await Promise.all([
     volumeSummary(pool, all),
     countBy(pool, "category", all),
     countBy(pool, "sentiment", all),
@@ -260,6 +265,7 @@ export async function fetchNewsStatistics(): Promise<StatisticsData> {
     // 기사 1건에 같은 용어가 여러 번 있어도 1회로 센다
     termCounts(pool, { ...all, limit: 15 }),
     bounds.first ? countByDay(pool, { ...all, range: { start: startDay } }) : Promise.resolve([]),
+    regionCounts(pool, all),
   ]);
   const daily = bounds.first ? fillDays(startDay, endDay, sparseDaily) : [];
 
@@ -278,6 +284,7 @@ export async function fetchNewsStatistics(): Promise<StatisticsData> {
     keywords: keywords.map(({ term, count }) => ({ term, count })),
     daily,
     weekly: buildWeeklyTrend(daily),
+    regions,
   };
 }
 

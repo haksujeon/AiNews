@@ -7,4 +7,5 @@ export const LIST_FIELDS = `id,
   source_name, source_url,
   to_char(news_date::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS news_date,
   title_cn, title_kr, title_en, summary_cn, summary_kr, summary_en,
-  sentiment, category, thumbnail_url, og_image_url, country`;
+  sentiment, category, thumbnail_url, og_image_url, country,
+  subject_region, region_tags`;

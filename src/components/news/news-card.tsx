@@ -42,7 +42,7 @@ export function NewsCard({ item, outletCount }: NewsCardProps) {
           sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
         />
         <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-          <ArticleKicker category={item.category} sourceName={item.source_name} locale={locale} />
+          <ArticleKicker category={item.category} sourceName={item.source_name} locale={locale} region={item.subject_region} regionTags={item.region_tags} />
           <OutletCount count={outletCount} />
         </div>
         <h2 className="text-[17px] font-semibold leading-[1.45] tracking-[-0.015em] text-ink line-clamp-3 decoration-1 underline-offset-[3px] group-hover:underline">

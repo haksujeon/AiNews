@@ -25,6 +25,9 @@ export interface NewsItem {
   thumbnail_url: string | null;
   og_image_url: string | null;
   country: string | null;
+  // 대상 지역 (src/lib/region.ts): 대표 지역 1개 + 태그. 미판정이면 null / []
+  subject_region?: string | null;
+  region_tags?: string[] | null;
   // 상세 조회(fetchNewsById)에만 실린다. 숨긴 기사(AI 무관 등)는 목록에서 빠지고 상세는 noindex.
   is_hidden?: boolean;
 }
