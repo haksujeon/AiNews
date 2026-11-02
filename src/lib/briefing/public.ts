@@ -56,20 +56,27 @@ export function pruneToVisible(content: StoredBriefingContent, visible: Set<stri
 
 const TITLE_COL: Record<BriefingLocale, string> = { ko: "title_kr", en: "title_en", zh: "title_cn" };
 
-/** 최신 발행본(date 없음) 또는 그 날짜 발행본. 없으면 null */
-export async function getPublishedBriefing(locale: BriefingLocale, date?: string): Promise<PublicBriefing | null> {
-  const { rows } = await pool.query(
-    `SELECT id, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, locale, version, mode, published_at, needs_review,
-            content, article_ids
-       FROM daily_briefings
-      WHERE status = 'published' AND edition_type = $1 AND locale = $2 AND ($3::date IS NULL OR edition_date = $3::date)
-      ORDER BY edition_date DESC LIMIT 1`,
-    [EDITION_TYPE, locale, date ?? null]
-  );
-  const row = rows[0];
-  if (!row) return null;
+interface RawBriefingRow {
+  id: string;
+  edition_date: string;
+  locale: BriefingLocale;
+  version: number;
+  mode: string;
+  published_at: string | null;
+  needs_review: boolean;
+  content: StoredBriefingContent;
+  article_ids: string[];
+}
 
-  const titleCol = TITLE_COL[locale];
+const RAW_COLUMNS = `id, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, locale, version, mode, published_at,
+  needs_review, content, article_ids`;
+
+/**
+ * 행 → 화면용 판. 공개 페이지와 관리자 검토 화면이 같은 함수로 인용 기사를 붙이고 숨긴 기사를 걸러낸다 (Gate 2).
+ * available_locales 는 같은 날짜에 발행된 언어판.
+ */
+async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
+  const titleCol = TITLE_COL[row.locale] ?? "title_kr";
   const [{ rows: arts }, { rows: locs }] = await Promise.all([
     pool.query(
       `SELECT id, COALESCE(NULLIF(${titleCol}, ''), NULLIF(title_kr, ''), title_cn, '') AS title,
@@ -77,7 +84,7 @@ export async function getPublishedBriefing(locale: BriefingLocale, date?: string
               to_char(news_date AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS news_date
          FROM ai_news_ex
         WHERE id = ANY($1::uuid[]) AND ${PUBLIC_NEWS_WHERE}`,
-      [row.article_ids]
+      [row.article_ids ?? []]
     ),
     pool.query(
       `SELECT locale FROM daily_briefings
@@ -94,10 +101,85 @@ export async function getPublishedBriefing(locale: BriefingLocale, date?: string
     locale: row.locale,
     version: row.version,
     mode: row.mode,
-    published_at: row.published_at,
+    published_at: row.published_at ?? "",
     needs_review: row.needs_review,
     available_locales: locs.map((l) => l.locale),
     content: pruneToVisible(row.content as StoredBriefingContent, new Set(Object.keys(articles))),
     articles,
   };
+}
+
+/**
+ * 최신 발행본(date 없음) 또는 그 날짜 발행본. 없으면 null.
+ * 브리핑 페이지·홈 띠·GET /api/briefing 이 모두 이 함수를 쓴다 (Gate 2).
+ */
+export async function getPublishedBriefing(locale: BriefingLocale, date?: string): Promise<PublicBriefing | null> {
+  const { rows } = await pool.query(
+    `SELECT ${RAW_COLUMNS}
+       FROM daily_briefings
+      WHERE status = 'published' AND edition_type = $1 AND locale = $2 AND ($3::date IS NULL OR edition_date = $3::date)
+      ORDER BY edition_date DESC LIMIT 1`,
+    [EDITION_TYPE, locale, date ?? null]
+  );
+  const row = rows[0] as RawBriefingRow | undefined;
+  return row ? hydrate(row) : null;
+}
+
+/** 관리자 검토용: 상태와 관계없이 id 로 한 판 (발행 화면과 같은 hydrate) */
+export async function getBriefingForReview(id: string): Promise<PublicBriefing | null> {
+  const { rows } = await pool.query(`SELECT ${RAW_COLUMNS} FROM daily_briefings WHERE id = $1::uuid AND edition_type = $2`, [
+    id,
+    EDITION_TYPE,
+  ]);
+  const row = rows[0] as RawBriefingRow | undefined;
+  if (!row || !row.content || !(row.content as Partial<StoredBriefingContent>).top_stories) return null;
+  return hydrate(row);
+}
+
+/**
+ * 그 날짜(없으면 가장 최근 날짜)에 발행된 언어판 목록. 요청한 언어판이 없을 때 안내용.
+ * date 없이 부르면 { date, locales } 의 date 는 어느 언어든 가장 최근 발행 날짜.
+ */
+export async function getPublishedLocales(date?: string): Promise<{ date: string; locales: BriefingLocale[] } | null> {
+  const { rows } = await pool.query(
+    `SELECT to_char(edition_date, 'YYYY-MM-DD') AS d, array_agg(locale ORDER BY locale) AS locales
+       FROM daily_briefings
+      WHERE status = 'published' AND edition_type = $1 AND ($2::date IS NULL OR edition_date = $2::date)
+      GROUP BY edition_date ORDER BY edition_date DESC LIMIT 1`,
+    [EDITION_TYPE, date ?? null]
+  );
+  return rows[0] ? { date: rows[0].d, locales: rows[0].locales } : null;
+}
+
+export interface EditionSummary {
+  edition_date: string;
+  headline: string;
+  lede: string;
+  top_count: number;
+}
+
+/** 아카이브: 그 언어로 발행된 판 목록 (최신순) */
+export async function listPublishedEditions(locale: BriefingLocale, limit = 120): Promise<EditionSummary[]> {
+  const { rows } = await pool.query(
+    `SELECT to_char(edition_date, 'YYYY-MM-DD') AS edition_date, content->>'headline' AS headline,
+            content->>'lede' AS lede, COALESCE(jsonb_array_length(content->'top_stories'), 0) AS top_count
+       FROM daily_briefings
+      WHERE status = 'published' AND edition_type = $1 AND locale = $2
+      ORDER BY edition_date DESC LIMIT $3`,
+    [EDITION_TYPE, locale, limit]
+  );
+  return rows as EditionSummary[];
+}
+
+/** 이전·다음 발행판 날짜 (같은 언어) */
+export async function getAdjacentEditions(locale: BriefingLocale, date: string): Promise<{ prev: string | null; next: string | null }> {
+  const { rows } = await pool.query(
+    `SELECT
+       (SELECT to_char(MAX(edition_date), 'YYYY-MM-DD') FROM daily_briefings
+         WHERE status = 'published' AND edition_type = $1 AND locale = $2 AND edition_date < $3::date) AS prev,
+       (SELECT to_char(MIN(edition_date), 'YYYY-MM-DD') FROM daily_briefings
+         WHERE status = 'published' AND edition_type = $1 AND locale = $2 AND edition_date > $3::date) AS next`,
+    [EDITION_TYPE, locale, date]
+  );
+  return { prev: rows[0]?.prev ?? null, next: rows[0]?.next ?? null };
 }

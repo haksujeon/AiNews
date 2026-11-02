@@ -10,6 +10,8 @@
   /* 로케일별 서체 스택은 :root / :root:lang(zh) 의 --app-sans 에서 고른다 */
   --font-sans: var(--app-sans);
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* 한자 명조 (브리핑 '오늘의 용어' 등 원어 한자 전용). 웹폰트 없이 시스템 명조만 쓴다 */
+  --font-han: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "Noto Serif SC", "SimSun", serif;
   /* ─── Briefing Desk 편집 토큰 (§3.3) ─── */
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
