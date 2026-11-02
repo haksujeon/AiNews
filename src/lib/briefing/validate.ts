@@ -301,7 +301,10 @@ export function citedRefs(c: BriefingContent): string[] {
 export { HAN_RE, HANGUL_RE } from "../text/han";
 /** 문장 속 숫자 (주간·월간 검증기도 같은 정규식을 쓴다) */
 export const NUM_RE = /\d[\d,.]*/g;
-const NUM_UNIT_RE = /\d[\d,.]*\s?(?:%|위안|위|억|만|명|개|점|회|대|배|달러|MW|GW|B\b|년|월|일|시간|종|팀|건|곳|조)/g;
+// 숫자는 숫자로 끝나야 하고("Genie 2, 대화형" 의 "2, 대" 는 아님), 한 글자 단위가 띄어 쓰여 있으면 뒤에 한글이 이어지지 않아야 한다
+// ("86 대규모" 는 "86대" 가 아님). 2026-11-02 재생성에서 이 오탐으로 중국 주체 기사가 빠져 판 전체가 실패했다.
+const UNIT1 = "위|억|만|명|개|점|회|대|배|년|월|일|종|팀|건|곳|조";
+const NUM_UNIT_RE = new RegExp(`\\d(?:[\\d,.]*\\d)?(?:\\s?(?:%|위안|달러|시간|MW|GW|B\\b)|(?:${UNIT1})|\\s(?:${UNIT1})(?![가-힣]))`, "g");
 /** 숫자 대조용 정규화: 공백·쉼표 제거 */
 export const norm = (s: string) => s.replace(/[\s,]/g, "");
 

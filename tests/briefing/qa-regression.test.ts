@@ -20,7 +20,7 @@ import {
   staleEventIssues,
   type SourceDoc,
 } from "../../src/lib/briefing/rules";
-import { contextFromArticles, fitSentenceLengths, stripParentheticalHan, unsupportedEntities, normalizeContent } from "../../src/lib/briefing/validate";
+import { contextFromArticles, fitSentenceLengths, stripParentheticalHan, unsupportedEntities, normalizeContent, validateKo } from "../../src/lib/briefing/validate";
 import { cvoConflict, rankIssues, uncitedDirectionConflicts, validateWeekly, normalizeWeekly } from "../../src/lib/briefing/periodic/validate";
 import { buildStoryPool, moneyRowProblem } from "../../src/lib/briefing/periodic/prompt";
 import { numericValues, checkTranslation } from "../../src/lib/briefing/translate";
@@ -333,6 +333,19 @@ test("주간 한자 정리: W44 big_picture 의 '구현형 AI(具身智能)와 �
   assert.equal(g.big_picture[0].text, "구현형 AI와 에이전트 등 용어 언급이 늘었다.");
   assert.equal(g.term!.term, "智能体"); // 용어 칸 원어는 그대로
   assert.equal(g.term!.why, "에이전트 언급");
+});
+
+test("숫자+단위 오탐: 'Genie 2, 대화형'·'86 대규모' 는 숫자+단위가 아니다 (10-28·10-31 재생성 실패 원인), '2위' 는 그대로 잡는다", () => {
+  const arts = [{ id: "a", source_name: "36Kr", source_url: null, category: "ai-tech", title_cn: "", title_kr: "Genie 2 대화형 세계 모델", summary_kr: "로봇 86대가 대규모 학습", ai_insights_kr: "", key_terms: [] }] as CandidateArticle[];
+  const ctx = contextFromArticles(arts, "short");
+  const c = normalizeContent({
+    headline: "Genie 2 공개",
+    lede: "Genie 2, 대화형 모델이다. 로봇 86 대규모 학습.",
+    lede_refs: ["a"],
+    top_stories: [{ title: "구글 Genie 2, 대화형 세계 모델", what: "로봇 86 대규모 학습을 했다.", why: "2위를 했다.", refs: ["a"], subject: "구글" }],
+  }).content;
+  const fatal = validateKo(c, ctx).report.fatal.filter((f) => f.rule === "number_unit_not_in_source");
+  assert.deepEqual(fatal.map((f) => f.path), ["top_stories[0].why"], JSON.stringify(fatal));
 });
 
 test("범위 토큰: '일반 GPU에서 구동' 의 GPU 는 플랫폼 범위가 아니다 (10-27 재생성 오탐)", () => {
