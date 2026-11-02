@@ -160,7 +160,14 @@
     "loadError": "뉴스를 불러오지 못했습니다.",
     "loadErrorHint": "네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
     "loadMoreError": "다음 기사를 불러오지 못했습니다.",
-    "groupCount": "{count}건"
+    "groupCount": "{count}건",
+    "dayTopTotal": "주요 {top}건 · 전체 {total}건",
+    "expandDay": "이날 기사 {count}건 더 보기",
+    "collapseDay": "접기",
+    "expandLoading": "이날 기사를 불러오는 중...",
+    "expandError": "이날 기사를 불러오지 못했습니다.",
+    "outlets": "{count}개 매체 보도",
+    "allDaysLoaded": "모든 날짜를 불러왔습니다 (총 {total}건)"
   },
   "briefing": {
     "kicker": "오늘의 중국 AI 브리핑",

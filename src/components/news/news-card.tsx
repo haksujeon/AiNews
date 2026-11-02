@@ -6,9 +6,12 @@ import type { NewsItem } from "@/lib/supabase";
 import { getTitle, getSummary, getImageUrl } from "@/lib/news-utils";
 import { NewsThumbnail } from "./news-thumbnail";
 import { ArticleKicker } from "./article-kicker";
+import { OutletCount } from "./outlet-count";
 
 interface NewsCardProps {
   item: NewsItem;
+  /** 같은 글을 실은 매체 수 (날짜별 목록의 전재 묶음). 2 이상이면 "N개 매체 보도" */
+  outletCount?: number;
 }
 
 /**
@@ -18,7 +21,7 @@ interface NewsCardProps {
  *
  * 표면: 테두리·둥근 모서리·그림자·블러 없이 위쪽 괘선과 여백으로만 구분한다.
  */
-export function NewsCard({ item }: NewsCardProps) {
+export function NewsCard({ item, outletCount }: NewsCardProps) {
   const locale = useLocale();
   const title = getTitle(item, locale);
   const summary = getSummary(item, locale);
@@ -38,7 +41,10 @@ export function NewsCard({ item }: NewsCardProps) {
           className="mb-1 aspect-[16/9] w-full"
           sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
         />
-        <ArticleKicker category={item.category} sourceName={item.source_name} locale={locale} />
+        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <ArticleKicker category={item.category} sourceName={item.source_name} locale={locale} />
+          <OutletCount count={outletCount} />
+        </div>
         <h2 className="text-[17px] font-semibold leading-[1.45] tracking-[-0.015em] text-ink line-clamp-3 decoration-1 underline-offset-[3px] group-hover:underline">
           {title}
         </h2>

@@ -160,7 +160,14 @@
     "loadError": "无法加载新闻。",
     "loadErrorHint": "请检查网络后重试。",
     "loadMoreError": "无法加载更多文章。",
-    "groupCount": "{count} 篇"
+    "groupCount": "{count} 篇",
+    "dayTopTotal": "要闻 {top} 篇 · 共 {total} 篇",
+    "expandDay": "查看当天其余 {count} 篇",
+    "collapseDay": "收起",
+    "expandLoading": "正在加载当天文章...",
+    "expandError": "无法加载当天文章。",
+    "outlets": "{count} 家媒体报道",
+    "allDaysLoaded": "已加载全部日期（共 {total} 篇）"
   },
   "briefing": {
     "kicker": "今日中国AI简报",

@@ -3,45 +3,41 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Search, Loader2, AlertTriangle, RotateCw } from "lucide-react";
-import type { NewsItem } from "@/lib/news-types";
-import { NEWS_PAGE_SIZE } from "@/lib/news-types";
-import { fetchNewsPageClient, isAbortError } from "@/lib/supabase-client";
-import { groupNewsByDate, formatDateGroup } from "@/lib/news-utils";
+import type { NewsDay, NewsDaysPage } from "@/lib/news-types";
+import { NEWS_DAYS_PER_PAGE } from "@/lib/news-types";
+import { fetchNewsDaysClient, isAbortError } from "@/lib/supabase-client";
+import { formatDateGroup } from "@/lib/news-utils";
 import type { DateRange } from "@/lib/news-utils";
 import type { NewsFilters } from "@/lib/news-query";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Button } from "@/components/ui/button";
-import { NewsCard } from "./news-card";
-import { NewsListItem } from "./news-list-item";
 import { NewsFilter } from "./news-filter";
 import { NewsContainerSkeleton } from "./news-skeleton";
+import { NewsDayGroup } from "./news-day-group";
 
 interface NewsContainerProps {
-  news: NewsItem[];
-  /** 필터 조건에 맞는 전체 건수 (로드된 개수가 아님) */
-  initialTotal?: number;
+  /** 서버가 렌더한 첫 페이지 (최근 NEWS_DAYS_PER_PAGE 일, 날마다 주요 4건) */
+  initialPage: NewsDaysPage;
   /** 테이블 전체 기준 필터 선택지 */
   facets?: { countries: string[]; categories: string[] };
   isLoading?: boolean;
 }
 
+// 목록은 날짜(베이징 news_date) 단위로 받는다. 날마다 공용 순위(src/lib/news-rank.ts)의 주요 4건만 먼저 보이고,
+// "이날 기사 N건 더 보기"로 그날 전체를 펼친다 (NewsDayGroup). 무한 스크롤 한 번 = 다음 NEWS_DAYS_PER_PAGE 일.
+// 검색·필터가 있으면 걸러진 기사 안에서 같은 방식(날짜 묶음 + 주요 4건 + 펼치기)으로 보인다.
+//
 // 기사 상세는 카드/리스트 항목의 링크(/news/[id])로 연다.
 // 소프트 이동이면 @modal/(.)news/[id] 가 모달로 가로채고, 직접 접속이면 전체 페이지가 뜬다.
-// (예전의 selectedItem 상태 기반 모달은 제거 — 모든 진입점이 같은 경로를 쓴다)
-export function NewsContainer({
-  news: initialNews,
-  initialTotal,
-  facets,
-  isLoading = false,
-}: NewsContainerProps) {
+export function NewsContainer({ initialPage, facets, isLoading = false }: NewsContainerProps) {
   const locale = useLocale();
   const t = useTranslations("list");
   const tc = useTranslations("common");
-  const [allNews, setAllNews] = useState<NewsItem[]>(initialNews);
-  const [total, setTotal] = useState(initialTotal ?? initialNews.length);
+  const [days, setDays] = useState<NewsDay[]>(initialPage.days);
+  const [total, setTotal] = useState(initialPage.total);
+  const [nextCursor, setNextCursor] = useState<string | null>(initialPage.nextCursor);
   const [loadingMore, setLoadingMore] = useState(false);
   const [filtering, setFiltering] = useState(false);
-  const [hasMore, setHasMore] = useState(initialNews.length >= NEWS_PAGE_SIZE);
   // 첫 페이지(필터 변경) 실패 / 추가 로드 실패를 따로 관리한다.
   // moreError 가 있으면 무한 스크롤을 멈춰 재시도 루프를 막는다.
   const [listError, setListError] = useState(false);
@@ -56,6 +52,7 @@ export function NewsContainer({
   // 필터가 바뀔 때마다 증가. 이전 세대의 응답(추가 로드 포함)은 버린다.
   const generationRef = useRef(0);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
+  const hasMore = nextCursor !== null;
 
   // 검색어는 타이핑마다 요청하지 않도록 디바운스한다.
   const debouncedQuery = useDebounce(searchQuery, 350);
@@ -96,18 +93,18 @@ export function NewsContainer({
     setFiltering(true);
     setListError(false);
     setMoreError(false);
-    fetchNewsPageClient(0, NEWS_PAGE_SIZE, filters, controller.signal)
+    fetchNewsDaysClient(null, filters, locale, controller.signal)
       .then((page) => {
         if (generation !== generationRef.current) return;
-        setAllNews(page.items);
+        setDays(page.days);
         setTotal(page.total);
-        setHasMore(page.items.length < page.total);
+        setNextCursor(page.nextCursor);
       })
       .catch((e) => {
         if (isAbortError(e) || generation !== generationRef.current) return;
         console.warn("[news] list fetch failed", e);
         setListError(true);
-        setHasMore(false);
+        setNextCursor(null);
       })
       .finally(() => {
         if (generation === generationRef.current) setFiltering(false);
@@ -115,37 +112,32 @@ export function NewsContainer({
     return () => {
       controller.abort();
     };
-  }, [filters, isInitialFilters, reloadToken]);
+  }, [filters, isInitialFilters, reloadToken, locale]);
 
-  // Sync if initialNews changes (e.g. revalidation)
+  // Sync if initialPage changes (e.g. revalidation)
   useEffect(() => {
-    setAllNews(initialNews);
-    setTotal(initialTotal ?? initialNews.length);
-    setHasMore(initialNews.length >= NEWS_PAGE_SIZE);
-  }, [initialNews, initialTotal]);
+    setDays(initialPage.days);
+    setTotal(initialPage.total);
+    setNextCursor(initialPage.nextCursor);
+  }, [initialPage]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || filtering || !hasMore || moreError || listError) return;
+    if (loadingMore || filtering || !nextCursor || moreError || listError) return;
     const generation = generationRef.current;
     const controller = new AbortController();
     loadMoreAbortRef.current = controller;
     setLoadingMore(true);
     try {
-      // 현재 필터를 유지한 채 다음 페이지를 받는다.
-      const page = await fetchNewsPageClient(allNews.length, NEWS_PAGE_SIZE, filters, controller.signal);
+      // 현재 필터를 유지한 채 커서(마지막 날짜) 이전의 날들을 받는다.
+      const page = await fetchNewsDaysClient(nextCursor, filters, locale, controller.signal);
       // 그 사이 필터가 바뀌었으면 이 결과는 다른 목록의 것이므로 버린다.
       if (generation !== generationRef.current) return;
-      if (page.items.length === 0) {
-        setHasMore(false);
-      } else {
-        setTotal(page.total);
-        setAllNews((prev) => {
-          const existingIds = new Set(prev.map((n) => n.id));
-          const merged = [...prev, ...page.items.filter((n) => !existingIds.has(n.id))];
-          setHasMore(merged.length < page.total);
-          return merged;
-        });
-      }
+      setTotal(page.total);
+      setDays((prev) => {
+        const seen = new Set(prev.map((d) => d.date));
+        return [...prev, ...page.days.filter((d) => !seen.has(d.date))];
+      });
+      setNextCursor(page.days.length ? page.nextCursor : null);
     } catch (e) {
       if (isAbortError(e) || generation !== generationRef.current) return;
       console.warn("[news] load more failed", e);
@@ -154,7 +146,7 @@ export function NewsContainer({
       if (loadMoreAbortRef.current === controller) loadMoreAbortRef.current = null;
       setLoadingMore(false);
     }
-  }, [allNews.length, loadingMore, filtering, hasMore, moreError, listError, filters]);
+  }, [nextCursor, loadingMore, filtering, moreError, listError, filters, locale]);
 
   // IntersectionObserver for infinite scroll (오류 상태에서는 멈춘다)
   useEffect(() => {
@@ -181,9 +173,6 @@ export function NewsContainer({
   // 필터 선택지는 서버가 테이블 전체에서 뽑아 넘겨준 값을 쓴다.
   const countries = facets?.countries ?? [];
   const categories = facets?.categories ?? [];
-
-  // 필터링은 서버(SQL)에서 끝났으므로 allNews 가 곧 결과다.
-  const dateGroups = useMemo(() => groupNewsByDate(allNews), [allNews]);
 
   const filterKey = `${selectedCategories.join(",")}-${selectedCountry}-${debouncedQuery}-${dateRange.from || ""}-${dateRange.to || ""}`;
 
@@ -254,7 +243,7 @@ export function NewsContainer({
             {tc("retry")}
           </Button>
         </div>
-      ) : allNews.length === 0 ? (
+      ) : days.length === 0 ? (
         <div className="py-20 text-center">
           <Search className="mx-auto mb-4 h-10 w-10 text-ink-3" aria-hidden="true" />
           <h3 className="mb-2 text-lg font-semibold text-ink">{t("noResults")}</h3>
@@ -262,33 +251,15 @@ export function NewsContainer({
         </div>
       ) : (
         <div key={`content-${filterKey}`} className="space-y-12">
-          {dateGroups.map((group) => (
-            <section key={group.date} aria-labelledby={`date-${group.date}`}>
-              <div className="mb-2 flex items-baseline justify-between gap-4 border-b-2 border-rule-strong pb-2">
-                <h3 id={`date-${group.date}`} className="text-[15px] font-bold text-ink">
-                  {group.date === "unknown"
-                    ? t("unknownDate")
-                    : formatDateGroup(group.date, locale)}
-                </h3>
-                <span className="text-xs text-ink-3">
-                  {t("groupCount", { count: group.items.length })}
-                </span>
-              </div>
-
-              {viewMode === "grid" ? (
-                <div className="grid grid-cols-1 gap-x-8 gap-y-8 pt-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {group.items.map((item) => (
-                    <NewsCard key={item.id} item={item} />
-                  ))}
-                </div>
-              ) : (
-                <div>
-                  {group.items.map((item) => (
-                    <NewsListItem key={item.id} item={item} />
-                  ))}
-                </div>
-              )}
-            </section>
+          {days.map((day) => (
+            <NewsDayGroup
+              key={day.date}
+              day={day}
+              heading={formatDateGroup(day.date, locale)}
+              viewMode={viewMode}
+              filters={filters}
+              locale={locale}
+            />
           ))}
         </div>
       )}
@@ -317,9 +288,9 @@ export function NewsContainer({
           </Button>
         </div>
       )}
-      {!hasMore && !listError && allNews.length > NEWS_PAGE_SIZE && (
+      {!hasMore && !listError && days.length > NEWS_DAYS_PER_PAGE && (
         <p className="text-center text-xs text-ink-3 py-4">
-          {t("allLoaded", { total })}
+          {t("allDaysLoaded", { total })}
         </p>
       )}
     </div>

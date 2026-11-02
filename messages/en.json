@@ -160,7 +160,14 @@
     "loadError": "Couldn't load the news.",
     "loadErrorHint": "Check your connection and try again.",
     "loadMoreError": "Couldn't load more articles.",
-    "groupCount": "{count} articles"
+    "groupCount": "{count} articles",
+    "dayTopTotal": "Top {top} · {total} total",
+    "expandDay": "Show {count} more from this day",
+    "collapseDay": "Show less",
+    "expandLoading": "Loading this day's articles...",
+    "expandError": "Couldn't load this day's articles.",
+    "outlets": "Reported by {count} outlets",
+    "allDaysLoaded": "All dates loaded ({total} articles in total)"
   },
   "briefing": {
     "kicker": "Today's China AI Briefing",
