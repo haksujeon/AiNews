@@ -2,7 +2,8 @@
  * 브리핑 의미 규칙 — 데일리(validate.ts)와 주간·월간(periodic/validate.ts)이 같은 함수를 쓴다 (Gate 2).
  * 편집 QA 감사(2026-11-02, 주장 454건 중 오류 53건)에서 나온 패턴을 결정적으로 잡는다.
  *
- *  - isChinaSubject: 중국 중심 규칙의 "중국 주체" 판정 (하나의 함수 — subject_region 이 들어오면 여기만 바꾼다)
+ *  - isChinaSubject: 중국 중심 규칙의 "중국 주체" 판정 (하나의 함수). 근거 기사 subject_region 기준 + LLM 표시 교차 확인,
+ *      미판정(NULL)이면 예전 실체 규칙. isChinaCandidate: 후보 기사 하나의 같은 판정 (프롬프트 cn 표시·수리 힌트)
  *  - claimIssues: 최상급·서열("최고/최대/첫/유일/역대/1위/가장")과 추세 단정("주도/재편/이동/가열/주류")이
  *      인용 기사에 있는지, 원문이 '중'·'전망'·'가능성' 같은 수식어로 한정했는데 브리핑이 그 수식어를 뺐는지
  *  - staleEventIssues: 근거 기사가 날짜로 못 박은 예전 사건(편집일보다 STALE_DAYS 넘게 전)을 시점 표시 없이 오늘 일처럼
@@ -15,6 +16,7 @@
  * 이 파일은 DB 를 import 하지 않는다 (단위 테스트).
  */
 import { LATIN_STOP, entityMentioned, findEntities, isChineseSubject, properNouns, type Entity } from "./entities";
+import { isChinaRegion } from "../region";
 
 /** 근거 기사 한 건 (한국어 번역 + 중국어 원문). 데일리 후보·주간 이야기 묶음이 같은 모양으로 넘긴다 */
 export interface SourceDoc {
@@ -26,7 +28,7 @@ export interface SourceDoc {
   /** YYYY-MM-DD (베이징 날짜) */
   news_date?: string;
   source_name?: string;
-  /** 기사 주체 지역 (분류기 v2, 아직 판정에 쓰지 않음 — isChinaSubject 참고) */
+  /** 기사 대상 지역 (ai_news_ex.subject_region, region.ts). isChinaSubject 가 쓴다 — NULL 이면 예전 실체 규칙 */
   subject_region?: string | null;
 }
 
@@ -56,20 +58,39 @@ export interface ChinaStory {
   subject?: string;
   title?: string;
   text?: string;
+  /** 데일리 top_stories 만 (LLM 표시). 주간·월간 흐름에는 없다 */
   subject_is_chinese?: boolean;
 }
 
+/** 근거 기사 한 묶음(ref 하나 = 대표 기사 + 전재 형제, 주간·월간은 S id 하나 = 사건 전체)의 대상 지역 투표: CN | 해외 | 판정 없음 */
+type GroupVote = "cn" | "other" | null;
+
+function groupVote(group: SourceDoc[]): GroupVote {
+  const judged = group.filter((d) => typeof d.subject_region === "string" && d.subject_region.trim() !== "");
+  if (!judged.length) return null;
+  const cn = judged.filter((d) => isChinaRegion(d.subject_region)).length;
+  return cn * 2 >= judged.length ? "cn" : "other";
+}
+
 /**
- * 이야기의 주체가 중국 기업·기관인가. 데일리 top_stories 와 주간·월간 big_picture 가 같은 함수를 쓴다.
+ * 근거 기사 대상 지역(subject_region)으로 본 중국 주체 여부. 판정된 기사가 하나도 없으면 null (→ 예전 실체 규칙).
+ * ref(묶음) 단위로 먼저 다수결(동수 = 중국)한 뒤 ref 끼리 다수결(동수 = 중국) — 많이 보도된 사건 하나가 기사 수로 다른 ref 를 덮지 않게.
+ * CN 에는 대만·홍콩·마카오가 들어간다 (사용자 결정 2026-11-02, region.ts isChinaRegion).
+ */
+export function chinaByRegion(groups: SourceDoc[][]): boolean | null {
+  const votes = groups.map(groupVote).filter((v): v is "cn" | "other" => v !== null);
+  if (!votes.length) return null;
+  return votes.filter((v) => v === "cn").length * 2 >= votes.length;
+}
+
+/**
+ * (예전 규칙, subject_region 이 없는 근거 기사일 때만) 이름표·지명 기준.
  *  1) subject·제목에 중국 실체(이름표)나 중국 지명이 있으면 중국 주체
  *  2) 이름표에 없는 중국 기업(쉰처·Diffusion Intelligence 등)은 LLM 표시(subject_is_chinese)를 믿되,
  *     subject 가 해외 실체로만 이루어졌으면(OpenAI 를 중국으로 표시) 믿지 않는다
  *  3) 주간·월간 흐름(text)은 본문에 중국 실체·지명이 있으면 중국 주체
- * articles: 근거 기사 — 기사 주체 지역(subject_region)이 운영에 들어오면 이 함수 안에서만 바꾼다
- *   (예: articles 의 과반이 subject_region === "CN" 이면 중국 주체). 지금은 쓰지 않는다.
  */
-export function isChinaSubject(story: ChinaStory, articles: SourceDoc[] = []): boolean {
-  void articles;
+export function isChinaSubjectLegacy(story: ChinaStory): boolean {
   if (story.subject && isChineseSubject(story.subject)) return true;
   if (story.title && findEntities(story.title).some((e) => e.chinese)) return true;
   if (story.text && isChineseSubject(story.text)) return true;
@@ -78,6 +99,26 @@ export function isChinaSubject(story: ChinaStory, articles: SourceDoc[] = []): b
     return !(es.length && es.every((e) => !e.chinese));
   }
   return false;
+}
+
+/**
+ * 이야기의 주체가 중국 기업·기관인가. 데일리 top_stories 와 주간·월간 big_picture 가 같은 함수를 쓴다 (Gate 2).
+ * articles: 근거 기사 — ref 별 묶음(SourceDoc[][]) 또는 평평한 목록(기사 하나 = 묶음 하나).
+ *  - 근거 기사에 대상 지역이 있으면: 지역 투표(chinaByRegion)가 중국이어야 하고, 데일리 항목은 LLM 표시(subject_is_chinese)도
+ *    true 여야 센다 (교차 확인 — 2026-11-02 재검증: 근거가 구글 기사뿐인 '바이두' 항목, 오역에서 나온 '상하이대' 주체가 중국으로 세어짐).
+ *  - 근거 기사가 모두 미판정(NULL)이면 예전 실체 규칙(isChinaSubjectLegacy).
+ */
+export function isChinaSubject(story: ChinaStory, articles: SourceDoc[] | SourceDoc[][] = []): boolean {
+  const groups: SourceDoc[][] = articles.map((a) => (Array.isArray(a) ? a : [a]));
+  const byRegion = chinaByRegion(groups);
+  if (byRegion === null) return isChinaSubjectLegacy(story);
+  return byRegion && story.subject_is_chinese !== false;
+}
+
+/** 후보 기사(데일리 ARTICLES 의 cn 표시·수리 힌트) 하나가 중국 주체 후보인가: 대상 지역 우선, 없으면 제목의 중국 실체 */
+export function isChinaCandidate(a: { title_kr?: string | null; title_cn?: string | null; subject_region?: string | null }): boolean {
+  if (typeof a.subject_region === "string" && a.subject_region.trim() !== "") return isChinaRegion(a.subject_region);
+  return findEntities(`${a.title_kr ?? ""} ${a.title_cn ?? ""}`).some((e) => e.chinese);
 }
 
 // ───────────────────────── 최상급·추세 단정

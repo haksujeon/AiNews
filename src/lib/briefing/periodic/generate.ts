@@ -21,6 +21,7 @@ import pool from "@/lib/db";
 import { COMPLETE_SINCE, computePeriodMetrics, type PeriodMetrics, type PeriodStory } from "@/lib/metrics/period";
 import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "../llm";
 import { articleText, toSourceDoc } from "../validate";
+import { SOURCE_ARTICLE_COLUMNS } from "../columns";
 import type { SourceDoc } from "../rules";
 import { BudgetExceeded, CostTracker, sumUsage } from "../generate";
 import { finishGenerating, insertBriefing, latestBriefing, withDateLock } from "../repository";
@@ -129,14 +130,12 @@ async function upsertPeriodMetrics(m: PeriodMetrics): Promise<string> {
 /**
  * S id → 근거 텍스트 (묶음 기사 전체, 데일리와 같은 articleText) + 근거 기사(중국어 원문 포함, rules.ts 의미 규칙용).
  * summary_cn 은 숫자 근거(sourceText)에 넣지 않는다 — 통화·고유명사 대조에만 쓴다.
+ * 열 목록은 데일리와 같은 columns.ts (subject_region 포함 — 중국 중심 규칙·STORIES 의 지역 표시).
  */
 async function loadSourceText(poolItems: StoryPoolItem[]): Promise<{ sourceText: Map<string, string>; docs: Map<string, SourceDoc[]> }> {
   const ids = [...new Set(poolItems.flatMap((p) => p.ids))];
   const { rows } = await pool.query(
-    `SELECT id, source_name, COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr,
-            COALESCE(summary_kr, '') AS summary_kr, COALESCE(ai_insights_kr, '') AS ai_insights_kr,
-            COALESCE(summary_cn, '') AS summary_cn, to_char((news_date AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS news_date
-       FROM ai_news_ex WHERE id = ANY($1::uuid[])`,
+    `SELECT ${SOURCE_ARTICLE_COLUMNS} FROM ai_news_ex WHERE id = ANY($1::uuid[])`,
     [ids]
   );
   const arts = rows as CandidateArticle[];

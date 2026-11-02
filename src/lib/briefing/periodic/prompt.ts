@@ -7,14 +7,15 @@
 import { BACKFILL_CAPS, type PeriodMetrics } from "../../metrics/period";
 import type { ValidationIssue } from "../types";
 import { groupPeriodStories, type PeriodStoryInput } from "../select";
-import { moneyIssues, type SourceDoc } from "../rules";
+import { chinaByRegion, moneyIssues, type SourceDoc } from "../rules";
 import type { PeriodicKind, StoryPoolItem, WeeklyContent } from "./types";
 
 // 프롬프트를 바꾸면 버전을 올린다 (input_hash 에 들어감)
 // weekly v3 / monthly v2 (2026-11-02 편집 QA): 사건 단위 후보, MONEY 표에서 매출·가치·통화 불일치 행 제외,
 //   금액 서열 금지, "가장 많이" 는 지표 1위만, 매체 수 그대로, 수리 지시문 금지
-export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v3-2026-11-02";
-export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v2-2026-11-02";
+// weekly v4 / monthly v3: 중국 주체 = 근거 기사 대상 지역(subject_region) — STORIES 에 region(사건 기사 지역 다수결)·cn 표시
+export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v4-2026-11-02";
+export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v3-2026-11-02";
 export const WEEKLY_HEADLINE_MAX = 36;
 export const WEEKLY_STORY_LIMIT = 50;
 export const MONTHLY_STORY_LIMIT = 60;
@@ -207,7 +208,7 @@ export function buildPeriodicSystemPrompt(kind: PeriodicKind, weekKeys: string[]
 4. 문장에 나오는 기업·인물·제품 이름은 refs 기사에 나와야 합니다.
 ${volumeRule}
 6. 언급 건수는 "중국 매체가 다룬 기사 수"입니다. 시장 점유율·인기·실적으로 해석하지 마십시오("언급이 늘었다"는 OK, "영향력이 커졌다"는 근거가 있을 때만).
-7. 중국 중심: big_picture 중 2개 이상은 중국 기업·기관·시장이 주체인 흐름이어야 합니다. 해외 기업 이야기는 중국 매체의 시각이나 중국 영향으로 씁니다.
+7. 중국 중심: big_picture 중 2개 이상은 중국 기업·기관·시장이 주체인 흐름이어야 합니다. "중국 주체"는 refs 사건의 region(기사 대상 지역)이 CN 인 것입니다(STORIES 의 cn:true, 대만·홍콩 기사도 CN). 중국 흐름의 refs 는 cn:true 사건 위주로 답니다. 해외 기업 이야기는 중국 매체의 시각이나 중국 영향으로 씁니다.
 8. 한국어 문장에 한자를 쓰지 마십시오(term.term 만 예외). 과장·추측·투자 권유 금지. 간결한 평서문(~했다, ~이다).
 9. 순위·배수·"최대/최초" 같은 서열 표현은 기사에 그 표현이 그대로 있을 때만 씁니다. 통화가 다른 금액끼리 크기를 비교하지 마십시오.
 10. 증감("늘었다·줄었다")을 말하면 그 증감을 담은 FACTS 키(.chg / .rise / .fall / vol.lfl_change / week.*)를 metrics 에 넣고, 지표의 방향(+/-, 늘어난 용어/줄어든 용어)과 같은 방향으로 씁니다.
@@ -257,6 +258,16 @@ export function moneyRowProblem(row: PeriodMetrics["money_table"][number], docs:
   return null;
 }
 
+/** STORIES 한 줄의 지역 표시: 사건 기사들의 대표 지역 최빈값(region) + 중국 주체 여부(cn, 검증기와 같은 chinaByRegion). 판정이 없으면 표시 없음 */
+export function storyRegion(docs: SourceDoc[] | undefined): { region?: string; cn?: true } {
+  const judged = (docs ?? []).filter((d) => d.subject_region);
+  if (!judged.length) return {};
+  const counts = new Map<string, number>();
+  for (const d of judged) counts.set(d.subject_region!, (counts.get(d.subject_region!) ?? 0) + 1);
+  const region = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+  return { region, ...(chinaByRegion([judged]) ? { cn: true as const } : {}) };
+}
+
 export function buildPeriodicUserPrompt(
   m: PeriodMetrics,
   facts: Record<string, string>,
@@ -303,7 +314,7 @@ ${kept.map((r) => `${sidOf.get(r.id) ?? "?"} | ${r.day} | ${r.kind} | ${r.amount
 STORIES (${pool.length}건, sources = 함께 다룬 매체):
 ${pool
   .map((p) =>
-    JSON.stringify({ id: p.sid, sources: p.sources, days: p.days, ent: p.entities, title_kr: p.title_kr, summary_kr: (p.summary_kr || "").slice(0, 200) })
+    JSON.stringify({ id: p.sid, sources: p.sources, days: p.days, ent: p.entities, ...storyRegion(docs?.get(p.sid)), title_kr: p.title_kr, summary_kr: (p.summary_kr || "").slice(0, 200) })
   )
   .join("\n")}`;
 }

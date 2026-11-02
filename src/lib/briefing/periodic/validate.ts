@@ -27,7 +27,7 @@
  * | metric_relevance (신규)        | 경고 → 수리 호출 대상 | 인용 지표의 대상(기업·매체)이 문장에 없음 |
  * | headline_length               | 치명 → 수리, 그래도 넘으면 결정적 제목 | 제목 상한 초과 (여유 없이 엄격) |
  * | han_in_ko / length            | 치명 (여유 없음) | |
- * | china_centric                 | 치명 | 흐름 4개 중 2개 이상 중국 주체 (rules.ts isChinaSubject). 수리 뒤에도 미달이면 failed |
+ * | china_centric                 | 치명 | 흐름 4개 중 2개 이상 중국 주체 (rules.ts isChinaSubject: 근거 사건의 subject_region 투표). 수리 뒤에도 미달이면 failed |
  * | top_event_missing             | 경고 → 수리 호출 대상 | 매체 수 1·2위 사건이 본문 어디에도 없음 |
  *
  * 이 파일은 DB 를 import 하지 않는다.
@@ -362,9 +362,9 @@ export function irrelevantMetrics(text: string, metrics: string[], entityNames: 
   return out;
 }
 
-/** 중국 주체 흐름 수 (데일리와 같은 rules.ts isChinaSubject) */
+/** 중국 주체 흐름 수 (데일리와 같은 rules.ts isChinaSubject — S id(사건) 별 근거 기사 subject_region 투표, 미판정이면 실체 규칙) */
 export function chinaCentricCount(c: WeeklyContent, ctx?: Pick<PeriodicValidationContext, "docs">): number {
-  return c.big_picture.filter((b) => isChinaSubject({ title: b.title, text: b.text }, b.refs.flatMap((r) => ctx?.docs?.get(r) ?? []))).length;
+  return c.big_picture.filter((b) => isChinaSubject({ title: b.title, text: b.text }, b.refs.map((r) => ctx?.docs?.get(r) ?? []))).length;
 }
 
 // ───────────────────────── 본 검증

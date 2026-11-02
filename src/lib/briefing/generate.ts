@@ -24,9 +24,9 @@ import type {
   ValidationReport,
 } from "./types";
 import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "./llm";
-import { findEntities } from "./entities";
 import { PROMPT_VERSION, TRANSLATE_PROMPT_VERSION, buildRepairPrompt, buildSystemPrompt, buildUserPrompt } from "./prompt";
 import { computeInputHash, editionModeFor, selectCandidates } from "./select";
+import { isChinaCandidate } from "./rules";
 import {
   HEADLINE_MAX,
   citedRefs,
@@ -157,11 +157,11 @@ export function repairHints(c: BriefingContent, r: ValidationReport, groups: Can
   if (r.fatal.some((f) => f.rule === "china_centric")) {
     const used = new Set(c.top_stories.slice(0, 5).flatMap((s) => s.refs));
     const cands = groups
-      .filter((g) => !used.has(g.shortId) && findEntities(`${g.primary.title_kr} ${g.primary.title_cn}`).some((e) => e.chinese))
+      .filter((g) => !used.has(g.shortId) && isChinaCandidate(g.primary))
       .slice(0, 6)
       .map((g) => `${g.shortId}(${g.primary.title_kr.slice(0, 30)})`);
     out.push(
-      `중국 중심 규칙 미달 — 상위 5건 중 3건 이상이 중국 기업·기관 주체여야 합니다. 같은 사건을 두 칸에 나눈 해외 이야기는 하나로 합치고, 중국 주체 후보를 올리십시오: ${cands.join(", ")}`
+      `중국 중심 규칙 미달 — 상위 5건 중 3건 이상이 중국 주체(근거 기사 region CN)여야 합니다. 같은 사건을 두 칸에 나눈 해외 이야기는 하나로 합치고, 중국 주체 후보를 올리십시오: ${cands.join(", ")}`
     );
   }
   for (const f of r.fatal.filter((x) => x.rule === "han_in_ko"))

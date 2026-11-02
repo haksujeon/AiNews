@@ -14,14 +14,16 @@
 import type { BriefingContent, CandidateGroup, EditionMode, ValidationIssue } from "./types";
 import type { PreviousEdition } from "./repository";
 import { HEADLINE_MAX } from "./validate";
-import { findEntities } from "./entities";
+import { isChinaCandidate } from "./rules";
 
 // v3: headline 32자 엄수(수리 대상), lede 실체 근거·"중국 내" 귀속 규칙
 // v4 (2026-11-02 편집 QA): 헤드라인 = 1위 기사, 원문 수식어 보존, 예전 사건 시점 표시, 직전 판 반복 표시,
 //   매출·가치 금액을 거래처럼 쓰지 않기, 매체 수 그대로, 지시문 누출 금지, 사건 단위 매체 수(event_sources)
 // v4.1: ARTICLES 에 cn(중국 주체 후보) 표시, 같은 사건을 두 칸에 나누지 않기, 상위 5건 중국 주체 수를 세어 보기
 // v4.2: 중국 주체 목표 4건(최소 3건) — 검증에서 중국 주체 기사 1건이 빠져도 판이 살아남게
-export const PROMPT_VERSION = "ko-v4.2-2026-11-02";
+// v4.3: 중국 주체 = 기사 대상 지역(region: CN, 대만·홍콩 포함) — ARTICLES 에 region 표시, cn 은 region 기준(없을 때만 제목 실체),
+//   subject 는 근거 기사에 나온 주체만 (근거 없는 주체·항목은 치명)
+export const PROMPT_VERSION = "ko-v4.3-2026-11-02";
 // v6: 이름 힌트에 중국어 요약 앞부분(고유명사 표기용), 범위 "7~10%" 를 "7%至10%" 로 써도 됨
 export const TRANSLATE_PROMPT_VERSION = "tr-v6-2026-11-02";
 
@@ -65,7 +67,7 @@ export function buildSystemPrompt(mode: EditionMode): string {
 4. 숫자(금액·%·MW·토큰·인원 등)는 근거 기사 title_kr/summary_kr/insight_kr 에 나온 값과 단위를 그대로 씁니다. 환산·반올림·합산 금지.
 5. 순위("2위")·배수("3배")·비교("최초", "최대") 같은 서열 표현은 근거 기사에 그 표현이 그대로 있을 때만 씁니다. "2점 뒤졌다"를 "2위"로 바꾸는 식의 추론을 하지 마십시오.
 6. clusters 에는 "같은 주체가 같은 행위를 한 같은 사건"을 다룬 기사만 묶습니다(예: 같은 기업의 같은 모델 발표를 여러 매체가 보도). "칩·메모리", "구현형 AI" 같은 주제 묶음은 금지입니다. 묶인 사건은 하나의 이야기로 쓰고 refs 에 모두 넣습니다.
-7. 중국 중심: top_stories 상위 5건 중 3건 이상(목표 4건)은 중국 기업·기관이 주체인 이야기여야 합니다(3건 미만이면 판 전체가 반려됩니다). 해외 이야기는 상위 5건에 많아야 1~2건입니다. ARTICLES 의 cn:true 는 제목에 중국 기업·기관이 나오는 후보입니다. 다 쓴 뒤 상위 5건의 subject_is_chinese:true 수를 세어 보십시오. 같은 사건(같은 주체의 같은 발표·같은 서류)을 top_stories 두 칸에 나누지 마십시오. 해외 기업 소식은 중국 시장 영향이나 중국 매체의 시각이 드러나게 씁니다. subject_is_chinese 를 정직하게 표시하십시오.
+7. 중국 중심: top_stories 상위 5건 중 3건 이상(목표 4건)은 중국 기업·기관이 주체인 이야기여야 합니다(3건 미만이면 판 전체가 반려됩니다). 해외 이야기는 상위 5건에 많아야 1~2건입니다. "중국 주체"는 근거 기사의 region(기사 대상 지역)이 CN 인 이야기입니다(대만·홍콩 기사도 CN). ARTICLES 의 cn:true 는 region 이 CN 인 후보(region 이 없으면 제목에 중국 기업·기관이 나오는 후보)입니다. region 이 CN 이 아닌 기사(US 등)를 근거로 쓴 이야기는 subject_is_chinese:true 로 표시해도 중국 주체로 세지 않습니다. 다 쓴 뒤 상위 5건의 subject_is_chinese:true 수를 세어 보십시오. subject 에는 refs 기사에 실제로 나오는 주체만 씁니다(근거 기사에 없는 기업을 주체로 만들면 그 항목이 폐기됩니다). 같은 사건(같은 주체의 같은 발표·같은 서류)을 top_stories 두 칸에 나누지 마십시오. 해외 기업 소식은 중국 시장 영향이나 중국 매체의 시각이 드러나게 씁니다. subject_is_chinese 를 정직하게 표시하십시오.
 8. AI·반도체·로봇·AI 비즈니스와 무관한 기사, 특히 정치·외교 기사(정상·총리·대통령 발언 등)는 선정하지 말고 excluded 에 사유와 함께 적습니다. 행사 모집 공고·홍보성 기사도 낮게 봅니다.
 9. 한국어 문장에 한자를 쓰지 마십시오(용어 원어는 term_of_the_day.term 에만). 중국 기업·인물명은 기사 title_kr/summary_kr 의 한국어 표기를 따르되 한자 병기는 하지 않습니다.
 10. 과장·추측·투자 권유 금지. 논쟁적인 주장은 "~라고 주장"처럼 주체를 밝힙니다. 평가가 엇갈리면 함께 적습니다. 존댓말이 아닌 간결한 평서문(~했다, ~이다)으로 씁니다.
@@ -96,7 +98,8 @@ export function buildUserPrompt(date: string, groups: CandidateGroup[], previous
       id: g.shortId,
       sources: g.sources,
       ...(g.eventSources && g.eventSources.length > g.sources.length ? { event_sources: g.eventSources.length } : {}),
-      ...(findEntities(`${a.title_kr} ${a.title_cn}`).some((e) => e.chinese) ? { cn: true } : {}),
+      ...(a.subject_region ? { region: a.subject_region } : {}),
+      ...(isChinaCandidate(a) ? { cn: true } : {}),
       score: g.score,
       category: a.category,
       title_kr: a.title_kr,

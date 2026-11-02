@@ -11,9 +11,12 @@
  * | number_unit_not_in_source: 숫자+단위("2위") | 치명 |
  * | term: 용어가 ref 기사 key_terms 에 있고 병음 일치 | 치명 |
  * | refs_relevance: 고유명사가 각 ref 기사에 나옴 | 경고 (무관한 ref 는 떼어냄, 마지막 1개는 남김) |
+ * | refs_all_irrelevant: 항목의 고유명사가 남은 근거 기사 어디에도 없음 | 치명 (2026-11-02 재검증: 근거가 구글 기사뿐인 '바이두' 항목) |
+ * | subject_not_in_refs: 주요 기사 subject 가 근거 기사 어디에도 없음 | 치명 (중국 할당을 채우려 만든 주체) |
  * | han_in_ko: 한국어 본문에 한자 (괄호 병기 포함) | 치명 (2026-11-02 QA: 수리 뒤에도 남은 채 draft 가 됐다) |
  * | length: 글자 수 상한 초과 (여유 없음)     | 치명 (예전 15% 여유 삭제) |
- * | china_centric: 상위 5건 중 중국 주체 ≥ 3 | 치명 (수리 호출 대상. 수리 뒤에도 미달이면 판 전체 failed) |
+ * | china_centric: 상위 5건 중 중국 주체 ≥ 3 | 치명 (수리 호출 대상. 수리 뒤에도 미달이면 판 전체 failed).
+ *   중국 주체 = 근거 기사 subject_region(CN, 대만·홍콩 포함) 다수 + subject_is_chinese 표시 (rules.ts isChinaSubject) |
  * | cluster_topic: 묶음 기사 전부에 공통 주체 | 경고 (주제 묶음은 clusters 에서 뺌) |
  * | term_pinyin_spacing: 병음 띄어쓰기만 다름 | 경고 (DB 표기로 교정) |
  * | headline_length: 헤드라인 32자 초과 (여유 없음) | 치명 (수리 호출 대상, 자동 자르기 없음) |
@@ -332,9 +335,10 @@ export const LIMITS: [RegExp, number][] = [
 export function pruneIrrelevantRefs(
   content: BriefingContent,
   ctx: ValidationContext
-): { content: BriefingContent; warn: ValidationIssue[]; dropped: { path: string; ref: string }[] } {
+): { content: BriefingContent; warn: ValidationIssue[]; fatal: ValidationIssue[]; dropped: { path: string; ref: string }[] } {
   const c: BriefingContent = structuredClone(content);
   const warn: ValidationIssue[] = [];
+  const fatal: ValidationIssue[] = [];
   const dropped: { path: string; ref: string }[] = [];
 
   const check = (path: string, text: string, refs: string[]): string[] => {
@@ -348,7 +352,8 @@ export function pruneIrrelevantRefs(
     let keep = refs.filter((r) => !irrelevant.includes(r));
     if (!keep.length) {
       keep = refs.slice(0, 1);
-      warn.push({ level: "warn", rule: "refs_relevance", path, detail: `유일한 근거 ${refs[0]} 에 ${nouns.map((n) => n.label).join("/")} 가 없음` });
+      // 2026-11-02 재검증: 근거 기사가 모두 무관하면 경고가 아니라 치명 (항목 삭제 대상) — 근거 없는 항목이 중국 할당을 채우지 않게
+      fatal.push({ level: "fatal", rule: "refs_all_irrelevant", path, detail: `근거 기사(${refs.join(",")}) 어디에도 ${nouns.map((n) => n.label).join("/")} 가 없음` });
     }
     for (const r of irrelevant.filter((x) => !keep.includes(x))) {
       dropped.push({ path, ref: r });
@@ -373,7 +378,27 @@ export function pruneIrrelevantRefs(
   c.key_numbers.forEach((k, i) => {
     check(`key_numbers[${i}]`, k.label, k.ref ? [k.ref] : []);
   });
-  return { content: c, warn, dropped };
+  return { content: c, warn, fatal, dropped };
+}
+
+/**
+ * 주요 기사의 subject(주체)가 근거 기사 어디에도 나오지 않는가. 고유명사(이름표·라틴 토큰)가 있으면 그것으로,
+ * 없으면 한국어 이름 토큰(2자 이상, 조사 제거)이 근거 텍스트에 그대로 있는지 본다. subject 가 비었으면 판단하지 않는다.
+ */
+export function subjectMissingFromRefs(subject: string, refs: string[], ctx: Pick<ValidationContext, "sourceText">): boolean {
+  const subj = (subject ?? "").trim();
+  if (!subj) return false;
+  const srcs = refs.map((r) => ctx.sourceText.get(r)).filter((x): x is string => x !== undefined);
+  if (!srcs.length) return false;
+  const nouns = properNouns(subj);
+  if (nouns.length) return !nouns.some((n) => srcs.some((t) => n.matches(t)));
+  const toks = subj
+    .split(/[\s,，·・/]+/)
+    .map((t) => t.replace(/[은는이가의]$/, ""))
+    .filter((t) => t.length >= 2);
+  if (!toks.length) return false;
+  const hay = srcs.join(" ").replace(/\s/g, "");
+  return !toks.some((t) => hay.includes(t));
 }
 
 // ───────────────────────── 근거 없는 실체 (headline·lede)
@@ -436,9 +461,9 @@ export function chinaAttributionIssues(text: string, refs: string[], ctx: Valida
 
 // ───────────────────────── 중국 중심
 
-/** 상위 5건 중 중국 주체 수 (판정은 rules.ts isChinaSubject 하나 — subject_region 이 들어오면 그 함수만 바꾼다) */
+/** 상위 5건 중 중국 주체 수 (판정은 rules.ts isChinaSubject 하나 — ref 별 근거 기사 묶음의 subject_region 으로 투표) */
 export function chinaCentricCount(c: BriefingContent, ctx?: Pick<ValidationContext, "docs">): number {
-  return c.top_stories.slice(0, 5).filter((s) => isChinaSubject(s, s.refs.flatMap((r) => ctx?.docs?.get(r) ?? []))).length;
+  return c.top_stories.slice(0, 5).filter((s) => isChinaSubject(s, s.refs.map((r) => ctx?.docs?.get(r) ?? []))).length;
 }
 
 export function chinaCentricRequired(mode: EditionMode, topCount: number): number {
@@ -452,8 +477,8 @@ export function validateKo(
   ctx: ValidationContext,
   preIssues: ValidationIssue[] = []
 ): { content: BriefingContent; report: ValidationReport } {
-  const { content, warn: relWarn, dropped } = pruneIrrelevantRefs(input, ctx);
-  const fatal: ValidationIssue[] = preIssues.filter((i) => i.level === "fatal");
+  const { content, warn: relWarn, fatal: relFatal, dropped } = pruneIrrelevantRefs(input, ctx);
+  const fatal: ValidationIssue[] = [...preIssues.filter((i) => i.level === "fatal"), ...relFatal];
   const warn: ValidationIssue[] = [...preIssues.filter((i) => i.level === "warn"), ...relWarn];
   const excludedIds = new Set(content.excluded.map((e) => e.id));
   const units = collectUnits(content);
@@ -487,6 +512,11 @@ export function validateKo(
       fatal.push({ level: "fatal", rule: "china_attribution", path: u.path, detail: d });
     for (const i of semanticIssues(u, ctx)) fatal.push({ level: "fatal", rule: i.rule, path: u.path, detail: i.detail });
   }
+  // 주요 기사의 주체가 근거 기사에 있어야 한다 (중국 할당을 채우려 근거 없는 주체를 만들지 않게)
+  content.top_stories.forEach((s, i) => {
+    if (subjectMissingFromRefs(s.subject, s.refs, ctx))
+      fatal.push({ level: "fatal", rule: "subject_not_in_refs", path: `top_stories[${i}]`, detail: `주체 "${s.subject}" 가 근거 기사(${s.refs.join(",")}) 어디에도 없음` });
+  });
   // 회사 why 길이 (단위 텍스트는 name 을 붙여 검사하므로 따로 본다)
   content.companies_to_watch.forEach((co, i) => {
     if (co.why.length > 40) fatal.push({ level: "fatal", rule: "length", path: `companies_to_watch[${i}].why`, detail: `${co.why.length}/40자` });

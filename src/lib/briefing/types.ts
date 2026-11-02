@@ -48,8 +48,10 @@ export interface CandidateArticle {
   summary_cn?: string;
   /** 베이징 날짜 YYYY-MM-DD */
   news_date?: string;
-  /** 기사 주체 지역 (분류기, rules.ts isChinaSubject 가 쓸 자리) */
+  /** 기사 대상 지역 (ai_news_ex.subject_region, region.ts). 중국 중심 규칙(rules.ts isChinaSubject)·프롬프트 지역 표시 */
   subject_region?: string | null;
+  /** 지역 태그 (CN·US·TW·HK…) */
+  region_tags?: string[];
 }
 
 export interface KeyTerm {
