@@ -66,6 +66,8 @@ async function main() {
         editionType: t === "daily" || t === "weekly" || t === "monthly" ? t : undefined,
         date: arg("date"),
         trigger: flag("dry-run") ? "dry_run" : "pipeline",
+        // dry-run 은 이어 갈 상태를 저장하지 않으므로 한 번에 끝까지 (검토 3회 + 재번역). 정기 실행은 250초 예산
+        budgetMs: arg("budget") ? Number(arg("budget")) * 1000 : flag("dry-run") ? 900_000 : undefined,
       });
       console.log(JSON.stringify(r, null, 1));
       return;
