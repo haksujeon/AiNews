@@ -145,6 +145,8 @@ export interface ReviewResult {
   outputTokens: number;
   requestIds: string[];
   error?: string;
+  /** 파싱하지 못한 응답 원문 (오류 때만 저장 — 다시 부르지 않고 고쳐 읽을 수 있게) */
+  rawResponse?: string;
 }
 
 export const emptyCounts = (): LabelCounts => ({

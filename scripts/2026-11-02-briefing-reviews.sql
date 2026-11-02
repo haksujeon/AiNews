@@ -41,8 +41,12 @@ CREATE TABLE IF NOT EXISTS briefing_reviews (
   cost_usd         numeric(10, 6),
   latency_ms       integer,
   error            text,
+  raw_response     text,
   created_at       timestamptz NOT NULL DEFAULT now()
 );
+
+-- (같은 날 추가) 파싱 실패 응답 원문 — 이미 만든 표에도 붙인다
+ALTER TABLE briefing_reviews ADD COLUMN IF NOT EXISTS raw_response text;
 
 CREATE INDEX IF NOT EXISTS briefing_reviews_briefing_idx ON briefing_reviews (briefing_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS briefing_reviews_edition_idx ON briefing_reviews (edition_type, edition_date, created_at DESC);

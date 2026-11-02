@@ -11,17 +11,17 @@ export async function insertReview(r: ReviewResult, extra: { parentReviewId?: st
     `INSERT INTO briefing_reviews
        (briefing_id, version, edition_type, edition_date, round, trigger, model, prompt_version, status, verdict, llm_verdict, score,
         counts, claims, fixes, omissions, translation, structure, summary, decision, parent_review_id, llm_request_ids,
-        input_tokens, output_tokens, cost_usd, latency_ms, error)
+        input_tokens, output_tokens, cost_usd, latency_ms, error, raw_response)
      VALUES ($1::uuid, $2, $3, $4::date, $5, $6, $7, $8, $9, $10, $11, $12,
              $13::jsonb, $14::jsonb, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20::jsonb, $21::uuid, $22::text[],
-             $23, $24, $25, $26, $27)
+             $23, $24, $25, $26, $27, $28)
      RETURNING id`,
     [
       r.briefingId, r.version, r.editionType, r.editionDate, r.round, r.trigger, r.model, r.promptVersion, r.status, r.verdict, r.llmVerdict, r.score,
       JSON.stringify(r.counts ? { ...r.counts, breakdown: r.breakdown, schema_issues: r.schemaIssues } : null),
       JSON.stringify(r.claims), JSON.stringify(r.fixes), JSON.stringify(r.omissions), JSON.stringify(r.translation), JSON.stringify(r.structure),
       r.summary || null, extra.decision ? JSON.stringify(extra.decision) : null, extra.parentReviewId ?? null, r.requestIds,
-      r.inputTokens, r.outputTokens, r.costUsd, r.latencyMs, r.error ?? null,
+      r.inputTokens, r.outputTokens, r.costUsd, r.latencyMs, r.error ?? null, r.rawResponse ?? null,
     ]
   );
   return rows[0].id as string;

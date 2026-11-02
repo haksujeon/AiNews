@@ -56,6 +56,9 @@ const LABEL_ALIASES: Record<string, ClaimLabel> = {
   supported: "correct",
 };
 
+/** 검토 모델이 메모에서 스스로 오류 판정을 거둔 표현 */
+export const RETRACTION_RE = /correct\s*로\s*(재판정|볼\s*수)|실질\s*(적인\s*)?오류는?\s*아님|오류가?\s*아님|문제\s*없음\s*$/;
+
 function labelOf(v: unknown): ClaimLabel | null {
   const x = s(v, 40).toLowerCase();
   if ((CLAIM_LABELS as readonly string[]).includes(x)) return x as ClaimLabel;
@@ -89,6 +92,14 @@ export function parseReviewJson(raw: unknown, ctx: SchemaContext): ParsedReview 
       note: s(c.n ?? c.note, 300),
     });
   });
+  // 라벨과 메모가 모순되면(모델이 메모에서 스스로 correct 로 재판정) correct 로 되돌린다 — 보정 v4·v5 에서 2건, 둘 다 실제로 맞는 주장
+  for (const c of claims) {
+    if (c.label !== "correct" && RETRACTION_RE.test(c.note)) {
+      issues.push(`${c.sid}: ${c.label} → correct (메모에서 스스로 철회)`);
+      c.note = `[철회: 원래 ${c.label}] ${c.note}`.slice(0, 300);
+      c.label = "correct";
+    }
+  }
   // 주장이 하나도 없는 문장이 있으면 기록만 (모델이 빼먹은 문장)
   const covered = new Set(claims.map((c) => c.sid));
   const missed = ctx.segments.filter((x) => !covered.has(x.sid)).map((x) => x.sid);

@@ -23,6 +23,7 @@ async function main() {
   const { reviewBriefing } = await import("../src/lib/briefing/review/review");
   const { buildReviewSystemPrompt, buildReviewUserPrompt } = await import("../src/lib/briefing/review/prompt");
   const { runReviewPipeline } = await import("../src/lib/briefing/review/pipeline");
+  const { buildHints } = await import("../src/lib/briefing/review/hints");
   const pool = (await import("../src/lib/db")).default;
   try {
     if (cmd === "prompt") {
@@ -32,6 +33,7 @@ async function main() {
         editionType: input.editionType, editionDate: input.row.edition_date, periodStart: input.periodStart, periodEnd: input.periodEnd,
         version: input.row.version, segments: input.segments, labelOf: input.labelOf, articles: input.articles, facts: input.facts,
         candidates: input.candidates, translations: input.translations, dataQualityNote: null,
+        hints: buildHints(input.segments, input.fullText, input.labelOf, input.periodStart),
       });
       console.log(JSON.stringify({ segments: input.segments.length, articles: input.articles.length, candidates: input.candidates.length, translations: input.translations.length, systemChars: sys.length, userChars: user.length }));
       if (flag("print")) console.log(user);
@@ -43,6 +45,17 @@ async function main() {
       const { result } = await reviewBriefing(id, { trigger, store: !flag("no-store"), includeTranslations: !flag("no-translations") });
       const { claims, fixes, ...rest } = result;
       console.log(JSON.stringify({ ...rest, errors: claims.filter((c) => c.label !== "correct"), fixes, claimCount: claims.length }, null, 1));
+      return;
+    }
+    if (cmd === "reparse") {
+      // 파싱에 실패한 검토(status error, raw_response 있음)를 같은 프롬프트 버전으로 다시 읽어 새 행으로 저장 (LLM 호출 없음)
+      const { REVIEW_PROMPT_VERSION } = await import("../src/lib/briefing/review/prompt");
+      const { rows } = await pool.query(`SELECT briefing_id, trigger, round, prompt_version, raw_response FROM briefing_reviews WHERE id = $1::uuid`, [id]);
+      const row = rows[0];
+      if (!row?.raw_response) throw new Error("raw_response 가 없는 검토입니다");
+      if (row.prompt_version !== REVIEW_PROMPT_VERSION) throw new Error(`프롬프트 버전이 다릅니다 (${row.prompt_version} ≠ ${REVIEW_PROMPT_VERSION})`);
+      const { result } = await reviewBriefing(row.briefing_id, { trigger: row.trigger, round: row.round, includeTranslations: row.trigger !== "calibration", rawOverride: row.raw_response });
+      console.log(JSON.stringify({ id: result.id, status: result.status, verdict: result.verdict, score: result.score, error: result.error }));
       return;
     }
     if (cmd === "pipeline") {

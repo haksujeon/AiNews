@@ -64,7 +64,10 @@ async function main() {
   const { scoreReview, stricter, verdictOfRecommendation, RUBRIC_PASS_SCORE } = await import("../src/lib/briefing/review/score");
   const { compareEdition, recallTable, falseAlarm, confusion } = await import("../src/lib/briefing/review/calibrate");
   const { segmentContent } = await import("../src/lib/briefing/review/segments");
+  const { RETRACTION_RE } = await import("../src/lib/briefing/review/schema");
   type RC = import("../src/lib/briefing/review/types").ReviewClaim;
+  /** 비교할 프롬프트 버전 (기본 지금 버전). 예전 버전 비교: --version review-v3-2026-11-02 --no-run */
+  const ver = arg("version") ?? REVIEW_PROMPT_VERSION;
 
   const audits = readAudits(auditDir).filter((a) => !only || only.includes(a.id));
   const policy = policyFromEnv({ ...process.env, BRIEFING_AUTO_PUBLISH: "on" });
@@ -87,7 +90,7 @@ async function main() {
           [a.id, REVIEW_PROMPT_VERSION]
         );
         if (rows.length && !flag("fresh")) continue;
-        if (spent + 0.2 > cap) {
+        if (spent + 0.17 > cap) {
           console.log(`비용 상한 근접 — ${a.edition} 이후 중단 (누적 $${spent.toFixed(4)})`);
           break;
         }
@@ -106,7 +109,7 @@ async function main() {
       const { rows } = await pool.query(
         `SELECT r.*, b.content, b.edition_type AS et FROM briefing_reviews r JOIN daily_briefings b ON b.id = r.briefing_id
           WHERE r.briefing_id = $1::uuid AND r.trigger = 'calibration' AND r.prompt_version = $2 AND r.status = 'done' ORDER BY r.created_at DESC LIMIT 1`,
-        [a.id, REVIEW_PROMPT_VERSION]
+        [a.id, ver]
       );
       const r = rows[0];
       const human = verdictOfRecommendation(a.recommendation);
@@ -114,7 +117,8 @@ async function main() {
         rowsOut.push({ edition: a.edition, set: a.set, humanScore: a.score, human, reviewer: null });
         continue;
       }
-      const claims = (r.claims ?? []) as RC[];
+      // 저장 뒤 추가한 결정적 규칙(메모 자체 철회 → correct)을 예전 행에도 같게 적용 — 모델 재호출 없음
+      const claims = ((r.claims ?? []) as RC[]).map((c) => (c.label !== "correct" && RETRACTION_RE.test(c.note ?? "") ? { ...c, label: "correct" as const } : c));
       const segs = new Map(segmentContent(r.content, r.et).map((s) => [s.sid, s.text]));
       const cmp = compareEdition(a.edition, a.claims, claims, (sid) => segs.get(sid) ?? "");
       cmps[a.set].push(cmp);
@@ -161,7 +165,7 @@ async function main() {
     }
     spent = await spentSoFar();
     const summary = {
-      promptVersion: REVIEW_PROMPT_VERSION,
+      promptVersion: ver,
       spentUsd: Math.round(spent * 1e4) / 1e4,
       recall: { all: recallTable(cmps.all), first: recallTable(cmps.first), v2: recallTable(cmps.v2) },
       falseAlarm: { all: falseAlarm(cmps.all), first: falseAlarm(cmps.first), v2: falseAlarm(cmps.v2) },
@@ -175,7 +179,7 @@ async function main() {
     };
     writeFileSync(join(outDir, "calibration.json"), JSON.stringify(summary, null, 1));
     const md: string[] = [
-      `# AI 검토 보정 (${REVIEW_PROMPT_VERSION})`,
+      `# AI 검토 보정 (${ver})`,
       ``,
       `누적 비용(LiteLLM 실측): $${summary.spentUsd}`,
       ``,

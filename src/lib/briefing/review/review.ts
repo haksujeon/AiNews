@@ -11,6 +11,7 @@ import { LlmError, chat, parseJsonContent, type ChatRequest, type ChatResponse }
 import type { LlmUsage } from "../types";
 import { loadReviewInput, type ReviewInput } from "./evidence";
 import { quoteMatch } from "./fix";
+import { buildHints } from "./hints";
 import { policyFromEnv, minScoreFor, type ReviewPolicy } from "./policy";
 import { REVIEW_PROMPT_VERSION, buildReviewSystemPrompt, buildReviewUserPrompt } from "./prompt";
 import { ReviewSchemaError, claimTypeOf, parseReviewJson } from "./schema";
@@ -41,6 +42,8 @@ export interface ReviewOptions {
   policy?: ReviewPolicy;
   /** 이미 읽어 둔 입력 (수정 루프에서 메모리 수정본을 검토할 때) */
   input?: ReviewInput;
+  /** 같은 프롬프트 버전으로 저장해 둔 응답 원문을 다시 읽는다 (파싱 실패 복구 — 모델을 다시 부르지 않음, 비용 0) */
+  rawOverride?: string;
 }
 
 /** 인용 기사 본문(전체) 중 이 문장의 근거 + (주간·월간) FACTS */
@@ -59,8 +62,70 @@ export function parseLenient(content: string): unknown {
   try {
     return parseJsonContent(content);
   } catch {
-    return parseJsonContent(content.replace(/[\u0000-\u001f]+/g, " "));
+    const flat = content.replace(/[\u0000-\u001f]+/g, " ");
+    try {
+      return parseJsonContent(flat);
+    } catch {
+      return parseWithStrayCloserRepair(escapeInnerQuotes(flat));
+    }
   }
+}
+
+/**
+ * 모델이 배열 끝에서 객체를 일찍 닫는 일이 있다 (보정 07-15 v2: `...}]},\n"omissions":` → Unexpected non-whitespace after JSON).
+ * "after JSON at position N" 이면 N 앞의 닫는 괄호 하나를 지우고 다시 읽는다 (최대 3번).
+ */
+function parseWithStrayCloserRepair(text: string): unknown {
+  let t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const first = t.indexOf("{");
+  const last = t.lastIndexOf("}");
+  if (first >= 0 && last > first) t = t.slice(first, last + 1);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return JSON.parse(t);
+    } catch (e) {
+      const m = /after JSON at position (\d+)/.exec((e as Error).message);
+      if (!m || attempt >= 3) return parseJsonContent(t);
+      let i = Number(m[1]) - 1;
+      while (i >= 0 && /\s/.test(t[i])) i--;
+      if (i < 0 || (t[i] !== "}" && t[i] !== "]")) return parseJsonContent(t);
+      t = t.slice(0, i) + t.slice(i + 1);
+    }
+  }
+}
+
+/**
+ * 문자열 안에 이스케이프하지 않은 큰따옴표("…" 인용)를 고친다 (보정 W44: Expected ',' or '}').
+ * 문자열 안의 " 뒤에(공백을 건너) , } ] : 가 오지 않으면 문자열 끝이 아니라 글자로 본다.
+ */
+export function escapeInnerQuotes(text: string): string {
+  let out = "";
+  let inStr = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (!inStr) {
+      if (ch === '"') inStr = true;
+      out += ch;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch + (text[i + 1] ?? "");
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < text.length && /\s/.test(text[j])) j++;
+      const next = text[j];
+      if (next === undefined || next === "," || next === "}" || next === "]" || next === ":") {
+        inStr = false;
+        out += ch;
+      } else out += '\\"';
+      continue;
+    }
+    out += ch;
+  }
+  return out;
 }
 
 export async function reviewBriefing(
@@ -102,19 +167,23 @@ export async function reviewBriefing(
     editionType: input.editionType, editionDate: input.row.edition_date, periodStart: input.periodStart, periodEnd: input.periodEnd,
     version: input.row.version, segments: input.segments, labelOf: input.labelOf, articles: input.articles, facts: input.facts,
     candidates: input.candidates, translations: input.translations,
+    hints: buildHints(input.segments, input.fullText, input.labelOf, input.periodStart),
     dataQualityNote: dq.incomplete_days?.length ? `수집 미완 날짜 ${dq.incomplete_days.join(", ")} (본문에 데이터 알림이 필요)` : null,
   });
 
   let raw: unknown;
+  let rawText: string | undefined;
   try {
-    const res = await deps.chat(
+    const res = opts.rawOverride !== undefined ? { content: opts.rawOverride } : await deps.chat(
       { model: REVIEW_MODEL, system, messages: [{ role: "user", content: user }], maxTokens: REVIEW_MAX_TOKENS, timeoutMs: REVIEW_TIMEOUT_MS, maxAttempts: 2 },
       (u) => usages.push(u)
     );
+    rawText = res.content;
     raw = parseLenient(res.content);
   } catch (e) {
     const r = base();
     r.error = e instanceof LlmError ? e.message : `검토 호출 실패: ${(e as Error).message}`;
+    r.rawResponse = rawText;
     return finish(r);
   }
 

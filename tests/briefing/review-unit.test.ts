@@ -273,3 +273,15 @@ test("itemKey / compareEdition: 감사 경로 별칭과 같은 항목 매칭", (
   assert.equal(c.humanErrors[1].found, false);
   assert.equal(c.reviewerErrors[1].matched, false, "사람 오류가 없는 항목 = 거짓 경보");
 });
+
+// ───────────────────────── 응답 파싱 (보정에서 실제로 난 오류)
+
+test("parseLenient: 문자열 안 줄바꿈·이스케이프 안 된 큰따옴표를 고쳐 읽는다", async () => {
+  const { parseLenient, escapeInnerQuotes } = await import("../../src/lib/briefing/review/review");
+  assert.deepEqual(parseLenient('{"a":"줄\n바꿈"}'), { a: "줄 바꿈" });
+  const bad = '{"claims":[{"s":"S01","n":"근거는 "가능성"으로만 서술","l":"overclaim"}],"verdict":"PASS"}';
+  assert.equal((parseLenient(bad) as { claims: { n: string }[] }).claims[0].n, '근거는 "가능성"으로만 서술');
+  assert.equal(escapeInnerQuotes('{"a":"x"}'), '{"a":"x"}');
+  const early = '{"claims":[],"fixes":[{"s":"S01","a":"delete"}]},\n"omissions":[],"verdict":"FAIL"}';
+  assert.deepEqual(parseLenient(early), { claims: [], fixes: [{ s: "S01", a: "delete" }], omissions: [], verdict: "FAIL" });
+});
