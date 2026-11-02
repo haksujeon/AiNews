@@ -14,7 +14,7 @@
  *
  * 이 파일은 DB 를 import 하지 않는다 (단위 테스트).
  */
-import { entityMentioned, findEntities, isChineseSubject, properNouns, type Entity } from "./entities";
+import { LATIN_STOP, entityMentioned, findEntities, isChineseSubject, properNouns, type Entity } from "./entities";
 
 /** 근거 기사 한 건 (한국어 번역 + 중국어 원문). 데일리 후보·주간 이야기 묶음이 같은 모양으로 넘긴다 */
 export interface SourceDoc {
@@ -130,7 +130,8 @@ function qualifiedBefore(sentence: string, idx: number): boolean {
 /** 범위를 정하는 플랫폼·데이터 이름 ("OpenRouter 데이터에 따르면", "MPDocBench에서") */
 const SCOPE_RE = /([A-Z][A-Za-z0-9.\-]{2,})\s?(?:의\s?)?(?=데이터|플랫폼|기준|순위|차트|리더보드|벤치마크|에서|에 따르면|数据|平台|榜单|上)/g;
 export function scopeTokens(sentence: string): string[] {
-  return [...sentence.matchAll(SCOPE_RE)].map((m) => m[1]);
+  // GPU·API 같은 일반 약어는 범위가 아니다 ("일반 GPU에서 구동")
+  return [...sentence.matchAll(SCOPE_RE)].map((m) => m[1]).filter((t) => !LATIN_STOP.has(t) && !LATIN_STOP.has(t.replace(/s$/, "")));
 }
 
 function occurrenceHedged(sentence: string, re: RegExp): { hedged: boolean; qualified: boolean; scope: string[] } {

@@ -138,6 +138,32 @@ export function contextFromArticles(
 
 // ───────────────────────── 결정적 정리 (수리 호출 전)
 
+const SENTENCE_END = /(?<=[.!?。])\s+/;
+
+/**
+ * 여러 문장 필드(lede·what·why)가 상한을 넘으면 끝 문장부터 통째로 뺀다 (첫 문장은 남긴다, 말줄임표로 자르지 않음).
+ * QA 감사 수정안("마지막 문장 삭제")과 같은 처리 — 길이 2자 초과 때문에 중국 주체 주요 기사가 통째로 빠져
+ * 판 전체가 중국 중심 미달로 실패하는 것을 막는다. 반환: 고친 판과 손댄 위치
+ */
+export function fitSentenceLengths(content: BriefingContent): { content: BriefingContent; trimmed: string[] } {
+  const c = structuredClone(content);
+  const trimmed: string[] = [];
+  const fit = (path: string, text: string, max: number): string => {
+    if (text.length <= max) return text;
+    const parts = text.split(SENTENCE_END);
+    while (parts.length > 1 && parts.join(" ").length > max) parts.pop();
+    const out = parts.join(" ");
+    if (out !== text) trimmed.push(path);
+    return out;
+  };
+  c.lede = fit("lede", c.lede, 200);
+  c.top_stories.forEach((st, i) => {
+    st.what = fit(`top_stories[${i}].what`, st.what, 160);
+    st.why = fit(`top_stories[${i}].why`, st.why, 120);
+  });
+  return { content: c, trimmed };
+}
+
 const PAREN_HAN_RE = /\s?[(（]\s*[\u3400-\u9fff\uf900-\ufaff·、，,\s]+\s*[)）]/g;
 
 /**

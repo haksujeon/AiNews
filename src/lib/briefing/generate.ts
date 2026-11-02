@@ -24,12 +24,16 @@ import type {
   ValidationReport,
 } from "./types";
 import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "./llm";
+import { findEntities } from "./entities";
 import { PROMPT_VERSION, TRANSLATE_PROMPT_VERSION, buildRepairPrompt, buildSystemPrompt, buildUserPrompt } from "./prompt";
 import { computeInputHash, editionModeFor, selectCandidates } from "./select";
 import {
+  HEADLINE_MAX,
   citedRefs,
   contextFromGroups,
   dropFatalItems,
+  fitSentenceLengths,
+  itemOf,
   minCountShortfall,
   normalizeContent,
   stripParentheticalHan,
@@ -132,6 +136,39 @@ interface KoOutcome {
   mode?: EditionMode;
 }
 
+const MAX_REPAIRS = 2;
+
+/** 헤드라인 치명이 남았고 1위 기사 제목이 상한 안이면 그 제목을 헤드라인으로 쓴 판 (아니면 null) */
+export function headlineFallback(c: BriefingContent, r: ValidationReport): BriefingContent | null {
+  if (!r.fatal.some((f) => f.path === "headline")) return null;
+  const title = c.top_stories[0]?.title?.trim();
+  if (!title || title.length > HEADLINE_MAX) return null;
+  return { ...structuredClone(c), headline: title };
+}
+
+/** 삭제할 수 없는 항목(headline·lede·top_stories 전체)의 치명 수 */
+function unrecoverableCount(r: ValidationReport): number {
+  return r.fatal.filter((f) => ["headline", "lede", "top_stories"].includes(itemOf(f.path))).length;
+}
+
+/** 수리 프롬프트 보충: 중국 중심 미달이면 상위 5건에 안 쓴 중국 주체 후보 id 를 짚어 준다, 한자 표기 예 */
+export function repairHints(c: BriefingContent, r: ValidationReport, groups: CandidateGroup[]): string[] {
+  const out: string[] = [];
+  if (r.fatal.some((f) => f.rule === "china_centric")) {
+    const used = new Set(c.top_stories.slice(0, 5).flatMap((s) => s.refs));
+    const cands = groups
+      .filter((g) => !used.has(g.shortId) && findEntities(`${g.primary.title_kr} ${g.primary.title_cn}`).some((e) => e.chinese))
+      .slice(0, 6)
+      .map((g) => `${g.shortId}(${g.primary.title_kr.slice(0, 30)})`);
+    out.push(
+      `중국 중심 규칙 미달 — 상위 5건 중 3건 이상이 중국 기업·기관 주체여야 합니다. 같은 사건을 두 칸에 나눈 해외 이야기는 하나로 합치고, 중국 주체 후보를 올리십시오: ${cands.join(", ")}`
+    );
+  }
+  for (const f of r.fatal.filter((x) => x.rule === "han_in_ko"))
+    out.push(`${f.path}: 한자 "${f.detail}" 를 한국어 표기로 바꾸십시오 (예: 《不问凡尘》 → 《불문범진》, 千问 → 치엔원). 괄호 병기도 쓰지 않습니다`);
+  return out;
+}
+
 /** 삭제 → 전체 재검증을 반복 (삭제한 항목을 헤드라인·리드가 쓰고 있으면 다음 검증에서 잡힌다). 최대 2회 */
 export function dropAndRevalidate(
   content: BriefingContent,
@@ -171,52 +208,67 @@ async function generateKo(
   const minTop = mode === "normal" ? 3 : 1;
   const validation: Record<string, unknown> = { prompt_version: PROMPT_VERSION };
 
+  // 결정적 정리: 괄호 병기 한자 삭제 + 여러 문장 필드는 넘친 끝 문장 삭제
+  const trimmed: string[] = [];
+  const prepare = (c: BriefingContent) => {
+    const f = fitSentenceLengths(stripParentheticalHan(c));
+    trimmed.push(...f.trimmed);
+    return f.content;
+  };
   cost.check();
   const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 8000 }, track);
   const parsed1 = normalizeContent(parseJsonContent(first.content));
-  let cur = validateKo(stripParentheticalHan(parsed1.content), ctx, parsed1.issues);
+  let cur = validateKo(prepare(parsed1.content), ctx, parsed1.issues);
   validation.initial = cur.report;
 
-  // 중국 중심·헤드라인 길이·한자·길이도 치명이라 치명이 있으면 수리 1회 (자동으로 자르지 않는다)
-  if (cur.report.fatal.length) {
+  // 중국 중심·헤드라인 길이·한자·길이도 치명이라 치명이 있으면 수리 (자동으로 자르지 않는다).
+  // 1차 수리 뒤에도 삭제할 수 없는 항목(headline·lede·top_stories 전체 — 중국 중심 미달 포함)의 치명이 남으면 한 번 더 (최대 2회).
+  const messages: { role: "user" | "assistant"; content: string }[] = [
+    { role: "user", content: user },
+    { role: "assistant", content: first.content },
+  ];
+  validation.used = "initial";
+  for (let round = 1; round <= MAX_REPAIRS && cur.report.fatal.length; round++) {
+    // 2차 수리는 지금 판을 삭제·재검증해도 살릴 수 없을 때만 (삭제할 수 없는 치명, 또는 삭제 뒤 중국 중심 미달 등)
+    if (round > 1) {
+      const sim = dropAndRevalidate(cur.content, cur.report, ctx);
+      if (!sim.unrecoverable.length && !sim.report.fatal.length) break;
+    }
     try {
       cost.check();
-      const extra = [
-        ...(cur.report.fatal.some((f) => f.rule === "china_centric") ? ["중국 중심 규칙 미달 — ARTICLES 에서 중국 기업·기관이 주체인 이야기를 상위 5건 안으로 올리십시오"] : []),
-        ...cur.report.fatal
-          .filter((f) => f.rule === "han_in_ko")
-          .map((f) => `${f.path}: 한자 "${f.detail}" 를 한국어 표기로 바꾸십시오 (예: 《不问凡尘》 → 《불문범진》, 千问 → 치엔원). 괄호 병기도 쓰지 않습니다`),
-      ];
-      const second = await chat(
-        {
-          system,
-          messages: [
-            { role: "user", content: user },
-            { role: "assistant", content: first.content },
-            { role: "user", content: buildRepairPrompt(cur.content, cur.report.fatal, extra) },
-          ],
-          maxTokens: 8000,
-        },
-        track
-      );
-      const parsed2 = normalizeContent(parseJsonContent(second.content));
-      const repaired = validateKo(stripParentheticalHan(parsed2.content), ctx, parsed2.issues);
-      validation.repair = repaired.report;
-      // 수리본이 더 나쁘면(치명 증가·주요 기사 감소) 원본 유지
-      if (
-        repaired.report.fatal.length <= cur.report.fatal.length &&
-        repaired.report.stats.topStories >= Math.min(cur.report.stats.topStories, minTop)
-      ) {
+      const extra = repairHints(cur.content, cur.report, groups);
+      messages.push({ role: "user", content: buildRepairPrompt(cur.content, cur.report.fatal, extra) });
+      const reply = await chat({ system, messages, maxTokens: 8000 }, track);
+      messages.push({ role: "assistant", content: reply.content });
+      const parsed = normalizeContent(parseJsonContent(reply.content));
+      const repaired = validateKo(prepare(parsed.content), ctx, parsed.issues);
+      validation[round === 1 ? "repair" : `repair${round}`] = repaired.report;
+      // 수리본이 더 나쁘면(삭제할 수 없는 치명·전체 치명 증가, 주요 기사 감소) 이전 판 유지
+      const better =
+        unrecoverableCount(repaired.report) < unrecoverableCount(cur.report) ||
+        (unrecoverableCount(repaired.report) === unrecoverableCount(cur.report) && repaired.report.fatal.length <= cur.report.fatal.length);
+      if (better && repaired.report.stats.topStories >= Math.min(cur.report.stats.topStories, minTop)) {
         cur = repaired;
-        validation.used = "repair";
-      } else validation.used = "initial";
+        validation.used = round === 1 ? "repair" : `repair${round}`;
+      }
     } catch (e) {
       if (e instanceof BudgetExceeded) throw e;
       validation.repair_error = (e as Error).message;
-      validation.used = "initial";
+      break;
     }
   }
 
+  if (trimmed.length) validation.trimmed_sentences = [...new Set(trimmed)];
+  // 수리 뒤에도 헤드라인만 치명이면(길이·1위 기사·최상급 등) 1위 기사 제목으로 대체 — 주간·월간의 결정적 제목 대체와 같은 방식.
+  // 1위 기사 제목은 그 자체로 검증을 거친 문장이고 헤드라인 규칙(1위 기사)도 만족한다. 그래도 걸리면 판 failed.
+  const fb = headlineFallback(cur.content, cur.report);
+  if (fb) {
+    const v = validateKo(fb, ctx);
+    if (!v.report.fatal.some((f) => f.path === "headline")) {
+      cur = v;
+      validation.fallbacks = ["headline"];
+    }
+  }
   let content = cur.content;
   if (cur.report.fatal.length) {
     const d = dropAndRevalidate(content, cur.report, ctx);

@@ -20,7 +20,7 @@ import {
   staleEventIssues,
   type SourceDoc,
 } from "../../src/lib/briefing/rules";
-import { contextFromArticles, stripParentheticalHan, unsupportedEntities, normalizeContent } from "../../src/lib/briefing/validate";
+import { contextFromArticles, fitSentenceLengths, stripParentheticalHan, unsupportedEntities, normalizeContent } from "../../src/lib/briefing/validate";
 import { cvoConflict, rankIssues, uncitedDirectionConflicts, validateWeekly, normalizeWeekly } from "../../src/lib/briefing/periodic/validate";
 import { buildStoryPool, moneyRowProblem } from "../../src/lib/briefing/periodic/prompt";
 import { numericValues, checkTranslation } from "../../src/lib/briefing/translate";
@@ -306,4 +306,27 @@ test("선정 가중: 사건 단위 매체 수는 사건의 대표 묶음에만 �
   assert.equal(ant[0].eventSources.length, 3);
   assert.equal(st.find((x) => x.primary.id === "p1")!.scoreDetail.foreign_paper, -1.5);
   assert.equal(st.find((x) => x.primary.id === "c1")!.scoreDetail.cn_deal, 0.5);
+});
+
+test("여러 문장 필드 길이: 넘친 끝 문장만 통째로 뺀다 (10-28 what 175/160 — 감사 수정안 '마지막 문장 삭제'), 한 문장은 그대로", () => {
+  const long = "가".repeat(100) + "였다. " + "나".repeat(50) + "였다. " + "다".repeat(20) + "였다.";
+  const c = normalizeContent({ headline: "h", lede: "l", top_stories: [{ title: "t", what: long, why: "라".repeat(130) }] }).content;
+  const { content, trimmed } = fitSentenceLengths(c);
+  assert.ok(content.top_stories[0].what.length <= 160);
+  assert.ok(content.top_stories[0].what.endsWith("였다."));
+  assert.equal(content.top_stories[0].why.length, 130); // 한 문장은 자르지 않는다 (검증기가 치명으로 잡아 수리)
+  assert.deepEqual(trimmed, ["top_stories[0].what"]);
+});
+
+test("헤드라인 대체: 수리 뒤에도 헤드라인만 치명이면 1위 기사 제목(32자 이내)으로 — 10-27 재생성 35/32자", async () => {
+  const { headlineFallback } = await import("../../src/lib/briefing/generate");
+  const c = normalizeContent({ headline: "Anthropic 상장 신고, 매출 13배와 807억 달러 손실", lede: "l", top_stories: [{ title: "Anthropic, 나스닥 상장 위한 투자설명서 공개", what: "w" }] }).content;
+  const r = { fatal: [{ level: "fatal" as const, rule: "headline_length", path: "headline", detail: "35/32자" }], warn: [], droppedRefs: [], stats: { numbersChecked: 0, topStories: 1, chinaCentric: 0, citedIds: 0, bodyChars: 0 } };
+  assert.equal(headlineFallback(c, r)?.headline, "Anthropic, 나스닥 상장 위한 투자설명서 공개");
+  assert.equal(headlineFallback(c, { ...r, fatal: [] }), null);
+});
+
+test("범위 토큰: '일반 GPU에서 구동' 의 GPU 는 플랫폼 범위가 아니다 (10-27 재생성 오탐)", () => {
+  const docs: SourceDoc[] = [{ title_kr: "", title_cn: "", summary_kr: "장문서 벤치마크 1위를 기록했으며, 일반 GPU에서도 구동할 수 있다.", insight_kr: "" }];
+  assert.ok(!claimIssues("바이두 OCR 2, 장문서 벤치마크 1위", docs).some((i) => /GPU/.test(i.detail)));
 });
