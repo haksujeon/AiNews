@@ -29,6 +29,7 @@ import {
   directionFlips,
   dropConflictSentences,
   prevPairConflicts,
+  volumeWowUnadjusted,
   pruneArcRefs,
   revertFlips,
   normalizeWeekly,
@@ -303,6 +304,14 @@ test("W44 round 2 재생성 china_lens: 이번 값·지난 값(region.cn + regio
   assert.ok(changeUnbacked(text, ["region.cn"]));
   assert.deepEqual(prevPairConflicts(text, metrics, facts), []);
   assert.equal(prevPairConflicts("중국 기사 비중은 42.2%로 늘었다.", metrics, facts).length, 1);
+  // 같은 판 v8 china_lens: 비중(%) 쌍 비교는 물량 비교가 아니다
+  const lens = "기사 수 기준으로 해외 기업 중심 기사(미국 기업 중심 43.1%)가 많았고, 중국 중심 기사는 지난주 46.8%에서 42.2%로 줄었다.";
+  assert.equal(volumeWowUnadjusted(lens, ["region.cn", "region.cn.prev", "region.us"]), false);
+  assert.ok(volumeWowUnadjusted("지난주보다 기사 수가 늘었다.", []));
+  // 같은 판 v8 big_picture[2]: 기사 숫자로 말한 증감(재산 6,700억 위안으로 늘었다)은 지표가 없어도 기사 사실
+  const bp = "장이밍의 재산도 6,700억 위안으로 늘었다는 보도가 이어졌다.";
+  assert.equal(changeUnbacked(bp, ["ent.deepseek"], "장이밍 재산 6,700억 위안 부호 순위"), false);
+  assert.ok(changeUnbacked(bp, ["ent.deepseek"], "장이밍 부호 순위"), "근거에 그 숫자가 없으면 여전히 치명");
 });
 
 test("W43 bp2 '검색 API 가격을 낮췄다' — 원문은 무료 → 11월 1일부터 유료화 → trend_unsupported", () => {

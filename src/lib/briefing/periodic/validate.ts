@@ -195,7 +195,9 @@ const WOW_RE = /지난주|전주|지난 주|지난달|전월|지난 달/;
 const VOLUME_RE = /기사 수|보도량|물량|기사가 (늘|줄)/;
 /** 지난주(지난달) 대비 기사 수 비교인데 보정 지표(같은 요일 vol.lfl* / 결손일 뺀 평균 vol.prev_avg_complete_day)를 인용하지 않음 */
 export function volumeWowUnadjusted(text: string, metrics: string[]): boolean {
-  return WOW_RE.test(text) && VOLUME_RE.test(text) && !metrics.some((k) => k.startsWith("vol.lfl") || k === "vol.prev_avg_complete_day");
+  // 비중(%) 비교를 이번 값·지난 값 쌍(region.cn + region.cn.prev)으로 하면 물량 비교가 아니다 (W44 round 2 china_lens)
+  const sharePair = /%/.test(text) && metrics.some((k) => k.endsWith(".prev") && metrics.includes(k.slice(0, -5)));
+  return WOW_RE.test(text) && VOLUME_RE.test(text) && !sharePair && !metrics.some((k) => k.startsWith("vol.lfl") || k === "vol.prev_avg_complete_day");
 }
 
 /** (월간) 주별 원 건수 비교: 주 길이·결손이 달라 평일 평균 지표를 써야 함 */
@@ -210,10 +212,14 @@ export function volumeWeekUnadjusted(text: string, metrics: string[]): boolean {
 // 2026-11-02 재감사: W42 헤드라인 '열풍', W41 '확산·몰리는' 이 증감 지표 없이 통과했다 → 증감·쏠림 표현을 넓힌다
 const CHANGE_RE = /크게 늘|늘었다|증가했|급증|줄었다|감소했|급감|열풍|(?<![가-힣])붐(?![가-힣])|붐을|쏠림|쏠리|확산(?!\s?(?:방지|억제))|몰리|몰려|몰린/;
 const CHANGE_METRIC_RE = /\.(rise|fall|chg)$|^week\.|^vol\.lfl/;
-/** 증감 주장인데 증감 지표가 없음. 이번 값과 지난 값(k 와 k.prev)을 함께 인용하면 증감 근거로 본다 (방향은 prevPairConflicts) */
-export function changeUnbacked(text: string, metrics: string[]): boolean {
+/**
+ * 증감 주장인데 증감 지표가 없음. 이번 값과 지난 값(k 와 k.prev)을 함께 인용하면 증감 근거로 본다 (방향은 prevPairConflicts).
+ * 언급 수 이야기가 아니고 증감을 근거 기사의 숫자로 말한 문장("재산이 6,700억 위안으로 늘었다")은 기사 사실이라 지표가 필요 없다 (sourcedChange, ground 가 있을 때).
+ */
+export function changeUnbacked(text: string, metrics: string[], ground = ""): boolean {
   const paired = metrics.some((k) => k.endsWith(".prev") && metrics.includes(k.slice(0, -5)));
-  return CHANGE_RE.test(text) && !paired && !metrics.some((k) => CHANGE_METRIC_RE.test(k));
+  if (paired || metrics.some((k) => CHANGE_METRIC_RE.test(k))) return false;
+  return splitSentences(text).some((s) => CHANGE_RE.test(s) && !sourcedChange(s, ground));
 }
 
 /** 지표 대상이 나오는 문장 (region.cn → 중국, region.us → 미국; 그 밖은 metricTargetIn) */
@@ -294,7 +300,7 @@ const MENTION_RE = /언급|기사|보도|다뤄|다룬|등장/;
 /** 문장의 증감이 근거 기사의 숫자로 뒷받침되나 (언급 이야기가 아니고, 증감 숫자 — %·배 — 가 근거 텍스트에 있음) */
 export function sourcedChange(sentence: string, ground: string): boolean {
   if (!ground || MENTION_RE.test(sentence)) return false;
-  const nums = sentence.match(/\d[\d,.]*\s?(?:%|배)/g) ?? [];
+  const nums = sentence.match(/\d[\d,.]*\s?(?:%|배|(?:조|억|만)?\s?(?:위안|달러))/g) ?? [];
   const g = norm(ground);
   return nums.some((n) => g.includes(norm(n)));
 }
@@ -445,7 +451,8 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
     if (ctx.kind === "monthly" && volumeWeekUnadjusted(u.text, u.metrics))
       push("fatal", "volume_week_unadjusted", u.path, "주 길이·수집 미완이 다른 주별 원 건수 비교");
     if (crossCurrencyRank(u.text)) push("fatal", "cross_currency_rank", u.path, "통화가 다른 금액의 서열 표현");
-    if (changeUnbacked(u.text, u.metrics)) push("fatal", "change_unbacked", u.path, "증감 주장에 증감 지표 없음");
+    if (changeUnbacked(u.text, u.metrics, u.refs.map((r) => ctx.sourceText.get(r) ?? "").join(" ")))
+      push("fatal", "change_unbacked", u.path, "증감 주장에 증감 지표 없음");
     for (const d of prevPairConflicts(u.text, u.metrics, F)) push("fatal", "direction_conflict", u.path, d);
     if (/합계|총\s?\d|모두 합쳐|합산/.test(u.text)) push("fatal", "summed_amount", u.path, "금액 합산 표현");
 
