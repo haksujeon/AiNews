@@ -7,7 +7,7 @@
 import { routing, type Locale } from "@/i18n/routing";
 import { clipText } from "@/lib/seo/text";
 import { rootUrl } from "@/lib/site";
-import { SCOPE_CATEGORIES } from "@/lib/categories";
+import { VISIBLE_CATEGORIES } from "@/lib/categories";
 
 /** 피드 하나에 넣는 최대 항목 수 */
 export const FEED_MAX_ITEMS = 50;
@@ -15,10 +15,10 @@ export const FEED_MAX_ITEMS = 50;
 export const FEED_DESCRIPTION_MAX = 300;
 
 /**
- * 분류 피드를 여는 분류 = 공개 범위 분류(categories.ts 의 SCOPE_CATEGORIES). 필터 칩과 같은 목록 (Gate 2).
- * 공개 분류가 늘면(예: robotics) 피드도 자동으로 열린다.
+ * 분류 피드를 여는 분류 = 노출 분류(categories.ts 의 VISIBLE_CATEGORIES = 범위 − 숨김). 필터 칩과 같은 목록 (Gate 2).
+ * 공개 분류가 늘어도(예: robotics) 숨김 분류(NEXT_PUBLIC_HIDDEN_CATEGORIES)에서 빠질 때까지 피드는 404 다.
  */
-export const FEED_CATEGORIES: readonly string[] = SCOPE_CATEGORIES;
+export const FEED_CATEGORIES: readonly string[] = VISIBLE_CATEGORIES;
 export type FeedCategory = string;
 
 export type FeedKind = { kind: "all" } | { kind: "briefing" } | { kind: "category"; category: FeedCategory };

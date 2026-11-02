@@ -6,7 +6,7 @@ export type { RankedNewsItem, NewsDay, NewsDaysPage, NewsDayRest } from './news-
 import type { NewsItem, NewsDaysPage, NewsDayRest, RankedNewsItem } from './news-types';
 import { NEWS_PAGE_SIZE, NEWS_DAYS_PER_PAGE, NEWS_DAY_TOP } from './news-types';
 import { buildNewsWhere, EMPTY_FILTERS, PUBLIC_NEWS_WHERE, type NewsFilters } from './news-query';
-import { SCOPE_CATEGORIES, publicCategoriesOf } from './categories';
+import { VISIBLE_CATEGORIES, publicCategoriesOf } from './categories';
 import { LIST_FIELDS } from './news-fields';
 import { findRelated } from './related';
 import { citedRanksFromTopStories, splitDay, type DaySplit, type RankableArticle } from './news-rank';
@@ -189,7 +189,7 @@ export const FACET_MIN_COUNT = 5;
 
 /**
  * 필터 드롭다운 선택지. 로드된 페이지가 아니라 테이블 전체에서 뽑는다.
- * 분류 = 공개 분류(categories.ts PUBLIC_CATEGORIES) ∩ DB 에 FACET_MIN_COUNT 건 이상 있는 분류, PUBLIC_CATEGORIES 순서.
+ * 분류 = 노출 분류(categories.ts VISIBLE_CATEGORIES = 범위 − 숨김) ∩ DB 에 FACET_MIN_COUNT 건 이상 있는 분류, PUBLIC_CATEGORIES 순서.
  * 국가는 값 그대로 — 1개 이하면 화면(news-filter)이 선택 칸을 그리지 않는다.
  */
 export async function fetchNewsFacets(): Promise<{
@@ -203,7 +203,7 @@ export async function fetchNewsFacets(): Promise<{
        ARRAY(SELECT category FROM ai_news_ex
              WHERE ${PUBLIC_NEWS_WHERE} AND category = ANY($1::text[])
              GROUP BY category HAVING COUNT(*) >= $2) AS categories`,
-    [SCOPE_CATEGORIES, FACET_MIN_COUNT]
+    [VISIBLE_CATEGORIES, FACET_MIN_COUNT]
   );
   return {
     countries: rows[0]?.countries ?? [],
