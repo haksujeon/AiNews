@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
 import pool from "@/lib/db";
 import { COMPLETE_SINCE, computePeriodMetrics, type PeriodMetrics, type PeriodStory } from "@/lib/metrics/period";
 import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "../llm";
-import { articleText, glossHanText, toSourceDoc } from "../validate";
+import { articleText, fitText, glossHanText, toSourceDoc } from "../validate";
 import { SOURCE_ARTICLE_COLUMNS } from "../columns";
 import type { SourceDoc } from "../rules";
 import { BudgetExceeded, CostTracker, sumUsage } from "../generate";
@@ -341,7 +341,24 @@ async function generateKo(
     if (JSON.stringify(g) !== JSON.stringify(c)) edits.push({ action: "gloss", path: "*", reason: "han_in_ko (용어·이름 사전 치환)", before: null, after: null, round });
     const a = pruneArcRefs(g, ctx);
     edits.push(...a.edits.map((e) => ({ ...e, round })));
-    return a.content;
+    return fitPeriodic(a.content, round);
+  };
+  // 길이 초과는 삭제 전에 끝 문장을 뺀다 (데일리와 같은 fitText — W44 round 2: term.why 85/80자로 term 칸 삭제)
+  const fitPeriodic = (c: WeeklyContent, round: string): WeeklyContent => {
+    const out = structuredClone(c);
+    const fit = (path: string, text: string, max: number) => {
+      const t = fitText(text, max);
+      if (t !== text) edits.push({ action: "trim", path, reason: `length ${text.length}/${max}자`, before: text, after: t, round });
+      return t;
+    };
+    out.dek = fit("dek", out.dek, 220);
+    out.big_picture.forEach((b, i) => (b.text = fit(`big_picture[${i}]`, b.text, 264 - b.title.length - 1)));
+    out.movers.forEach((b, i) => (b.text = fit(`movers[${i}]`, b.text, 90)));
+    if (out.money) out.money.text = fit("money", out.money.text, 200);
+    if (out.china_lens) out.china_lens.text = fit("china_lens", out.china_lens.text, 200);
+    if (out.term) out.term.why = fit("term", out.term.why, 80);
+    (out.month_arc ?? []).forEach((b, i) => (b.text = fit(`month_arc[${i}]`, b.text, 90)));
+    return out;
   };
   cost.check();
   const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 6000 }, track);

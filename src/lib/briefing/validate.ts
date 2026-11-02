@@ -192,12 +192,7 @@ export function fitSentenceLengths(content: BriefingContent): { content: Briefin
   const trimmed: string[] = [];
   const edits: ContentEdit[] = [];
   const fit = (path: string, text: string, max: number, clause = false): string => {
-    if (text.length <= max) return text;
-    const parts = text.split(SENTENCE_END);
-    while (parts.length > 1 && parts.join(" ").length > max) parts.pop();
-    let out = parts.join(" ");
-    // 한 문장짜리 짧은 칸(섹션 한 줄·주목 기업)은 절 경계(쉼표·말줄임·줄표)에서 자른다 — 2026-11-02 재감사 10-27: 76/70자 때문에 항목이 통째로 빠짐
-    if (clause && out.length > max) out = trimAtClause(out, max) ?? out;
+    const out = fitText(text, max, clause);
     if (out !== text) {
       trimmed.push(path);
       edits.push({ action: "trim", path, reason: `length ${text.length}/${max}자`, before: text, after: out });
@@ -212,6 +207,20 @@ export function fitSentenceLengths(content: BriefingContent): { content: Briefin
   c.sections.forEach((sec, j) => sec.items.forEach((it, k) => (it.text = fit(`sections[${j}].items[${k}]`, it.text, 70, true))));
   c.companies_to_watch.forEach((co, i) => (co.why = fit(`companies_to_watch[${i}].why`, co.why, 40, true)));
   return { content: c, trimmed, edits };
+}
+
+/**
+ * 상한을 넘은 텍스트를 끝 문장부터 뺀다 (첫 문장은 남김). clause 면 한 문장짜리도 절 경계에서 자른다.
+ * 데일리 fitSentenceLengths 와 주간·월간 생성(periodic/generate.ts)이 같은 함수를 쓴다 (Gate 2).
+ */
+export function fitText(text: string, max: number, clause = false): string {
+  if (text.length <= max) return text;
+  const parts = text.split(SENTENCE_END);
+  while (parts.length > 1 && parts.join(" ").length > max) parts.pop();
+  let out = parts.join(" ");
+  // 한 문장짜리 짧은 칸(섹션 한 줄·주목 기업)은 절 경계(쉼표·말줄임·줄표)에서 자른다 — 2026-11-02 재감사 10-27: 76/70자 때문에 항목이 통째로 빠짐
+  if (clause && out.length > max) out = trimAtClause(out, max) ?? out;
+  return out;
 }
 
 /** 절 경계(", " "… " " — " "·")에서 상한 안으로 자른 문장. 남는 길이가 상한의 절반 미만이면 null (뜻이 빠짐) */
