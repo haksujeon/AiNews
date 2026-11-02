@@ -278,6 +278,8 @@ async function generateKo(
   const parsed1 = normalizeContent(parseJsonContent(first.content));
   let cur = validateKo(prepare(parsed1.content, "initial"), ctx, parsed1.issues);
   validation.initial = cur.report;
+  // 핵심 기사 삭제 경고는 첫 판과도 비교한다 (10-29 S-1 은 삭제가 아니라 전체 수리 중에 사라졌다)
+  const initialContent = cur.content;
 
   // 중국 중심·헤드라인 길이·한자·길이도 치명이라 치명이 있으면 수리 (자동으로 자르지 않는다).
   // 1차 수리 뒤에도 삭제할 수 없는 항목(headline·lede·top_stories 전체 — 중국 중심 미달 포함)의 치명이 남으면 한 번 더 (최대 2회).
@@ -379,7 +381,9 @@ async function generateKo(
     content = cur.content;
   }
   // 핵심 기사 삭제 경고: 여러 매체가 다룬 사건의 유일한 주요 기사가 검증으로 빠졌으면 리뷰어가 보게 남긴다
-  const keyDrops = droppedKeyStories(beforeFinal, content, ctx);
+  const keyDrops = [...droppedKeyStories(initialContent, content, ctx), ...droppedKeyStories(beforeFinal, content, ctx)].filter(
+    (w, i, all) => all.findIndex((x) => x.detail === w.detail) === i
+  );
   if (keyDrops.length) cur = { ...cur, report: { ...cur.report, warn: [...cur.report.warn, ...keyDrops] } };
   validation.edits = edits;
   const usedTrim = trimmedByRound[String(validation.used)] ?? [];

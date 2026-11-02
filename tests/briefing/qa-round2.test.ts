@@ -287,6 +287,11 @@ test("W44 bp3: '딥시크 호출량 801% 급증'(기사 숫자) 은 ent.deepseek
   // 지표 값을 그대로 인용하면 방향을 바꿔 써도 된다
   const cited = weekly({ big_picture: [{ title: "t", text: "딥시크 언급은 딥시크 -18%로 줄었다. 바이두는 문서 파싱 모델을 오픈소스로 공개했다.", refs: ["S01"], metrics: [] }] });
   assert.deepEqual(directionFlips(before, cited, facts), []);
+  // 고유명사가 없는 용어 문장도 같은 대상으로 본다 (W44 dek "구현형 AI와 에이전트 용어의 언급이 …")
+  const tf = { "term.智能体.fall": "智能体 84건→55건" };
+  const d1 = weekly({ dek: "구현형 AI와 에이전트 용어의 언급이 함께 줄었다. 앤트로픽은 상장을 준비했다." });
+  const d2 = weekly({ dek: "구현형 AI와 에이전트 용어의 언급이 함께 늘었다. 앤트로픽은 상장을 준비했다." });
+  assert.deepEqual(directionFlips(d1, d2, tf), ["dek"]);
 });
 
 test("방향 충돌 문장은 수리 전에 그 문장만 지운다 (고쳐 쓰지 않음)", () => {
@@ -303,6 +308,9 @@ test("W42 헤드라인 '에이전트·구체지능 열풍 속 …' / W41 '자금
   assert.ok(changeUnbacked(ED("w41_bp1"), []));
   assert.ok(!changeUnbacked(ED("w42_headline"), ["term.智能体.rise"]));
   assert.ok(!changeUnbacked("확산 방지 대책을 내놓았다", []));
+  // 추세 표현(열풍·쏠림 …)은 기사 숫자가 같은 문장에 있어도 증감 지표가 있어야 한다 (수량 증감만 기사 숫자로 뒷받침)
+  assert.ok(changeUnbacked("AI 열풍 속 딥시크 1000억 위안 융자", [], "딥시크 1000억 위안 융자 라운드"));
+  assert.ok(!changeUnbacked("딥시크 융자는 1000억 위안으로 늘었다", [], "딥시크 1000억 위안 융자 라운드"));
 });
 
 test("W44 round 2 재생성 오탐 회귀: 'OpenAI는 투자 목표를 100억 달러 삭감'(원문 제목 '砍掉100亿', 요약 300亿美元→200亿美元) 은 currency_mismatch 가 아니다", () => {

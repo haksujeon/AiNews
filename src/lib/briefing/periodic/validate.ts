@@ -209,8 +209,10 @@ export function volumeWeekUnadjusted(text: string, metrics: string[]): boolean {
   );
 }
 
-// 2026-11-02 재감사: W42 헤드라인 '열풍', W41 '확산·몰리는' 이 증감 지표 없이 통과했다 → 증감·쏠림 표현을 넓힌다
-const CHANGE_RE = /크게 늘|늘었다|증가했|급증|줄었다|감소했|급감|열풍|(?<![가-힣])붐(?![가-힣])|붐을|쏠림|쏠리|확산(?!\s?(?:방지|억제))|몰리|몰려|몰린/;
+// 2026-11-02 재감사: W42 헤드라인 '열풍', W41 '확산·몰리는' 이 증감 지표 없이 통과했다 → 증감·쏠림 표현을 넓힌다.
+// 수량 증감(늘었다·줄었다)은 기사 숫자로 뒷받침되면 기사 사실로 보지만, 추세 표현(열풍·붐·쏠림·확산·몰리)은 언제나 증감 지표가 있어야 한다
+const QUANTITY_CHANGE_RE = /크게 늘|늘었다|증가했|급증|줄었다|감소했|급감/;
+const TREND_CHANGE_RE = /열풍|(?<![가-힣])붐(?![가-힣])|붐을|쏠림|쏠리|확산(?!\s?(?:방지|억제))|몰리|몰려|몰린/;
 const CHANGE_METRIC_RE = /\.(rise|fall|chg)$|^week\.|^vol\.lfl/;
 /**
  * 증감 주장인데 증감 지표가 없음. 이번 값과 지난 값(k 와 k.prev)을 함께 인용하면 증감 근거로 본다 (방향은 prevPairConflicts).
@@ -219,7 +221,7 @@ const CHANGE_METRIC_RE = /\.(rise|fall|chg)$|^week\.|^vol\.lfl/;
 export function changeUnbacked(text: string, metrics: string[], ground = ""): boolean {
   const paired = metrics.some((k) => k.endsWith(".prev") && metrics.includes(k.slice(0, -5)));
   if (paired || metrics.some((k) => CHANGE_METRIC_RE.test(k))) return false;
-  return splitSentences(text).some((s) => CHANGE_RE.test(s) && !sourcedChange(s, ground));
+  return splitSentences(text).some((s) => TREND_CHANGE_RE.test(s) || (QUANTITY_CHANGE_RE.test(s) && !sourcedChange(s, ground)));
 }
 
 /** 지표 대상이 나오는 문장 (region.cn → 중국, region.us → 미국; 그 밖은 metricTargetIn) */
@@ -281,7 +283,7 @@ export function directionConflicts(text: string, metrics: string[], facts: Recor
   const out: string[] = [];
   // 언급 수 이야기가 아니고, 증감을 근거 기사의 숫자("호출량 +801%")로 말한 문장은 지표(언급 수)와 다른 사실이다 —
   // 2026-11-02 재감사 W44: '딥시크 호출량 급증'(사실)을 ent.deepseek.chg(언급 −18%)와 충돌로 잡아 수리가 사실을 뒤집었다
-  const sentences = splitSentences(text).filter((s) => !sourcedChange(s, ground));
+  const sentences = splitSentences(text).filter((s) => TREND_CHANGE_RE.test(s) || !sourcedChange(s, ground));
   for (const k of metrics) {
     const v = facts[k] ?? "";
     const neg = k.endsWith(".fall") || (k.endsWith(".chg") && /-\d/.test(v));
@@ -613,6 +615,10 @@ export function directionFlips(before: WeeklyContent, after: WeeklyContent, fact
     ...(before.month_arc ?? []).map((_, i) => `month_arc[${i}]`),
   ];
   const factValues = Object.values(facts).filter((v) => /\d/.test(v));
+  // 같은 대상: 고유명사 공유, 또는 같은 용어·기업 지표의 대상을 둘 다 말함 (W44 dek "구현형 AI와 에이전트 용어의 언급이 늘었다" 는 고유명사가 없다)
+  const targets = Object.keys(facts).filter((k) => /^(term|ent)\./.test(k));
+  const sameTarget = (a: string, b: string) =>
+    properNouns(b).some((n) => properNouns(a).some((m) => m.label === n.label)) || targets.some((k) => metricTargetIn(k, a) === true && metricTargetIn(k, b) === true);
   const flipped: string[] = [];
   for (const item of items) {
     const a = periodicText(before, item);
@@ -622,11 +628,10 @@ export function directionFlips(before: WeeklyContent, after: WeeklyContent, fact
     const hit = splitSentences(a).some((sa) => {
       const da = directionOf(sa);
       if (!da) return false;
-      const na = properNouns(sa).map((n) => n.label);
       return bs.some((sb) => {
         const db = directionOf(sb);
         if (!db || db === da) return false;
-        return properNouns(sb).some((n) => na.includes(n.label)) && !factValues.some((v) => sb.includes(v));
+        return sameTarget(sa, sb) && !factValues.some((v) => sb.includes(v));
       });
     });
     if (hit) flipped.push(item);

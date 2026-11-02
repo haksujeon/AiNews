@@ -16,8 +16,9 @@ import type { PeriodicKind, StoryPoolItem, WeeklyContent } from "./types";
 // weekly v4 / monthly v3: 중국 주체 = 근거 기사 대상 지역(subject_region) — STORIES 에 region(사건 기사 지역 다수결)·cn 표시
 // weekly v5 / monthly v4 (재감사 round 2): MONEY 의 같은 거래(통화만 다름)는 한 행, 기간 밖 거래 제외(지표 v4),
 //   월간 WEEK_STORIES — month_arc 의 refs 는 그 주의 사건만, 증감·쏠림 표현('열풍·확산·몰리')도 증감 지표 필요
-export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v5-2026-11-02";
-export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v4-2026-11-02";
+// weekly v6 / monthly v5: 수리 지시 — 방향 충돌 문장은 지우거나 FACTS 값을 그대로 인용 (사실 뒤집기 금지)
+export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v6-2026-11-02";
+export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v5-2026-11-02";
 export const WEEKLY_HEADLINE_MAX = 36;
 export const WEEKLY_STORY_LIMIT = 50;
 export const MONTHLY_STORY_LIMIT = 60;
@@ -353,7 +354,7 @@ ${lines}
 
 문제가 된 항목만 고쳐서 같은 스키마의 JSON 전체를 다시 출력하십시오.
 - 근거에 없는 숫자·기업명·서열 표현은 FACTS 값이나 refs 기사에 나온 표현으로 바꾸거나 문장에서 뺍니다.
-- 증감을 말하는 문장에는 그 증감 FACTS 키를 metrics 에 넣고, 지표 방향과 반대되는 표현("줄었는데 열풍")을 고칩니다.
+- 증감을 말하는 문장에는 그 증감 FACTS 키를 metrics 에 넣습니다. 지표 방향과 반대되는 문장("줄었는데 열풍")은 지우십시오. 다시 쓸 때는 FACTS 값 문자열을 그대로 인용합니다(예: "智能体 84건→55건"). 기사에 나온 사실(호출량·매출 등)의 방향은 바꾸지 마십시오.
 - ${volume}. 통화가 다른 금액끼리 크기를 비교하지 않습니다.
 - metrics 에 넣은 지표의 대상이 문장에 없으면 그 지표를 빼거나 문장에 대상을 씁니다.
 - headline 이 ${WEEKLY_HEADLINE_MAX}자를 넘었다면 뜻을 유지한 채 ${WEEKLY_HEADLINE_MAX}자 이내로 다시 씁니다.
