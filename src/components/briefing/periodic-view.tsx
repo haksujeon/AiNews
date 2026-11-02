@@ -6,8 +6,9 @@ import { toCategoryStats } from "@/lib/statistics-utils";
 import { BACKFILL_CAPS, weekdayOf } from "@/lib/metrics/period";
 import { buildFacts, compactDays } from "@/lib/briefing/periodic/prompt";
 import type { PublicPeriodic } from "@/lib/briefing/periodic/public";
-import { briefingDatePath, formatShortDate } from "@/lib/briefing/view";
+import { formatShortDate } from "@/lib/briefing/view";
 import { Sources } from "./briefing-view";
+import { BriefingDateLink } from "./briefing-date-link";
 import { periodicPath } from "./briefing-tabs";
 import { ChartFigure, DataTable } from "./charts/chart-figure";
 import { BarsTick, DailyColumns, Dumbbell, SmallMultiples, type DayBar } from "./charts/charts";
@@ -795,9 +796,9 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                       <span className="text-ink">{t("dailyCellDay", { dow: dow(t, d.date), d: Number(d.date.slice(8, 10)) })}</span>
                       <span className="text-[12.5px] text-ink-3">{t("countUnit", { count })}</span>
                       {d.published ? (
-                        <Link href={briefingDatePath(d.date)} className="rounded-sm font-semibold text-jade hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <BriefingDateLink date={d.date} className="rounded-sm font-semibold text-jade hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                           {t("dailyOpen")}
-                        </Link>
+                        </BriefingDateLink>
                       ) : (
                         <span className="text-[12.5px] text-ink-3">{t("dailyNone")}</span>
                       )}

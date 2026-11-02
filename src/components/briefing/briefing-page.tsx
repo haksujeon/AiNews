@@ -8,6 +8,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BriefingView } from "@/components/briefing/briefing-view";
 import { BriefingTabs } from "@/components/briefing/briefing-tabs";
+import { BriefingDateLink } from "@/components/briefing/briefing-date-link";
 import { absoluteUrl } from "@/lib/site";
 import { formatDate } from "@/lib/news-utils";
 import { isValidEditionDate } from "@/lib/briefing/generate";
@@ -92,13 +93,13 @@ export async function BriefingPageContent({ locale, date }: { locale: string; da
         <ul className="mt-4 flex flex-wrap gap-4">
           {r.locales.map((l) => (
             <li key={l}>
-              <Link
-                href={briefingDatePath(r.date)}
+              <BriefingDateLink
+                date={r.date}
                 locale={l}
                 className="rounded-sm font-medium text-ink underline decoration-1 underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {t(`langName_${l}`)}
-              </Link>
+              </BriefingDateLink>
             </li>
           ))}
         </ul>

@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { Link } from "@/i18n/navigation";
 import { isLocale, LOCALE_HTML_LANG, routing } from "@/i18n/routing";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { formatDateGroup } from "@/lib/news-utils";
 import { absoluteUrl } from "@/lib/site";
 import { listPublishedEditions } from "@/lib/briefing/public";
-import { BRIEFING_PATH, briefingDatePath } from "@/lib/briefing/view";
+import { BRIEFING_PATH } from "@/lib/briefing/view";
+import { BriefingDateLink } from "@/components/briefing/briefing-date-link";
 
 // 지난 판 목록. 발행된 판이 없으면 noindex.
 export const dynamic = "force-dynamic";
@@ -61,12 +61,12 @@ export default async function BriefingArchivePage({ params }: Props) {
                   {t("storiesCount", { count: e.top_count })}
                 </p>
                 <h2 className="mt-1 text-[19px] font-bold leading-snug tracking-[-0.015em] text-ink sm:text-[21px]">
-                  <Link
-                    href={briefingDatePath(e.edition_date)}
+                  <BriefingDateLink
+                    date={e.edition_date}
                     className="rounded-sm hover:underline hover:decoration-1 hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {e.headline}
-                  </Link>
+                  </BriefingDateLink>
                 </h2>
                 <p className="mt-1.5 line-clamp-2 text-[15px] leading-relaxed text-ink-2">{e.lede}</p>
               </li>

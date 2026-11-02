@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import { formatDateGroup } from "@/lib/news-utils";
 import type { PublicBriefing } from "@/lib/briefing/public";
 import {
-  briefingDatePath,
   BRIEFING_PATH,
   editorNoteData,
   formatShortDate,
@@ -13,10 +12,15 @@ import {
   sourceLinks,
 } from "@/lib/briefing/view";
 import { LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
+import type { TopStory } from "@/lib/briefing/types";
+import { BriefingDateLink } from "./briefing-date-link";
 
 /*
  * 데일리 브리핑 본문 ("Briefing Desk" 시안 §5.1–5.2).
  * 공개 페이지(/briefing, /briefing/[date])와 관리자 검토 화면이 이 컴포넌트 하나로 그린다 (Gate 2).
+ * 홈 날짜 팝업의 간추린 보기(briefing-compact.tsx)는 아래 부품(BriefingCoverage·AiLabel·DataNotice·TopStoryItem·Sources)을
+ * 같이 쓴다 — 문구·근거 링크·데이터 알림 규칙을 두 곳에 따로 쓰지 않는다.
+ * 클라이언트(팝업)에서도 그려지므로 DB 를 읽는 모듈을 import 하지 않는다 (PublicBriefing 은 type 만).
  * 카드·그림자·둥근 모서리 없이 괘선과 기존 색 토큰(ink/rule/jade)만 쓴다. 원문 썸네일은 쓰지 않는다.
  */
 
@@ -28,7 +32,7 @@ interface Props {
 
 type Translator = ReturnType<typeof useTranslations<"briefing">>;
 
-function sectionLabel(t: Translator, code: string): string {
+export function sectionLabel(t: Translator, code: string): string {
   const key = `section_${code}`;
   return t.has(key as never) ? t(key as never) : code;
 }
@@ -63,6 +67,110 @@ export function Sources({
         </span>
       ))}
     </p>
+  );
+}
+
+/** "기사 N건 중 M건 정리 · K분" */
+export function BriefingCoverage({ briefing }: { briefing: PublicBriefing }) {
+  const t = useTranslations("briefing");
+  const c = briefing.content;
+  return (
+    <span>
+      {t("coverage", { total: c.meta?.candidate_count ?? 0, cited: c.meta?.cited_count ?? Object.keys(briefing.articles).length })}
+      {" · "}
+      {t("readTime", { minutes: readMinutes(c, briefing.locale) })}
+    </span>
+  );
+}
+
+/** AI 작성 라벨 + 고지 */
+export function AiLabel({ className }: { className?: string }) {
+  const t = useTranslations("briefing");
+  return (
+    <p className={cn("flex flex-wrap items-baseline gap-2 text-[12.5px] leading-relaxed text-ink-3", className)}>
+      <span className="rounded-[3px] border border-rule px-1.5 py-px font-semibold text-ink-2" data-testid="ai-label">
+        {t("aiLabel")}
+      </span>
+      <span>{t("aiDisclosure")}</span>
+    </p>
+  );
+}
+
+/** 수집 품질 (주간·월간과 같은 결손일 판정): 축소·부분 수집일이 있으면 데이터 알림 */
+export function DataNotice({ briefing, className }: { briefing: PublicBriefing; className?: string }) {
+  const t = useTranslations("briefing");
+  const loc = briefing.locale;
+  const dqDays = briefing.content.meta?.data_quality?.days ?? [];
+  if (!dqDays.length) return null;
+  return (
+    <p role="note" className={cn("border-l-[3px] border-ink-3 bg-surface px-3.5 py-2.5 text-sm leading-[1.65] text-ink-2", className)} data-testid="briefing-data-notice">
+      <strong className="mr-2 text-ink">{t("dataNoticeTitle")}</strong>
+      {dqDays
+        .map((d) =>
+          d.reduced
+            ? t("dataNoticeReduced", { date: formatShortDate(d.day, loc), count: d.count })
+            : t("dataNoticePartial", { date: formatShortDate(d.day, loc), count: d.count, median: d.expected })
+        )
+        .join(" ")}{" "}
+      {t("dataNoticeTail")}
+    </p>
+  );
+}
+
+/**
+ * 주요 기사 한 건. page = 브리핑 페이지(앵커·"왜 중요한가" 포함), compact = 팝업(분야·제목·what·근거만).
+ */
+export function TopStoryItem({
+  story: s,
+  briefing,
+  variant = "page",
+}: {
+  story: TopStory;
+  briefing: PublicBriefing;
+  variant?: "page" | "compact";
+}) {
+  const t = useTranslations("briefing");
+  const outlets = outletsOf(s.refs, briefing.articles).length;
+  const compact = variant === "compact";
+  return (
+    <li
+      id={compact ? undefined : `story-${s.rank}`}
+      className={
+        compact
+          ? "grid grid-cols-[28px_minmax(0,1fr)] gap-1.5 border-b border-rule py-4 sm:grid-cols-[36px_minmax(0,1fr)] sm:py-[18px]"
+          : "grid scroll-mt-20 grid-cols-[30px_minmax(0,1fr)] gap-2 border-b border-rule py-5 sm:grid-cols-[44px_minmax(0,1fr)] sm:py-6"
+      }
+    >
+      <span aria-hidden="true" className={cn("font-[760] text-ink", compact ? "text-[20px] sm:text-[24px]" : "text-[22px] sm:text-[30px]", "leading-none")}>
+        {s.rank}
+      </span>
+      <div className="min-w-0">
+        <p className={cn("flex flex-wrap gap-x-3 text-[13px] text-ink-3", compact ? "mb-1" : "mb-1.5")}>
+          <span className="font-semibold text-jade">{sectionLabel(t, s.section)}</span>
+          {outlets >= 2 && <span>{t("outlets", { count: outlets })}</span>}
+        </p>
+        <h3
+          className={
+            compact
+              ? "text-[18px] font-bold leading-[1.4] tracking-[-0.02em] text-ink sm:text-[19px]"
+              : "text-[20px] font-bold leading-[1.38] tracking-[-0.02em] text-ink sm:text-[23px]"
+          }
+        >
+          {s.title}
+        </h3>
+        <p className={compact ? "mt-2 text-[15.5px] leading-[1.75] text-ink-2" : "mt-2.5 max-w-[40rem] text-base leading-[1.8] text-ink-2 sm:text-[17px]"}>
+          {s.what}
+        </p>
+        {!compact && s.why && (
+          // AI 인사이트 블록(article-body.tsx)과 같은 모양: 3px 청자 선 + 옅은 배경
+          <div className="mt-3.5 max-w-[40rem] border-l-[3px] border-jade bg-jade-weak px-4 py-2.5">
+            <p className="mb-0.5 text-[12.5px] font-[650] text-jade">{t("whyItMatters")}</p>
+            <p className="text-base leading-[1.7] text-ink">{s.why}</p>
+          </div>
+        )}
+        <Sources refs={s.refs} briefing={briefing} className={compact ? "mt-2" : "mt-3"} />
+      </div>
+    </li>
   );
 }
 
@@ -107,13 +215,9 @@ export function BriefingView({ briefing, pager }: Props) {
   const c = briefing.content;
   const loc = briefing.locale;
   const htmlLang = LOCALE_HTML_LANG[loc as Locale] ?? loc;
-  const minutes = readMinutes(c, loc);
   const note = c.editor_note ? null : editorNoteData(briefing);
   const allOutlets = outletsOf(Object.keys(briefing.articles), briefing.articles);
   const term = c.term_of_the_day;
-  // 수집 품질 (주간·월간과 같은 결손일 판정): 축소·부분 수집일이 있으면 데이터 알림
-  const dq = c.meta?.data_quality;
-  const dqDays = dq?.days ?? [];
 
   return (
     <article lang={htmlLang} data-testid="briefing">
@@ -123,23 +227,14 @@ export function BriefingView({ briefing, pager }: Props) {
           <p className="mb-3.5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-ink-3">
             <span className="font-[650] text-jade">{t("kicker")}</span>
             <time dateTime={briefing.edition_date}>{formatDateGroup(briefing.edition_date, loc)}</time>
-            <span>
-              {t("coverage", { total: c.meta?.candidate_count ?? 0, cited: c.meta?.cited_count ?? Object.keys(briefing.articles).length })}
-              {" · "}
-              {t("readTime", { minutes })}
-            </span>
+            <BriefingCoverage briefing={briefing} />
           </p>
           <h1 className="max-w-[44rem] text-[28px] font-[740] leading-[1.25] tracking-[-0.028em] text-ink sm:text-[34px] lg:text-[40px]">
             {c.headline}
           </h1>
           <p className="mt-4 max-w-[40rem] text-[17px] font-medium leading-[1.75] text-ink-2 sm:text-[19px]">{c.lede}</p>
           <Sources refs={c.lede_refs} briefing={briefing} className="mt-2.5" />
-          <p className="mt-4 flex flex-wrap items-baseline gap-2 text-[12.5px] leading-relaxed text-ink-3">
-            <span className="rounded-[3px] border border-rule px-1.5 py-px font-semibold text-ink-2" data-testid="ai-label">
-              {t("aiLabel")}
-            </span>
-            <span>{t("aiDisclosure")}</span>
-          </p>
+          <AiLabel className="mt-4" />
           <KeyNumbers briefing={briefing} variant="strip" />
         </div>
         {c.top_stories.length > 0 && (
@@ -159,19 +254,7 @@ export function BriefingView({ briefing, pager }: Props) {
         )}
       </header>
 
-      {dqDays.length > 0 && (
-        <p role="note" className="mt-[18px] border-l-[3px] border-ink-3 bg-surface px-3.5 py-2.5 text-sm leading-[1.65] text-ink-2" data-testid="briefing-data-notice">
-          <strong className="mr-2 text-ink">{t("dataNoticeTitle")}</strong>
-          {dqDays
-            .map((d) =>
-              d.reduced
-                ? t("dataNoticeReduced", { date: formatShortDate(d.day, loc), count: d.count })
-                : t("dataNoticePartial", { date: formatShortDate(d.day, loc), count: d.count, median: d.expected })
-            )
-            .join(" ")}{" "}
-          {t("dataNoticeTail")}
-        </p>
-      )}
+      <DataNotice briefing={briefing} className="mt-[18px]" />
 
       <div className="grid gap-6 pb-10 pt-2 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-12">
         {/* ── 본문 칼럼 ── */}
@@ -181,36 +264,9 @@ export function BriefingView({ briefing, pager }: Props) {
             <span className="text-[13px] font-normal text-ink-3">{t("byImportance")}</span>
           </h2>
           <ol>
-            {c.top_stories.map((s) => {
-              const outlets = outletsOf(s.refs, briefing.articles).length;
-              return (
-                <li
-                  key={s.rank}
-                  id={`story-${s.rank}`}
-                  className="grid scroll-mt-20 grid-cols-[30px_minmax(0,1fr)] gap-2 border-b border-rule py-5 sm:grid-cols-[44px_minmax(0,1fr)] sm:py-6"
-                >
-                  <span aria-hidden="true" className="text-[22px] font-[760] leading-none text-ink sm:text-[30px]">
-                    {s.rank}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="mb-1.5 flex flex-wrap gap-x-3 text-[13px] text-ink-3">
-                      <span className="font-semibold text-jade">{sectionLabel(t, s.section)}</span>
-                      {outlets >= 2 && <span>{t("outlets", { count: outlets })}</span>}
-                    </p>
-                    <h3 className="text-[20px] font-bold leading-[1.38] tracking-[-0.02em] text-ink sm:text-[23px]">{s.title}</h3>
-                    <p className="mt-2.5 max-w-[40rem] text-base leading-[1.8] text-ink-2 sm:text-[17px]">{s.what}</p>
-                    {s.why && (
-                      // AI 인사이트 블록(article-body.tsx)과 같은 모양: 3px 청자 선 + 옅은 배경
-                      <div className="mt-3.5 max-w-[40rem] border-l-[3px] border-jade bg-jade-weak px-4 py-2.5">
-                        <p className="mb-0.5 text-[12.5px] font-[650] text-jade">{t("whyItMatters")}</p>
-                        <p className="text-base leading-[1.7] text-ink">{s.why}</p>
-                      </div>
-                    )}
-                    <Sources refs={s.refs} briefing={briefing} className="mt-3" />
-                  </div>
-                </li>
-              );
-            })}
+            {c.top_stories.map((s) => (
+              <TopStoryItem key={s.rank} story={s} briefing={briefing} />
+            ))}
           </ol>
 
           {c.sections.length > 0 && (
@@ -296,21 +352,21 @@ export function BriefingView({ briefing, pager }: Props) {
         >
           <span>
             {pager.prev && (
-              <Link href={briefingDatePath(pager.prev)} className="rounded-sm text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <BriefingDateLink date={pager.prev} className="rounded-sm text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {t("prev", { date: formatShortDate(pager.prev, loc) })}
-              </Link>
+              </BriefingDateLink>
             )}
           </span>
           <span className="order-last col-span-2 text-center sm:order-none sm:col-span-1">
-            <Link href={`${BRIEFING_PATH}/archive`} className="rounded-sm text-ink-2 underline decoration-rule underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <BriefingDateLink path={`${BRIEFING_PATH}/archive`} className="rounded-sm text-ink-2 underline decoration-rule underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               {t("archiveLink")}
-            </Link>
+            </BriefingDateLink>
           </span>
           <span className="text-right">
             {pager.next && (
-              <Link href={briefingDatePath(pager.next)} className="rounded-sm text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <BriefingDateLink date={pager.next} className="rounded-sm text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {t("next", { date: formatShortDate(pager.next, loc) })}
-              </Link>
+              </BriefingDateLink>
             )}
           </span>
         </nav>

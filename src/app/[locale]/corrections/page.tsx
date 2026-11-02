@@ -8,6 +8,7 @@ import { Markdown } from "@/lib/trust/markdown";
 import { loadLegal } from "@/lib/trust/content";
 import { formatDateGroup } from "@/lib/news-utils";
 import { listCorrections, resolveCorrectionsSince } from "@/lib/briefing/corrections";
+import { BriefingDateLink } from "@/components/briefing/briefing-date-link";
 
 // 정정 기록은 DB 를 읽는다 — 빌드 시점 스냅샷이 되지 않게 요청마다 그린다
 export const dynamic = "force-dynamic";
@@ -84,7 +85,15 @@ export default async function CorrectionsPage({ params }: Props) {
                 {c.reason ?? (c.kind === "superseded" ? t("reasonSuperseded") : t("reasonMissing"))}
               </p>
               <p className="mt-1.5 text-[14px]">
-                {c.replacement ? (
+                {c.replacement && c.edition_type === "daily" ? (
+                  // 데일리 대체판은 브리핑 판 사이 링크 — 전체 이동 (BriefingDateLink)
+                  <BriefingDateLink
+                    path={c.replacement.path}
+                    className="rounded-sm text-jade underline decoration-1 underline-offset-4 hover:decoration-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {t("viewReplacement", { version: c.replacement.version })}
+                  </BriefingDateLink>
+                ) : c.replacement ? (
                   <Link
                     href={c.replacement.path}
                     className="rounded-sm text-jade underline decoration-1 underline-offset-4 hover:decoration-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
