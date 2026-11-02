@@ -50,9 +50,9 @@ test("샘플: refs 관련성 — Meta 문장의 A16(DeepSeek) 만 떼어내고 A
   assert.ok(!report.warn.some((w) => w.rule === "refs_relevance" && /A44/.test(w.detail)));
 });
 
-test("샘플: 한국어 본문의 한자를 경고로 잡는다 (無問芯穹, 不问凡尘)", () => {
+test("샘플: 한국어 본문의 한자를 치명으로 잡는다 (無問芯穹, 不问凡尘) — 2026-11-02 부터 경고 아님", () => {
   const { report } = run(load());
-  const han = report.warn.filter((w) => w.rule === "han_in_ko");
+  const han = report.fatal.filter((w) => w.rule === "han_in_ko");
   assert.ok(han.length >= 3, JSON.stringify(han));
   assert.ok(han.some((w) => w.detail.includes("無問芯穹")));
   assert.ok(han.some((w) => w.detail.includes("不问凡尘")));
@@ -60,10 +60,12 @@ test("샘플: 한국어 본문의 한자를 경고로 잡는다 (無問芯穹, �
   assert.ok(!han.some((w) => w.path.startsWith("term_of_the_day")));
 });
 
-test("샘플: 중국 중심 규칙 미달(상위 5건 중 2건)을 경고로 잡는다", () => {
-  const { report } = run(load());
+test("샘플: 중국 중심 규칙 미달(상위 5건 중 2건)은 치명 (삭제할 수 없는 top_stories → 판 전체 failed)", () => {
+  const { report, content } = run(load());
   assert.equal(report.stats.chinaCentric, 2);
-  assert.ok(report.warn.some((w) => w.rule === "china_centric"));
+  const f = report.fatal.find((w) => w.rule === "china_centric");
+  assert.ok(f);
+  assert.deepEqual(dropFatalItems(content, [f!]).unrecoverable, ["top_stories"]);
 });
 
 test("샘플: 용어(自主复制) 와 병음은 통과", () => {
@@ -104,8 +106,9 @@ test("숨긴 기사·제외한 기사 인용은 치명", () => {
   const ex = run(c).report;
   assert.ok(ex.fatal.some((f) => f.rule === "excluded_or_hidden_ref" && f.path === "key_numbers[0]"));
   // 2026-10-13 v7 회귀: headline 은 본문 전체 refs 를 쓰므로 ref 위반을 headline 에 붙이면 판 전체가 failed 가 됐다
-  assert.ok(!ex.fatal.some((f) => f.path === "headline"), JSON.stringify(ex.fatal));
-  assert.deepEqual(dropFatalItems(load(), ex.fatal).unrecoverable, []);
+  const refIssues = ex.fatal.filter((f) => f.rule === "excluded_or_hidden_ref");
+  assert.ok(!refIssues.some((f) => f.path === "headline"), JSON.stringify(refIssues));
+  assert.deepEqual(dropFatalItems(load(), refIssues).unrecoverable, []);
 });
 
 test("바꾼 숫자는 치명 (34% → 43%)", () => {
@@ -124,13 +127,14 @@ test("refs 가 비면 치명, 용어 병음이 틀리면 치명", () => {
   assert.ok(report.fatal.some((f) => f.rule === "term"));
 });
 
-test("남은 치명 항목 삭제 후 재검증하면 치명 0, 주요 기사 4건 유지", () => {
+test("남은 치명 항목 삭제 후 재검증하면 숫자 위반 0, 주요 기사 4건 유지", () => {
   const first = run(load());
-  const { content, dropped, unrecoverable } = dropFatalItems(first.content, first.report.fatal);
+  const numberIssues = first.report.fatal.filter((f) => f.rule.startsWith("number"));
+  const { content, dropped, unrecoverable } = dropFatalItems(first.content, numberIssues);
   assert.deepEqual(dropped, ["top_stories[1]"]);
   assert.deepEqual(unrecoverable, []);
   const again = run(content);
-  assert.equal(again.report.fatal.length, 0, JSON.stringify(again.report.fatal));
+  assert.equal(again.report.fatal.filter((f) => f.rule.startsWith("number")).length, 0, JSON.stringify(again.report.fatal));
   assert.equal(content.top_stories.length, 4);
   assert.deepEqual(content.top_stories.map((s) => s.rank), [1, 2, 3, 4]);
 });
@@ -168,16 +172,15 @@ test("번역 재검증: 숫자 집합·문자 체계·구조", () => {
 
 // ───────────────────────── 2026-10-13 후속 (UI·검토 단계) 규칙
 
-test("헤드라인 32자 초과는 headline_length 경고 (36자 샘플) — 자르지 않고 수리 대상", () => {
+test("헤드라인 32자 초과는 headline_length 치명 (36자 샘플) — 자르지 않고 수리 대상, 수리 뒤에도 길면 판 failed", () => {
   const { report, content } = run(load());
-  const w = report.warn.find((x) => x.rule === "headline_length");
-  assert.ok(w, JSON.stringify(report.warn));
+  const w = report.fatal.find((x) => x.rule === "headline_length");
+  assert.ok(w, JSON.stringify(report.fatal));
   assert.equal(w!.detail, "36/32자");
   assert.equal(content.headline.length, 36); // 자동 자르기 없음
-  assert.ok(!report.fatal.some((f) => f.path === "headline"));
   const short = load();
   short.headline = "무문신궁 23억 위안 조달, 메타 신모델";
-  assert.ok(!run(short).report.warn.some((x) => x.rule === "headline_length"));
+  assert.ok(!run(short).report.fatal.some((x) => x.rule === "headline_length"));
 });
 
 test("리드: v8 실제 오류 '중국 내에서는 … Anthropic의 일본 데이터센터' 는 china_attribution 치명", () => {

@@ -44,6 +44,12 @@ export interface CandidateArticle {
   summary_kr: string;
   ai_insights_kr: string;
   key_terms: KeyTerm[];
+  /** 중국어 원문 요약 (통화·고유명사 대조용 — 숫자 근거에는 넣지 않는다) */
+  summary_cn?: string;
+  /** 베이징 날짜 YYYY-MM-DD */
+  news_date?: string;
+  /** 기사 주체 지역 (분류기, rules.ts isChinaSubject 가 쓸 자리) */
+  subject_region?: string | null;
 }
 
 export interface KeyTerm {
@@ -60,6 +66,8 @@ export interface CandidateGroup {
   primary: CandidateArticle;
   siblings: CandidateArticle[]; // 전재(제목 바이그램 Jaccard ≥ 0.6)
   sources: string[]; // 대표 + 형제의 매체명 (중복 제거)
+  /** 같은 사건(제목이 다른 묶음 포함)을 다룬 매체 전체 (news-rank sameEvent). 없으면 sources */
+  eventSources?: string[];
   score: number;
   scoreDetail: Record<string, number>;
 }
@@ -186,6 +194,8 @@ export interface GenerateOptions {
   force?: boolean;
   /** 테스트·CLI 용: LLM 을 부르지 않고 후보만 계산 */
   dryRun?: boolean;
+  /** 일요일 단독판을 굳이 만들 때만 (CLI --sunday). force 로는 만들지 않는다 — 토요일 합본과 같은 기사가 두 번 실림 */
+  sunday?: boolean;
 }
 
 export interface LocaleOutcome {
