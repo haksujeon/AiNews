@@ -5,7 +5,7 @@
  *   npx tsx scripts/briefing-generate.ts publish --date 2026-10-13 [--version 2]
  *   npx tsx scripts/briefing-generate.ts withdraw --date 2026-10-13 --reason "공개 철회 사유" [--locale en]
  *   npx tsx scripts/briefing-generate.ts                    (날짜 없음 = n8n 과 같은 정기 일정: 월~금 오늘, 일요일 = 토요일 합본, 토요일 = 건너뜀.
- *                                                            일요일 날짜를 직접 주면 --force 없이는 건너뜀 — 토요일 판이 토·일 합본)
+ *                                                            일요일 날짜는 --force 로도 건너뜀 — 토요일 판이 토·일 합본. 꼭 필요하면 --sunday)
  *   npx tsx scripts/briefing-generate.ts weekly [--week 2026-W44] [--force] [--dry-run]
  *     (주간 리포트 초안. --week 없으면 베이징 기준 지난주. 수집 미완 날짜가 있으면 --force 가 있어야 만든다.
  *      발행은 관리자 화면에서 데이터 알림을 확인한 뒤 한다)
@@ -52,7 +52,7 @@ async function main() {
       console.log(JSON.stringify(result, null, 2));
       if (["failed", "invalid_period", "blocked_data_quality", "locked"].includes(result.outcome)) process.exitCode = 1;
     } else if (cmd === "generate") {
-      const result = await generateBriefing({ date, force: flag("force"), dryRun: flag("dry-run") });
+      const result = await generateBriefing({ date, force: flag("force"), dryRun: flag("dry-run"), sunday: flag("sunday") });
       console.log(JSON.stringify(result, null, 2));
       if (result.outcome === "failed") process.exitCode = 1;
     } else {

@@ -6,11 +6,15 @@
  */
 import { BACKFILL_CAPS, type PeriodMetrics } from "../../metrics/period";
 import type { ValidationIssue } from "../types";
+import { groupPeriodStories, type PeriodStoryInput } from "../select";
+import { moneyIssues, type SourceDoc } from "../rules";
 import type { PeriodicKind, StoryPoolItem, WeeklyContent } from "./types";
 
 // 프롬프트를 바꾸면 버전을 올린다 (input_hash 에 들어감)
-export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v2-2026-11-02";
-export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v1-2026-11-02";
+// weekly v3 / monthly v2 (2026-11-02 편집 QA): 사건 단위 후보, MONEY 표에서 매출·가치·통화 불일치 행 제외,
+//   금액 서열 금지, "가장 많이" 는 지표 1위만, 매체 수 그대로, 수리 지시문 금지
+export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v3-2026-11-02";
+export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v2-2026-11-02";
 export const WEEKLY_HEADLINE_MAX = 36;
 export const WEEKLY_STORY_LIMIT = 50;
 export const MONTHLY_STORY_LIMIT = 60;
@@ -110,17 +114,37 @@ export function buildFacts(m: PeriodMetrics): Record<string, string> {
   return F;
 }
 
-/** 이야기 후보: 매체 수·점수 상위 묶음 + 돈 흐름 표 기사 (S01..) */
-export function buildStoryPool(
-  stories: { ids: string[]; title_kr: string; summary_kr: string; sources: string[]; days: string[]; entities: string[] }[],
-  money: PeriodMetrics["money_table"],
-  limit: number = WEEKLY_STORY_LIMIT
-): StoryPoolItem[] {
+type PoolStory = { ids: string[]; title_kr: string; summary_kr: string; sources: string[]; days: string[]; entities: string[] } & Partial<
+  Pick<PeriodStoryInput, "primary_id" | "title_cn" | "score">
+>;
+
+/**
+ * 이야기 후보: 매체 수·점수 상위 사건 + 돈 흐름 표 기사 (S01..).
+ * 같은 사건을 다른 날·다른 글로 다룬 묶음(1단계)은 2단계 사건 묶기(select.ts groupPeriodStories, 지표 events 와 같은 함수)로
+ * 하나의 후보로 합친다 — 같은 이야기가 두 후보로 나뉘어 본문에 두 번 나오지 않게 (QA 권고 5).
+ * 대표 제목·요약은 점수가 가장 높은 묶음, ids·sources·days 는 사건 전체.
+ */
+export function buildStoryPool(stories: PoolStory[], money: PeriodMetrics["money_table"], limit: number = WEEKLY_STORY_LIMIT): StoryPoolItem[] {
   const pool: Omit<StoryPoolItem, "sid">[] = [];
   const seen = new Set<string>();
-  for (const g of stories.slice(0, limit)) {
-    pool.push({ ids: g.ids, title_kr: g.title_kr, summary_kr: g.summary_kr, sources: g.sources, days: g.days, entities: g.entities });
-    g.ids.forEach((i) => seen.add(i));
+  const inputs = stories.map((g, i) => ({
+    ...g,
+    primary_id: g.primary_id ?? g.ids[0] ?? String(i),
+    title_cn: g.title_cn ?? "",
+    score: g.score ?? 0,
+  }));
+  const events = groupPeriodStories(inputs);
+  for (const ev of events.slice(0, limit)) {
+    const lead = ev.lead;
+    pool.push({
+      ids: ev.ids,
+      title_kr: lead.title_kr,
+      summary_kr: lead.summary_kr,
+      sources: ev.sources,
+      days: ev.days,
+      entities: [...new Set(ev.members.flatMap((x) => x.entities))],
+    });
+    ev.ids.forEach((i) => seen.add(i));
   }
   for (const r of money) {
     if (seen.has(r.id)) continue;
@@ -175,8 +199,12 @@ ${volumeRule}
 10. 증감("늘었다·줄었다")을 말하면 그 증감을 담은 FACTS 키(.chg / .rise / .fall / vol.lfl_change / week.*)를 metrics 에 넣고, 지표의 방향(+/-, 늘어난 용어/줄어든 용어)과 같은 방향으로 씁니다.
 11. metrics 에 넣는 지표의 대상(기업·매체·용어)은 그 문장에 나와야 합니다.
 12. headline 은 공백 포함 ${WEEKLY_HEADLINE_MAX}자 이내입니다(넘으면 반려). 쓰고 나서 글자 수를 세어 보십시오.
-13. money 는 MONEY 표에 있는 금액과 그 행의 유형(투자·상장·부채 조달 등)만 씁니다. 매출·기업가치를 거래 금액처럼 쓰지 마십시오.
+13. money 는 MONEY 표에 있는 금액과 그 행의 유형(투자·상장·부채 조달 등)만 씁니다. 매출·기업가치·손실 금액을 "확보·유치·조달" 처럼 거래 금액으로 쓰지 마십시오. 금액끼리 크기를 비교하거나 서열을 매기지 마십시오("최대 거래", "가장 큰", "상대적으로 작았다" 금지 — 같은 통화여도).
 14. DATA_QUALITY 의 축소 수집일(보충 수집, 매체별 하루 상한)과 부분 수집일의 기사 수는 실제 보도량이 아닙니다. 그 날·그 주의 기사 수가 적다는 사실로 관심이 줄었다거나 늘었다고 추론하지 마십시오.
+15. "가장 많이 늘었다·가장 많이 다뤄졌다·언급 최다" 같은 순위 표현은 FACTS 의 1위(용어는 .rise 의 첫째, 기업은 ent 언급 수 첫째)에만 씁니다. dek·term.why·china_lens 도 증감을 말하면 그 증감 키를 metrics 에 넣고, 용어를 한국어로 옮겨 써도(智能体 → 에이전트) 지표 방향과 같아야 합니다.
+16. "두 매체가 전했다" 처럼 매체 수를 말할 때는 refs 의 sources 수 그대로 씁니다. china_lens 에서 "국내 기업 위주·해외 기업 위주" 는 cvo.china / cvo.foreign 값이 큰 쪽으로만 씁니다.
+17. "주도·주류·재편·가열·이동" 같은 추세 단정과 "최초·최대·역대" 는 기사에 그 표현이 있을 때만, 기사가 "전망·가능성·중 하나" 로 한정했으면 한정을 그대로 씁니다.
+18. STORIES 는 사건 단위입니다(같은 사건의 여러 날·여러 글이 한 id). 매체 수(sources)가 가장 많은 사건 1·2위는 big_picture 나 movers 에 반영합니다. 같은 사건을 두 항목에 나눠 쓰지 마십시오.
 
 출력: 아래 스키마의 JSON 하나만. 코드 펜스·설명 금지.
 ${schema(kind, weekKeys)}`;
@@ -202,9 +230,40 @@ export function dataQualityLine(m: PeriodMetrics): string {
   return `${parts.join("; ")} — ${cmp}. 이 날들의 기사 수로 추세를 추론하지 말 것`;
 }
 
-export function buildPeriodicUserPrompt(m: PeriodMetrics, facts: Record<string, string>, pool: StoryPoolItem[]): string {
+/**
+ * MONEY 표 행의 금액이 거래 금액인가 — 검증기(moneyIssues)와 같은 함수로 본다 (Gate 2).
+ *  value: 원문에서 그 금액은 매출·기업가치·손실 (Anthropic "반년 만에 163억 달러 확보" = 상반기 매출)
+ *  currency: 중국어 원문의 통화가 다름 ("최대 110억 달러" ← 最大一笔110亿 = 위안)
+ */
+export function moneyRowProblem(row: PeriodMetrics["money_table"][number], docs: SourceDoc[]): "value" | "currency" | null {
+  if (!docs.length) return null;
+  const issues = moneyIssues(`${row.amount} 조달`, docs);
+  if (issues.some((i) => i.rule === "currency_mismatch")) return "currency";
+  if (issues.some((i) => i.rule === "money_not_deal")) return "value";
+  return null;
+}
+
+export function buildPeriodicUserPrompt(
+  m: PeriodMetrics,
+  facts: Record<string, string>,
+  pool: StoryPoolItem[],
+  docs?: Map<string, SourceDoc[]>
+): string {
   const W = WORDS[kindOfMetrics(m)];
   const sidOf = new Map(pool.flatMap((p) => p.ids.map((id) => [id, p.sid] as const)));
+  // 기사 id → 근거 기사 (S id 의 docs 중 그 기사)
+  const docOf = (id: string): SourceDoc[] => {
+    const sid = sidOf.get(id);
+    const p = sid ? pool.find((x) => x.sid === sid) : undefined;
+    const list = sid ? docs?.get(sid) ?? [] : [];
+    const i = p ? p.ids.indexOf(id) : -1;
+    return i >= 0 && list[i] ? [list[i]] : [];
+  };
+  const moneyRows = m.money_table.map((r) => ({ r, problem: moneyRowProblem(r, docOf(r.id)) }));
+  const kept = moneyRows.filter((x) => !x.problem).map((x) => x.r);
+  const droppedValue = moneyRows.filter((x) => x.problem === "value").length;
+  const droppedCur = moneyRows.filter((x) => x.problem === "currency").length;
+  const moneyNote = droppedValue || droppedCur ? `\n(제외: 매출·기업가치 금액 ${droppedValue}행, 중국어 원문과 통화가 다른 금액 ${droppedCur}행 — 쓰지 마십시오)` : "";
   const span = m.kind === "monthly" ? `${m.period.start.slice(0, 7)} 한 달` : "월~일";
   const noPrev =
     m.kind === "monthly"
@@ -224,8 +283,8 @@ ${Object.entries(facts)
   .map(([k, x]) => `${k} = ${x}`)
   .join("\n")}
 
-MONEY (제목에 나온 거래 금액, 합산 금지):
-${m.money_table.map((r) => `${sidOf.get(r.id) ?? "?"} | ${r.day} | ${r.kind} | ${r.amount} | ${r.title_kr}`).join("\n")}
+MONEY (제목에 나온 거래 금액, 합산·크기 비교 금지):
+${kept.map((r) => `${sidOf.get(r.id) ?? "?"} | ${r.day} | ${r.kind} | ${r.amount} | ${r.title_kr}`).join("\n")}${moneyNote}
 
 STORIES (${pool.length}건, sources = 함께 다룬 매체):
 ${pool
@@ -252,6 +311,9 @@ ${lines}
 - metrics 에 넣은 지표의 대상이 문장에 없으면 그 지표를 빼거나 문장에 대상을 씁니다.
 - headline 이 ${WEEKLY_HEADLINE_MAX}자를 넘었다면 뜻을 유지한 채 ${WEEKLY_HEADLINE_MAX}자 이내로 다시 씁니다.
 - 한국어 문장의 한자는 한국어 표기로 바꿉니다 (term.term 만 예외).
+- money 에서는 금액 서열·크기 비교를 빼고, 매출·기업가치 금액을 거래처럼 쓴 문장을 지웁니다.
+- 순위 표현("가장 많이 …")은 FACTS 1위가 아니면 지우고, 최상급·추세 단정은 기사 표현(한정 포함) 그대로 씁니다.
+- 고친 결과만 본문에 씁니다. 지시문·괄호 메모("~ 대신 ~", "수정:")를 본문에 남기지 마십시오.
 - 문제가 없는 항목은 그대로 둡니다. 코드 펜스·설명 없이 JSON 하나만 출력합니다.
 
 ${JSON.stringify(draft)}`;

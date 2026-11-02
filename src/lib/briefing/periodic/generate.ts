@@ -20,7 +20,8 @@ import { createHash } from "node:crypto";
 import pool from "@/lib/db";
 import { COMPLETE_SINCE, computePeriodMetrics, type PeriodMetrics, type PeriodStory } from "@/lib/metrics/period";
 import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "../llm";
-import { articleText } from "../validate";
+import { articleText, toSourceDoc } from "../validate";
+import type { SourceDoc } from "../rules";
 import { BudgetExceeded, CostTracker, sumUsage } from "../generate";
 import { finishGenerating, insertBriefing, latestBriefing, withDateLock } from "../repository";
 import type { CandidateArticle, LlmUsage } from "../types";
@@ -124,20 +125,33 @@ async function upsertPeriodMetrics(m: PeriodMetrics): Promise<string> {
   return rows[0].id as string;
 }
 
-/** S id → 근거 텍스트 (묶음 기사 전체). 데일리와 같은 articleText */
-async function loadSourceText(poolItems: StoryPoolItem[]): Promise<Map<string, string>> {
+/**
+ * S id → 근거 텍스트 (묶음 기사 전체, 데일리와 같은 articleText) + 근거 기사(중국어 원문 포함, rules.ts 의미 규칙용).
+ * summary_cn 은 숫자 근거(sourceText)에 넣지 않는다 — 통화·고유명사 대조에만 쓴다.
+ */
+async function loadSourceText(poolItems: StoryPoolItem[]): Promise<{ sourceText: Map<string, string>; docs: Map<string, SourceDoc[]> }> {
   const ids = [...new Set(poolItems.flatMap((p) => p.ids))];
   const { rows } = await pool.query(
-    `SELECT id, COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr,
-            COALESCE(summary_kr, '') AS summary_kr, COALESCE(ai_insights_kr, '') AS ai_insights_kr
+    `SELECT id, source_name, COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr,
+            COALESCE(summary_kr, '') AS summary_kr, COALESCE(ai_insights_kr, '') AS ai_insights_kr,
+            COALESCE(summary_cn, '') AS summary_cn, to_char((news_date AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS news_date
        FROM ai_news_ex WHERE id = ANY($1::uuid[])`,
     [ids]
   );
-  const byId = new Map((rows as CandidateArticle[]).map((a) => [a.id, articleText(a)]));
-  return new Map(poolItems.map((p) => [p.sid, p.ids.map((id) => byId.get(id) ?? "").join(" ")]));
+  const arts = rows as CandidateArticle[];
+  const byId = new Map(arts.map((a) => [a.id, a]));
+  return {
+    sourceText: new Map(poolItems.map((p) => [p.sid, p.ids.map((id) => (byId.has(id) ? articleText(byId.get(id)!) : "")).join(" ")])),
+    docs: new Map(poolItems.map((p) => [p.sid, p.ids.flatMap((id) => (byId.has(id) ? [toSourceDoc(byId.get(id)!)] : []))])),
+  };
 }
 
-export function validationContext(m: PeriodMetrics, sourceText: Map<string, string>): PeriodicValidationContext {
+export function validationContext(
+  m: PeriodMetrics,
+  sourceText: Map<string, string>,
+  docs?: Map<string, SourceDoc[]>,
+  poolItems: StoryPoolItem[] = []
+): PeriodicValidationContext {
   const monthly = m.kind === "monthly";
   return {
     kind: monthly ? "monthly" : "weekly",
@@ -147,6 +161,17 @@ export function validationContext(m: PeriodMetrics, sourceText: Map<string, stri
     terms: new Set(m.terms.top.map((t) => t.term)),
     headlineMax: WEEKLY_HEADLINE_MAX,
     weekKeys: monthly ? new Set((m.weeks ?? []).map((w) => w.key)) : undefined,
+    docs,
+    outlets: new Map(poolItems.map((p) => [p.sid, p.sources])),
+    // 지표 순위 — "가장 많이 늘었다·가장 많이 다뤄졌다" 는 이 순서의 1위와 같아야 한다
+    ranks: {
+      entities: m.entities.map((e) => e.key),
+      terms: m.terms.top.map((t) => t.term),
+      rising: m.terms.rising.map((t) => t.term),
+      falling: m.terms.falling.map((t) => t.term),
+    },
+    topEvents: (m.stories.events_top ?? []).slice(0, 2).map((e) => e.ids),
+    poolIds: new Map(poolItems.map((p) => [p.sid, p.ids])),
   };
 }
 
@@ -201,7 +226,7 @@ async function generateKo(
   cost: CostTracker
 ): Promise<KoOutcome> {
   const system = buildPeriodicSystemPrompt(kind, (m.weeks ?? []).map((w) => w.key));
-  const user = buildPeriodicUserPrompt(m, ctx.facts, poolItems);
+  const user = buildPeriodicUserPrompt(m, ctx.facts, poolItems, ctx.docs);
   const validation: Record<string, unknown> = { prompt_version: PROMPT_VERSION[kind], prompt_chars: system.length + user.length };
   const track = (u: LlmUsage) => cost.add(u);
 
@@ -320,8 +345,8 @@ export async function generatePeriodic(kind: PeriodicKind, opts: PeriodicGenerat
       }
 
       const metricsId = await upsertPeriodMetrics(m);
-      const sourceText = await loadSourceText(poolItems);
-      const ctx = validationContext(m, sourceText);
+      const { sourceText, docs } = await loadSourceText(poolItems);
+      const ctx = validationContext(m, sourceText, docs, poolItems);
       const inputArticleIds = [...new Set(poolItems.flatMap((x) => x.ids))];
       const row = await insertBriefing({
         editionType: kind, date: start, periodStart: start, periodEnd: end, metricsId,
