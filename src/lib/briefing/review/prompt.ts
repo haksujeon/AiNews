@@ -10,7 +10,7 @@ import { isPeriodic, segmentContent } from "./segments";
 import type { Segment } from "./types";
 import type { Hint } from "./hints";
 
-export const REVIEW_PROMPT_VERSION = "review-v6-2026-11-02";
+export const REVIEW_PROMPT_VERSION = "review-v6.1-2026-11-02";
 
 export function buildReviewSystemPrompt(editionType: EditionType, withTranslations: boolean): string {
   const periodic = isPeriodic(editionType);
@@ -53,7 +53,7 @@ export function buildReviewSystemPrompt(editionType: EditionType, withTranslatio
 7. 구조(structure): 같은 사건을 두 번 서술, 광고·행사·칼럼·순위표를 주요 기사로, 수집 결손 알림이 필요한데 없음, 한자·길이 문제 등 (각 문자열 하나, 없으면 빈 배열).${
     withTranslations
       ? `
-8. 번역(translation): en/zh 문장이 ko 와 숫자·이름·주체·의미(부정·방향·시점)가 다르면 major, 어색한 표현은 minor. 문제 없으면 빈 배열.`
+8. 번역(translation): 필드 단위로 비교합니다. en/zh 가 ko 와 숫자·이름·주체·의미(부정·방향·시점)가 다르거나 내용이 빠지·더해지면 major, 어색한 표현은 minor. 문장을 나누거나 합친 것은 문제가 아닙니다. 문제 없으면 빈 배열.`
       : ""
   }
 
@@ -123,13 +123,18 @@ function translationLines(segments: Segment[], tr: TranslationRow[], editionType
       return [t.locale, m];
     })
   );
+  // 필드 단위로 ko 전체 문장과 나란히 (문장 나눔이 언어마다 달라 S id 단위로 붙이면 경계를 혼동한다 — 10-27 v7 dry-run 오탐)
   const firstSid = new Map<string, string>();
-  for (const s of segments) if (!firstSid.has(s.path)) firstSid.set(s.path, s.sid);
+  const koText = new Map<string, string>();
+  for (const s of segments) {
+    if (!firstSid.has(s.path)) firstSid.set(s.path, s.sid);
+    koText.set(s.path, `${koText.get(s.path) ?? ""} ${s.text}`.trim());
+  }
   const out: string[] = [];
   for (const [path, sid] of firstSid) {
     const en = byLoc.get("en")?.get(path) ?? "(없음)";
     const zh = byLoc.get("zh")?.get(path) ?? "(없음)";
-    out.push(`${sid} ${path} | en: ${en} || zh: ${zh}`);
+    out.push(`${sid} ${path} | ko: ${koText.get(path)} || en: ${en} || zh: ${zh}`);
   }
   return out;
 }

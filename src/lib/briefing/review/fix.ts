@@ -95,7 +95,7 @@ export interface FixCheck {
  * replace 수정안 하나를 근거와 대조한다.
  * corpus = 그 문장의 인용 기사 본문(+FACTS). quote 는 그 corpus 안에 그대로 있어야 한다.
  */
-export function checkReplacement(original: string, replacement: string, quote: string, corpus: string, opts: { keyNumber?: boolean } = {}): FixCheck {
+export function checkReplacement(original: string, replacement: string, quote: string, corpus: string, opts: { keyNumber?: boolean; keepOriginalSuperlatives?: boolean } = {}): FixCheck {
   const reasons: string[] = [];
   const t = (replacement ?? "").replace(/\s+/g, " ").trim();
   if (!t) reasons.push("고친 문장이 비어 있음");
@@ -121,7 +121,8 @@ export function checkReplacement(original: string, replacement: string, quote: s
     const cov = grams.filter((g) => poolGrams.has(g)).length / grams.length;
     if (cov < MIN_BIGRAM_COVERAGE) reasons.push(`근거에 없는 표현 비율이 높음 (글자쌍 일치 ${Math.round(cov * 100)}%)`);
   }
-  const sup = [...new Set(t.match(SUPERLATIVE_RE) ?? [])].filter((w) => !quote.includes(w));
+  // 원문 문장에 이미 있던 강조는, 문제가 overclaim 이 아닐 때(예: 모델명만 틀림) 그대로 둘 수 있다
+  const sup = [...new Set(t.match(SUPERLATIVE_RE) ?? [])].filter((w) => !quote.includes(w) && !(opts.keepOriginalSuperlatives && original.includes(w)));
   if (sup.length) reasons.push(`근거 인용에 없는 최상급·강조: ${sup.join(", ")}`);
   return { ok: reasons.length === 0, reasons };
 }
@@ -180,7 +181,7 @@ export function planFixes(
     if (f?.action === "replace" && !labels.includes("misattributed")) {
       const refIds = claims.filter((c) => c.sid === sid).flatMap((c) => c.ref_ids);
       const corpus = corpusOf(seg, refIds);
-      const chk = checkReplacement(seg.text, f.text, f.evidence, corpus, { keyNumber: seg.path.startsWith("key_numbers[") });
+      const chk = checkReplacement(seg.text, f.text, f.evidence, corpus, { keyNumber: seg.path.startsWith("key_numbers["), keepOriginalSuperlatives: !labels.includes("overclaim") });
       if (chk.ok) {
         planned.push({ sid, path: seg.path, action: "replace", original: seg.text, text: f.text.replace(/\s+/g, " ").trim(), basis: "reviewer_replace", labels, evidence: f.evidence });
         continue;

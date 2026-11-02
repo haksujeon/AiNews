@@ -57,7 +57,7 @@ const LABEL_ALIASES: Record<string, ClaimLabel> = {
 };
 
 /** 검토 모델이 메모에서 스스로 오류 판정을 거둔 표현 */
-export const RETRACTION_RE = /correct\s*로\s*(재판정|볼\s*수)|실질\s*(적인\s*)?오류는?\s*아님|오류가?\s*아님|문제\s*없음\s*$/;
+export const RETRACTION_RE = /correct\s*(로\s*(재판정|볼\s*수)|에\s*가깝)|실제로는?\s*correct|실질\s*(적인\s*)?오류는?\s*아님|오류가?\s*아님|문제\s*없음\s*$/;
 
 function labelOf(v: unknown): ClaimLabel | null {
   const x = s(v, 40).toLowerCase();

@@ -20,7 +20,7 @@ import { citedSids } from "../periodic/validate";
 import { fallbackDek, fallbackHeadline } from "../periodic/prompt";
 import type { BriefingContent, ValidationIssue } from "../types";
 import type { WeeklyContent } from "../periodic/types";
-import { rootUrl } from "@/lib/site";
+import { SITE_ORIGIN } from "@/lib/site";
 import { loadReviewInput, type ReviewInput, type TranslationRow } from "./evidence";
 import { planFixes, type FixPlan } from "./fix";
 import { decide, policyFromEnv, type Decision, type ReviewPolicy } from "./policy";
@@ -216,7 +216,8 @@ function storedFatal(row: BriefingRow): number {
   return Array.isArray(f) ? f.length : 0;
 }
 
-const adminUrl = (id: string) => rootUrl(`/ko/admin/briefings/${id}`);
+// CLI 에서는 NEXT_PUBLIC_BASE_PATH 가 없어서 기본 /ainews (next.config basePath)
+const adminUrl = (id: string) => `${SITE_ORIGIN}${process.env.NEXT_PUBLIC_BASE_PATH || "/ainews"}/ko/admin/briefings/${id}`;
 const typeKo = (t: EditionType) => (t === "daily" ? "데일리" : t === "weekly" ? "주간" : "월간");
 
 /** 수정본으로 다음 검토 입력을 만든다 (메모리, dry-run 과 저장 뒤 공통) */
@@ -350,7 +351,9 @@ async function processEdition(target: Target, o: Required<Pick<PipelineOptions, 
 
     // 3) 고칠 수 있나
     const failing = decision.checks.filter((c) => !c.ok);
-    const nonClaim = failing.filter((c) => !CLAIM_RULES.has(c.rule));
+    // 데일리 번역 조건은 수정하면 다시 번역하므로, 고칠 주장이 있으면 막지 않는다
+    const flaggedAny = review.claims.some((c) => c.label !== "correct");
+    const nonClaim = failing.filter((c) => !CLAIM_RULES.has(c.rule) && !(flaggedAny && target.editionType === "daily" && c.rule.startsWith("translation")));
     const hard = counts.wrong + counts["number-unit"];
     const flagged = review.claims.some((c) => c.label !== "correct");
     let holdReason: string | null = null;

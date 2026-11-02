@@ -6,7 +6,9 @@
  *  - BRIEFING_AUTO_PUBLISH=on|off        (기본 on — 끄면 판정만 기록하고 발행하지 않는다 = 관리자 발행으로 되돌림)
  *  - 판정 PASS (코드 기준표 판정과 모델 판정 중 엄격한 쪽)
  *  - wrong · number-unit · misattributed 0건, overclaim ≤ 1, unsupported ≤ 0
- *  - 점수 ≥ 8.0 (데일리) / ≥ 7.5 (주간·월간)   BRIEFING_REVIEW_MIN_SCORE_DAILY / _PERIODIC
+ *  - 점수 ≥ 9.0 (데일리) / ≥ 7.5 (주간·월간)   BRIEFING_REVIEW_MIN_SCORE_DAILY / _PERIODIC
+ *    (보정 v6 24판: 사람 "발행 가능" 10-27 v7 = 9.5, 사람 6.5 "수정 후 발행" 09-16 v1 = 8.8 → 데일리 기준 8.0 이면 09-16 v1 도 자동 발행되어 9.0 으로 올림.
+ *     주간·월간은 보정에서 PASS 가 한 판도 없어 7.5 는 기준표 기본값 그대로 — 결손일 조건과 함께 사실상 사람 확인)
  *  - 결정적 검사기 치명 0건, 고칠 수 없는 항목 없음
  *  - 데일리: en·zh 번역본이 이 ko 버전에서 나온 draft 이고 번역 재검증 문제 0건, 검토의 번역 major 문제 0건
  *  - 주간·월간: 수집 미완 날짜가 없다 (있으면 데이터 알림 확인이 필요하므로 사람에게 넘긴다 — 자동으로 확인하지 않는다)
@@ -33,7 +35,7 @@ export function policyFromEnv(env: Record<string, string | undefined> = process.
   const flag = (env.BRIEFING_AUTO_PUBLISH ?? "on").trim().toLowerCase();
   return {
     autoPublish: !["off", "0", "false", "no"].includes(flag),
-    minScore: { daily: num(env.BRIEFING_REVIEW_MIN_SCORE_DAILY, 8), periodic: num(env.BRIEFING_REVIEW_MIN_SCORE_PERIODIC, 7.5) },
+    minScore: { daily: num(env.BRIEFING_REVIEW_MIN_SCORE_DAILY, 9), periodic: num(env.BRIEFING_REVIEW_MIN_SCORE_PERIODIC, 7.5) },
     maxOverclaim: num(env.BRIEFING_REVIEW_MAX_OVERCLAIM, 1),
     maxUnsupported: num(env.BRIEFING_REVIEW_MAX_UNSUPPORTED, 0),
     blockingLabels: ["wrong", "number-unit", "misattributed"],

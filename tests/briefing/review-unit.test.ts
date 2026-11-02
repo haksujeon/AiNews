@@ -61,6 +61,22 @@ test("parseReviewJson: 모르는 문장·라벨·후보는 버리고 기록, 라
   assert.ok(p.schemaIssues.some((x) => x.startsWith("주장으로 다루지 않은 문장")));
 });
 
+test("parseReviewJson: 메모에서 스스로 철회한 오류 라벨은 correct 로 (보정 10-27 v7 실제 응답)", () => {
+  const p = parseReviewJson(
+    {
+      claims: [
+        { s: "S06", c: "27B 규모 Qwen 기반", l: "wrong", r: "a01", e: "x", n: "'27B 규모'는 근거와 일치하므로 correct에 가깝지만 모델명 표기 확인 필요 — 실제로 correct" },
+        { s: "S07", c: "x", l: "wrong", r: "a01", e: "x", n: "방향이 반대" },
+      ],
+      verdict: "PASS",
+    },
+    ctx
+  );
+  assert.equal(p.claims[0].label, "correct");
+  assert.match(p.claims[0].note, /철회: 원래 wrong/);
+  assert.equal(p.claims[1].label, "wrong");
+});
+
 test("parseReviewJson: 최상위 모양이 틀리면 ReviewSchemaError", () => {
   assert.throws(() => parseReviewJson(null, ctx), ReviewSchemaError);
   assert.throws(() => parseReviewJson({ verdict: "PASS" }, ctx), ReviewSchemaError);
@@ -122,7 +138,7 @@ const base = (o: Partial<DecisionInput> = {}, r: Partial<ReviewResult> = {}): De
 
 test("policyFromEnv: 기본값과 스위치", () => {
   assert.equal(policy.autoPublish, true);
-  assert.deepEqual(policy.minScore, { daily: 8, periodic: 7.5 });
+  assert.deepEqual(policy.minScore, { daily: 9, periodic: 7.5 });
   assert.equal(policy.maxOverclaim, 1);
   assert.equal(policy.maxUnsupported, 0);
   assert.equal(policyFromEnv({ BRIEFING_AUTO_PUBLISH: "off" }).autoPublish, false);
@@ -139,8 +155,8 @@ test("decide: 결정표", () => {
     ["overclaim 1 허용", base({}, { counts: counts({ overclaim: 1 }) }), true],
     ["overclaim 2", base({}, { counts: counts({ overclaim: 2 }) }), false],
     ["unsupported 1", base({}, { counts: counts({ unsupported: 1 }) }), false],
-    ["데일리 7.9점", base({}, { score: 7.9 }), false],
-    ["데일리 8.0점", base({}, { score: 8 }), true],
+    ["데일리 8.9점", base({}, { score: 8.9 }), false],
+    ["데일리 9.0점", base({}, { score: 9 }), true],
     ["주간 7.5점", base({ editionType: "weekly", translations: undefined }, { score: 7.5 }), true],
     ["주간 7.4점", base({ editionType: "weekly", translations: undefined }, { score: 7.4 }), false],
     ["주간 결손일", base({ editionType: "weekly", incompleteDays: ["2026-10-31"] }), false],
@@ -180,6 +196,14 @@ test("checkReplacement: 근거에 없는 숫자·로마자·최상급·인용은
   assert.match(checkReplacement(orig, "즈푸, GLM-6 공개", "", corpus).reasons.join(), /인용 없음/);
   assert.match(checkReplacement("즈푸가 GLM-6를 공개했다.", "즈푸가 세계 최초로 GLM-6를 공개했다.", "智谱发布GLM-6", corpus).reasons.join(), /최상급|최초/);
   assert.match(checkReplacement("즈푸가 GLM-6를 공개했다.", "즈푸가 GLM-6를 공개해 엔비디아 주가가 폭락했다.", "智谱发布GLM-6", corpus).reasons.join(), /표현 비율|최상급/);
+});
+
+test("checkReplacement: 원문에 있던 강조는 overclaim 이 아닌 수정에서만 유지 허용 (10-27 v7 dry-run)", () => {
+  const corpus = "该模型以轻量级 Qwen3.8-27B 为基座，在多个基准上取得开源轻量模型最佳成绩";
+  const orig = "27B 규모의 Qwen 기반 모델로 오픈소스 경량 모델 중 최고 성능을 기록했다.";
+  const fixed = "경량 Qwen3.8-27B 기반 모델로 오픈소스 경량 모델 중 최고 성능을 기록했다.";
+  assert.equal(checkReplacement(orig, fixed, "以轻量级 Qwen3.8-27B 为基座", corpus, { keepOriginalSuperlatives: true }).ok, true);
+  assert.equal(checkReplacement(orig, fixed, "以轻量级 Qwen3.8-27B 为基座", corpus).ok, false, "overclaim 수정이면 원문 강조도 근거 인용에 있어야");
 });
 
 test("planFixes: 근거 확인된 replace 만 바꾸고, 수정안 없음·근거 미확인·misattributed 는 삭제, correct 문장 수정안은 버림", () => {
