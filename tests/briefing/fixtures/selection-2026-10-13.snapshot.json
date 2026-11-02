@@ -376,7 +376,7 @@
   },
   {
    "shortId": "A21",
-   "primary": "afeef382-a96e-476b-b487-835986449f89",
+   "primary": "390a6f19-aae0-4ca8-af0e-7636deffb403",
    "siblings": [],
    "sources": [
     "Qbitai"
@@ -394,6 +394,24 @@
   },
   {
    "shortId": "A22",
+   "primary": "afeef382-a96e-476b-b487-835986449f89",
+   "siblings": [],
+   "sources": [
+    "Qbitai"
+   ],
+   "score": 5.8,
+   "scoreDetail": {
+    "coverage": 3,
+    "source": 1,
+    "category": 0.8,
+    "company": 0.5,
+    "number": 0.5,
+    "event": 0,
+    "column": 0
+   }
+  },
+  {
+   "shortId": "A23",
    "primary": "3f1953a2-5934-4301-9342-2274c5cb5ac7",
    "siblings": [],
    "sources": [
@@ -411,7 +429,7 @@
    }
   },
   {
-   "shortId": "A23",
+   "shortId": "A24",
    "primary": "5860e63a-6b65-4c9f-9e83-40b769acb279",
    "siblings": [],
    "sources": [
@@ -429,7 +447,7 @@
    }
   },
   {
-   "shortId": "A24",
+   "shortId": "A25",
    "primary": "67279035-ff53-45f7-ae02-74d62718323b",
    "siblings": [],
    "sources": [
@@ -447,7 +465,7 @@
    }
   },
   {
-   "shortId": "A25",
+   "shortId": "A26",
    "primary": "3bcdbbf9-2eb5-4baf-aa17-7eb730ad697d",
    "siblings": [],
    "sources": [
@@ -465,7 +483,7 @@
    }
   },
   {
-   "shortId": "A26",
+   "shortId": "A27",
    "primary": "4d432de2-d718-46e6-baec-5db4995a7074",
    "siblings": [],
    "sources": [
@@ -483,7 +501,7 @@
    }
   },
   {
-   "shortId": "A27",
+   "shortId": "A28",
    "primary": "7a564500-eb92-49c2-937d-c3ac61eccfe9",
    "siblings": [],
    "sources": [
@@ -501,7 +519,7 @@
    }
   },
   {
-   "shortId": "A28",
+   "shortId": "A29",
    "primary": "8d50c6e8-fe01-4f36-bfe5-afbf8956599c",
    "siblings": [],
    "sources": [
@@ -519,7 +537,7 @@
    }
   },
   {
-   "shortId": "A29",
+   "shortId": "A30",
    "primary": "b7c0693c-3f82-470c-beec-4141a7d6f296",
    "siblings": [],
    "sources": [
@@ -537,7 +555,7 @@
    }
   },
   {
-   "shortId": "A30",
+   "shortId": "A31",
    "primary": "d1de1954-3701-468a-b20b-684f14721b07",
    "siblings": [],
    "sources": [
@@ -555,7 +573,7 @@
    }
   },
   {
-   "shortId": "A31",
+   "shortId": "A32",
    "primary": "d2c564c0-c02f-4af9-b478-7cc9fabb5584",
    "siblings": [],
    "sources": [
@@ -573,7 +591,7 @@
    }
   },
   {
-   "shortId": "A32",
+   "shortId": "A33",
    "primary": "d98073fa-e189-4fbb-a934-3baf2d2c8a2f",
    "siblings": [],
    "sources": [
@@ -591,7 +609,7 @@
    }
   },
   {
-   "shortId": "A33",
+   "shortId": "A34",
    "primary": "2070e7de-d224-4d88-8628-01d8c1a912ff",
    "siblings": [],
    "sources": [
@@ -609,7 +627,7 @@
    }
   },
   {
-   "shortId": "A34",
+   "shortId": "A35",
    "primary": "21bccac7-193d-43ca-aeb4-effb085338c2",
    "siblings": [],
    "sources": [
@@ -627,7 +645,7 @@
    }
   },
   {
-   "shortId": "A35",
+   "shortId": "A36",
    "primary": "bad5c966-6c95-4dc4-90b7-bc74082ef9c1",
    "siblings": [],
    "sources": [
@@ -645,7 +663,7 @@
    }
   },
   {
-   "shortId": "A36",
+   "shortId": "A37",
    "primary": "03dfebc8-fd05-42ce-a154-874e24d2e67b",
    "siblings": [],
    "sources": [
@@ -656,24 +674,6 @@
     "coverage": 3,
     "source": 0.8,
     "category": 1,
-    "company": 0,
-    "number": 0.5,
-    "event": 0,
-    "column": 0
-   }
-  },
-  {
-   "shortId": "A37",
-   "primary": "390a6f19-aae0-4ca8-af0e-7636deffb403",
-   "siblings": [],
-   "sources": [
-    "Qbitai"
-   ],
-   "score": 5.3,
-   "scoreDetail": {
-    "coverage": 3,
-    "source": 1,
-    "category": 0.8,
     "company": 0,
     "number": 0.5,
     "event": 0,

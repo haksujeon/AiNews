@@ -56,7 +56,22 @@ export const ENTITIES: Entity[] = [
   { key: "intel", chinese: false, tier: 0.6, aliases: ["인텔", /\bIntel\b/, "英特尔"] },
   { key: "tsmc", chinese: false, tier: 0.6, aliases: ["TSMC", "台积电", "타이완 반도체"] },
   { key: "samsung", chinese: false, tier: 0.6, aliases: ["삼성", "Samsung", "三星"] },
+  // ── 로봇 기업 (로봇 범위 v3, 등급 0.5). 다른 낱말과 겹치는 단독 별칭은 쓰지 않는다:
+  //    "银河"(Galaxy)·"Fourier"/"푸리에"(푸리에 변환)·"Figure"/"피규어"(장난감)·\bIRON\b·"1X"(N1X 칩)·"지위안"(다른 낱말 음역과 겹침)·"擎天柱"(트랜스포머).
+  //    "智元" 은 매체 新智元(XinZhiYuan) 이름에 들어 있어 앞 글자 新·数 를 막는다.
+  { key: "ubtech", chinese: true, tier: 0.5, aliases: ["유비테크", "UBTech", "UBTECH", "优必选"] },
+  { key: "agibot", chinese: true, tier: 0.5, aliases: ["즈위안", "지위안로봇", "지위안 로봇", "AgiBot", "Agibot", "智元机器人", /(?<![新数])智元/] },
+  { key: "galbot", chinese: true, tier: 0.5, aliases: ["갤봇", "Galbot", "银河通用", "은하통용", "은하범용"] },
+  { key: "fourier", chinese: true, tier: 0.5, aliases: ["傅利叶", "Fourier Intelligence", "Fourier Robotics"] },
+  { key: "xpeng_iron", chinese: true, tier: 0.5, aliases: [/小鹏\s?IRON/, /XPeng\s?IRON/i, /샤오펑\s?(?:IRON|아이언)/] },
+  { key: "boston_dynamics", chinese: false, tier: 0.5, aliases: ["보스턴 다이내믹스", "보스턴다이내믹스", "Boston Dynamics", "波士顿动力"] },
+  { key: "figure_ai", chinese: false, tier: 0.5, aliases: ["Figure AI", "피규어 AI", "피규어AI", /\bFigure 0\d\b/] },
+  { key: "1x", chinese: false, tier: 0.5, aliases: ["1X Technologies", "1X 테크놀로지스", "1X테크놀로지스"] },
 ];
+
+// 테슬라 옵티머스(휴머노이드)는 테슬라와 같은 실체로 센다(관련 기사·지표가 tesla 키로 묶이도록).
+// 기존 tesla 줄을 고치지 않고 덧붙인다(다른 작업과 충돌을 줄이려고).
+ENTITIES.find((e) => e.key === "tesla")?.aliases.push(/\bOptimus\b/, "옵티머스");
 
 function aliasMatches(alias: string | RegExp, text: string): boolean {
   if (typeof alias === "string") return text.includes(alias);

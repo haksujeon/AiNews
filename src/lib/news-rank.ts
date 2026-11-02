@@ -38,6 +38,8 @@ export const CATEGORY_WEIGHT: Record<string, number> = {
   "ai-tech": 1.0,
   "ai-product": 1.0,
   "ai-biz": 0.8,
+  // 로봇(로봇 범위 v3): AI 초점이 흐려지지 않게 ai-biz 와 같은 0.8
+  robotics: 0.8,
 };
 
 const EVENT_RE = /모집|공모|참가자|신청 접수|대회 개최|행사|포럼|컨퍼런스|招募|报名|大赛|峰会|论坛|开幕/;
