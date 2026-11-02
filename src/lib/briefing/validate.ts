@@ -201,6 +201,8 @@ export function fitSentenceLengths(content: BriefingContent): { content: Briefin
   };
   c.lede = fit("lede", c.lede, 200);
   c.top_stories.forEach((st, i) => {
+    // 제목 41/40자로 주요 기사가 통째로 빠졌다 (round 2 재생성 10-31) — 제목도 절 경계("…", ",")에서 자른다
+    st.title = fit(`top_stories[${i}].title`, st.title, 40, true);
     st.what = fit(`top_stories[${i}].what`, st.what, 160);
     st.why = fit(`top_stories[${i}].why`, st.why, 120);
   });
