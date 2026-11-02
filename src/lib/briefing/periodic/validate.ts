@@ -210,9 +210,38 @@ export function volumeWeekUnadjusted(text: string, metrics: string[]): boolean {
 // 2026-11-02 재감사: W42 헤드라인 '열풍', W41 '확산·몰리는' 이 증감 지표 없이 통과했다 → 증감·쏠림 표현을 넓힌다
 const CHANGE_RE = /크게 늘|늘었다|증가했|급증|줄었다|감소했|급감|열풍|(?<![가-힣])붐(?![가-힣])|붐을|쏠림|쏠리|확산(?!\s?(?:방지|억제))|몰리|몰려|몰린/;
 const CHANGE_METRIC_RE = /\.(rise|fall|chg)$|^week\.|^vol\.lfl/;
-/** 증감 주장인데 증감 지표가 없음 */
+/** 증감 주장인데 증감 지표가 없음. 이번 값과 지난 값(k 와 k.prev)을 함께 인용하면 증감 근거로 본다 (방향은 prevPairConflicts) */
 export function changeUnbacked(text: string, metrics: string[]): boolean {
-  return CHANGE_RE.test(text) && !metrics.some((k) => CHANGE_METRIC_RE.test(k));
+  const paired = metrics.some((k) => k.endsWith(".prev") && metrics.includes(k.slice(0, -5)));
+  return CHANGE_RE.test(text) && !paired && !metrics.some((k) => CHANGE_METRIC_RE.test(k));
+}
+
+/** 지표 대상이 나오는 문장 (region.cn → 중국, region.us → 미국; 그 밖은 metricTargetIn) */
+function pairTargetIn(k: string, sentence: string): boolean {
+  if (k === "region.cn") return /중국/.test(sentence);
+  if (k === "region.us") return /미국/.test(sentence);
+  return metricTargetIn(k, sentence) === true;
+}
+
+/**
+ * k 와 k.prev 를 함께 인용한 증감의 방향: 이번 값 > 지난 값인데 "줄었다"(또는 반대) 면 충돌.
+ * W44 round 2: china_lens "중국 기사 비중은 42.2%로, 지난주 46.8%에서 줄었다" — 맞는 방향인데 증감 지표가 없다고 칸째 빠졌다.
+ */
+export function prevPairConflicts(text: string, metrics: string[], facts: Record<string, string>): string[] {
+  const out: string[] = [];
+  const num = (v: string | undefined) => Number((v ?? "").match(/-?\d+(?:\.\d+)?/)?.[0] ?? NaN);
+  for (const kp of metrics.filter((k) => k.endsWith(".prev"))) {
+    const k = kp.slice(0, -5);
+    if (!metrics.includes(k)) continue;
+    const cur = num(facts[k]);
+    const prev = num(facts[kp]);
+    if (!Number.isFinite(cur) || !Number.isFinite(prev) || cur === prev) continue;
+    for (const s of splitSentences(text).filter((x) => pairTargetIn(k, x))) {
+      const d = directionOf(s);
+      if ((cur > prev && d < 0) || (cur < prev && d > 0)) out.push(`${k}=${facts[k]} / ${kp}=${facts[kp]} 인데 ${d > 0 ? "상승" : "하락"} 표현`);
+    }
+  }
+  return out;
 }
 
 const RANK_RE = /가장 큰|최대 규모|가장 많은/;
@@ -417,6 +446,7 @@ export function validateWeekly(c: WeeklyContent, ctx: PeriodicValidationContext,
       push("fatal", "volume_week_unadjusted", u.path, "주 길이·수집 미완이 다른 주별 원 건수 비교");
     if (crossCurrencyRank(u.text)) push("fatal", "cross_currency_rank", u.path, "통화가 다른 금액의 서열 표현");
     if (changeUnbacked(u.text, u.metrics)) push("fatal", "change_unbacked", u.path, "증감 주장에 증감 지표 없음");
+    for (const d of prevPairConflicts(u.text, u.metrics, F)) push("fatal", "direction_conflict", u.path, d);
     if (/합계|총\s?\d|모두 합쳐|합산/.test(u.text)) push("fatal", "summed_amount", u.path, "금액 합산 표현");
 
     if (!u.headline) {

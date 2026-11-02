@@ -28,6 +28,7 @@ import {
   directionConflicts,
   directionFlips,
   dropConflictSentences,
+  prevPairConflicts,
   pruneArcRefs,
   revertFlips,
   normalizeWeekly,
@@ -287,6 +288,21 @@ test("W42 헤드라인 '에이전트·구체지능 열풍 속 …' / W41 '자금
   assert.ok(changeUnbacked(ED("w41_bp1"), []));
   assert.ok(!changeUnbacked(ED("w42_headline"), ["term.智能体.rise"]));
   assert.ok(!changeUnbacked("확산 방지 대책을 내놓았다", []));
+});
+
+test("W44 round 2 재생성 오탐 회귀: 'OpenAI는 투자 목표를 100억 달러 삭감'(원문 제목 '砍掉100亿', 요약 300亿美元→200亿美元) 은 currency_mismatch 가 아니다", () => {
+  const text = "한편 OpenAI는 투자 목표를 100억 달러 삭감한 것으로 전해졌다.";
+  assert.ok(!rules(moneyIssues(text, [doc(A("openai_cut"))])).includes("currency_mismatch"));
+});
+
+test("W44 round 2 재생성 china_lens: 이번 값·지난 값(region.cn + region.cn.prev)을 함께 인용한 증감은 근거 있음, 방향이 반대면 direction_conflict", () => {
+  const facts = { "region.cn": "대표 지역이 중국인 기사 42.2%", "region.cn.prev": "지난주 중국 46.8%", "region.us": "대표 지역이 미국인 기사 43.1%", "region.us.prev": "지난주 미국 40.4%" };
+  const metrics = ["region.cn", "region.us", "region.cn.prev", "region.us.prev"];
+  const text = "중국 매체가 다룬 기사에서 대표 지역이 중국인 기사 비중은 42.2%로, 지난주 46.8%에서 줄었다. 미국 기사 비중은 43.1%로 늘어 미중 구도에서 미국 쪽 비중이 커졌다.";
+  assert.equal(changeUnbacked(text, metrics), false);
+  assert.ok(changeUnbacked(text, ["region.cn"]));
+  assert.deepEqual(prevPairConflicts(text, metrics, facts), []);
+  assert.equal(prevPairConflicts("중국 기사 비중은 42.2%로 늘었다.", metrics, facts).length, 1);
 });
 
 test("W43 bp2 '검색 API 가격을 낮췄다' — 원문은 무료 → 11월 1일부터 유료화 → trend_unsupported", () => {

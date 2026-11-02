@@ -20,7 +20,7 @@
  */
 import { ENTITIES, LATIN_STOP, entityMentioned, findEntities, isChineseSubject, properNouns, type Entity, type ProperNoun } from "./entities";
 import { isChinaRegion } from "../region";
-import { amountGrounded } from "./quantity";
+import { amountGrounded, parseQuantities } from "./quantity";
 
 /** 근거 기사 한 건 (한국어 번역 + 중국어 원문). 데일리 후보·주간 이야기 묶음이 같은 모양으로 넘긴다 */
 export interface SourceDoc {
@@ -426,10 +426,20 @@ export function amountMentions(text: string): AmountMention[] {
   return out;
 }
 
-/** 중국어 원문 금액 뒤 통화. 단위만 있고 통화가 없으면("最大一笔110亿") 위안으로 본다 (중국 매체 관례) */
-function zhCurrencyAfter(after: string): "CNY" | "USD" | "HKD" {
+/**
+ * 중국어 원문 금액 뒤 통화. 단위만 있고 통화가 없으면("最大一笔110亿") 위안으로 본다 (중국 매체 관례) —
+ * 다만 같은 기사 원문에서 그 값이 통화를 단 금액으로 다시 나오거나, 같은 통화 두 금액의 차이면 그 통화
+ * (W44 round 2: 제목 "OpenAI融资目标砍掉100亿！" — 요약은 300亿美元→200亿美元. 위안으로 읽어 currency_mismatch → 큰 흐름 한 칸 삭제).
+ */
+function zhCurrencyAfter(after: string, docZh = "", value = NaN): "CNY" | "USD" | "HKD" {
   if (/^\s*(?:美元|美金|USD|\$)/.test(after)) return "USD";
   if (/^\s*(?:港元|港币|HKD)/.test(after)) return "HKD";
+  if (Number.isFinite(value)) {
+    const labeled = parseQuantities(docZh).filter((q) => q.currency === "USD" || q.currency === "CNY" || q.currency === "HKD");
+    const same = (x: number) => Math.abs(x - value) <= value * 1e-6;
+    const hit = labeled.find((q) => same(q.value)) ?? labeled.find((q) => labeled.some((r) => r !== q && r.currency === q.currency && same(Math.abs(q.value - r.value))));
+    if (hit) return hit.currency as "CNY" | "USD" | "HKD";
+  }
   return "CNY";
 }
 
@@ -442,7 +452,6 @@ function zhCurrencyAfter(after: string): "CNY" | "USD" | "HKD" {
 export function moneyIssues(text: string, docs: SourceDoc[], groundKo?: string): RuleIssue[] {
   const out: RuleIssue[] = [];
   if (!docs.length) return out;
-  const zhText = docs.map((d) => `${d.title_cn} ${d.summary_cn ?? ""}`).join(" ");
   const koBody = docs.flatMap((d) => [d.title_kr, ...splitSentences(d.summary_kr), ...splitSentences(d.insight_kr ?? "")]);
   const zhSents = docs.flatMap((d) => [d.title_cn, ...splitSentences(d.summary_cn ?? "")]);
   const groundRaw = groundKo ?? docs.map((d) => `${d.title_kr} ${d.summary_kr} ${d.insight_kr ?? ""}`).join(" ");
@@ -454,9 +463,13 @@ export function moneyIssues(text: string, docs: SourceDoc[], groundKo?: string):
       out.push({ rule: "amount_not_in_source", detail: `"${a.raw}" — 근거 기사에 같은 금액·통화 표기가 없음` });
     }
     if (a.zh) {
-      const zhHits = [...zhText.matchAll(new RegExp(`(?<![\\d.])${a.zh.replace(/\./g, "\\.")}`, "g"))].map((m) =>
-        zhCurrencyAfter(zhText.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 4))
-      );
+      // 기사마다 따로 본다 (통화가 없는 금액은 그 기사 원문의 통화로)
+      const zhHits = docs.flatMap((d) => {
+        const t = `${d.title_cn} ${d.summary_cn ?? ""}`;
+        return [...t.matchAll(new RegExp(`(?<![\\d.])${a.zh!.replace(/\./g, "\\.")}`, "g"))].map((m) =>
+          zhCurrencyAfter(t.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 4), t, parseQuantities(a.zh!)[0]?.value)
+        );
+      });
       if (zhHits.length && (a.currency === "USD" || a.currency === "CNY") && !zhHits.includes(a.currency)) {
         out.push({ rule: "currency_mismatch", detail: `"${a.raw}" — 중국어 원문은 ${a.zh}${zhHits[0] === "CNY" ? "(위안)" : zhHits[0] === "USD" ? "美元" : "港元"}` });
       }
