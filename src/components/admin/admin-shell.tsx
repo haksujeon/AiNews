@@ -10,6 +10,7 @@ import {
   LogOut,
   ArrowLeft,
   Menu,
+  Newspaper,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiUrl } from "@/lib/api-path";
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/sheet";
 
 const navItems = [
+  { key: "briefings", icon: Newspaper, labelKey: "briefings" },
   { key: "send-history", icon: Mail, labelKey: "sendHistory" },
   { key: "subscribers", icon: Users, labelKey: "subscribers" },
 ] as const;
