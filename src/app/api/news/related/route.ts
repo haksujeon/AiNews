@@ -1,32 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
-import { PUBLIC_NEWS_WHERE } from '@/lib/news-query';
+import { findRelated, RELATED_LIMIT } from '@/lib/related';
 
-const LIST_FIELDS = `id,
-  to_char(created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
-  source_name, source_url,
-  to_char(news_date::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS news_date,
-  title_cn, title_kr, title_en, summary_cn, summary_kr, summary_en,
-  sentiment, category, thumbnail_url, og_image_url, country`;
-
+/**
+ * 모달용 관련 기사. 상세 페이지와 같은 findRelated (src/lib/related.ts) — 같은 기사면 같은 id 목록.
+ *   GET /api/news/related?id=<uuid>&limit=4   (예전 이름 exclude=<uuid> 도 받는다. category 는 더 이상 쓰지 않는다)
+ */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const excludeId = searchParams.get('exclude') || '';
-  const category = searchParams.get('category') || '';
-  const limit = Math.min(parseInt(searchParams.get('limit') || '4'), 20);
+  const id = searchParams.get('id') || searchParams.get('exclude') || '';
+  const n = Number.parseInt(searchParams.get('limit') ?? '', 10);
+  const limit = Number.isFinite(n) ? n : RELATED_LIMIT;
 
   try {
-    const values: unknown[] = [excludeId, limit];
-    let sql = `SELECT ${LIST_FIELDS} FROM ai_news_ex
-               WHERE id != $1 AND ${PUBLIC_NEWS_WHERE}`;
-    if (category) {
-      values.push(category);
-      sql += ` AND category = $${values.length}`;
-    }
-    sql += ` ORDER BY news_date DESC LIMIT $2`;
-
-    const { rows } = await pool.query(sql, values);
-    return NextResponse.json(rows);
+    return NextResponse.json(await findRelated(id, { limit }));
   } catch {
     return NextResponse.json([], { status: 500 });
   }

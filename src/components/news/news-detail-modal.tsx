@@ -42,7 +42,7 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
     // 관련 기사로 연속 이동할 때 늦게 도착한 이전 기사 응답이 덮어쓰지 않도록 한다.
     let cancelled = false;
     if (open && news) {
-      fetchRelatedNewsClient(news.category, news.id, 4)
+      fetchRelatedNewsClient(news.id, 4)
         .then((related) => {
           if (!cancelled) setRelatedNews(related);
         })
