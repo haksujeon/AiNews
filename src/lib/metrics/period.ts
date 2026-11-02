@@ -836,19 +836,18 @@ export async function computePeriodMetrics(
   const eightWeeks = addDays(end, -55);
   const since = eightWeeks > COMPLETE_SINCE ? eightWeeks : COMPLETE_SINCE;
 
-  const [arts, prevArts, baseSeries, catCur, catPrev, srcCur, srcPrev, sentCur, sentPrev, termCur, termPrev] = await Promise.all([
-    loadPeriodArticles(q, cur),
-    prev ? loadPeriodArticles(q, prev) : Promise.resolve(null),
-    countByDay(q, { population, range: { start: since, end } }),
-    countBy(q, "category", cur),
-    prev ? countBy(q, "category", prev) : Promise.resolve(null),
-    countBy(q, "source_name", cur),
-    prev ? countBy(q, "source_name", prev) : Promise.resolve(null),
-    countBy(q, "sentiment", cur),
-    prev ? countBy(q, "sentiment", prev) : Promise.resolve(null),
-    termCounts(q, { ...cur, pinyin: true }),
-    prev ? termCounts(q, { ...prev, pinyin: true }) : Promise.resolve(null),
-  ]);
+  // 순차 실행: q 가 단일 client(READ ONLY 트랜잭션 등)일 수 있어 한 연결에 쿼리를 겹쳐 보내지 않는다
+  const arts = await loadPeriodArticles(q, cur);
+  const prevArts = prev ? await loadPeriodArticles(q, prev) : null;
+  const baseSeries = await countByDay(q, { population, range: { start: since, end } });
+  const catCur = await countBy(q, "category", cur);
+  const catPrev = prev ? await countBy(q, "category", prev) : null;
+  const srcCur = await countBy(q, "source_name", cur);
+  const srcPrev = prev ? await countBy(q, "source_name", prev) : null;
+  const sentCur = await countBy(q, "sentiment", cur);
+  const sentPrev = prev ? await countBy(q, "sentiment", prev) : null;
+  const termCur = await termCounts(q, { ...cur, pinyin: true });
+  const termPrev = prev ? await termCounts(q, { ...prev, pinyin: true }) : null;
 
   const baseline = baselineFrom(baseSeries, since, end);
   const curDays = fillDays(start, end, await countByDay(q, cur));
