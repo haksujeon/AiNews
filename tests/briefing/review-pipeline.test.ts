@@ -282,3 +282,28 @@ test("이미 누락 재생성한 판(validation.regen_reason)은 또 재생성�
   assert.equal(h.regens.length, 0);
   assert.equal(h.decisions.at(-1)!.decision.action, "hold");
 });
+
+test("쉬운 AI 설명: 데일리 자동 발행 뒤 같은 함수를 부르고 알림에 한 줄, dry-run 은 부르지 않음", async () => {
+  const h = harness([pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  let calls = 0;
+  h.deps.easyTerms = async () => (calls++, "쉬운 AI 설명 3건");
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(calls, 1);
+  assert.match(r.message, /자동 발행.*· 쉬운 AI 설명 3건/);
+
+  const d = harness([pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  let dryCalls = 0;
+  d.deps.easyTerms = async () => (dryCalls++, "x");
+  await runReviewPipeline({ briefingId: ORIG.id, dryRun: true, policy }, d.deps);
+  assert.equal(dryCalls, 0);
+});
+
+test("쉬운 AI 설명: 정기 스윕은 끝에 따라잡기를 한 번 부르고, 실패해도 검토 결과는 그대로", async () => {
+  const h = harness([], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  h.deps.easyTerms = async () => {
+    throw new Error("timeout");
+  };
+  const r = await runReviewPipeline({ policy }, h.deps);
+  assert.equal(r.processed.length, 0);
+  assert.match(r.message, /쉬운 AI 설명 실패: timeout/);
+});

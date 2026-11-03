@@ -30,12 +30,15 @@ import type { TranslateOptions } from "../translate";
 import { applySegmentEdits, isPeriodic, segmentContent, type EditOutcome } from "./segments";
 import { reviewThatProduced, reviewsOf, updateReviewDecision } from "./store";
 import type { ReviewResult, ReviewTrigger } from "./types";
+import { EASY_TIMEOUT_MS, easyRunNote, ensureEasyTerms } from "../easy-terms-run";
 
 export const REVIEW_SINCE = process.env.BRIEFING_REVIEW_SINCE || "2026-11-02";
 /** 검토 1회를 시작하려면 남아 있어야 하는 시간 (측정한 최장 검토 + 여유) */
 export const REVIEW_SLOT_MS = 170_000;
 const DEFAULT_BUDGET_MS = 250_000;
 const MAX_ERROR_REVIEWS = 2;
+/** "쉬운 AI 설명"은 시간 예산을 넘겨도 라우트 한도(300초) 안이면 부른다 — 예산(250초) + 이만큼까지 끝나야 한다 */
+const EASY_SLACK_MS = 45_000;
 
 export interface Target {
   briefingId: string;
@@ -102,6 +105,8 @@ export interface PipelineDeps {
   /** 누락 재생성 (2026-11-03): 반드시 넣을 기사로 다시 생성 — 생성 잠금을 잡으므로 판 잠금 밖에서 부른다 */
   regenerate: (t: Target, mustInclude: string[], reason: string) => Promise<{ koId: string | null; outcome: string; message: string }>;
   recordDecision: (reviewId: string, decision: unknown, fixedBriefingId?: string | null) => Promise<void>;
+  /** 발행된 최신 데일리 판의 "쉬운 AI 설명" 만들기 (easy-terms-run.ts ensureEasyTerms — 관리자 발행과 같은 함수). 알림 한 줄(없으면 "") */
+  easyTerms?: () => Promise<string>;
   now: () => number;
 }
 
@@ -223,6 +228,7 @@ export const defaultPipelineDeps: PipelineDeps = {
     return { koId: r.locales.find((l) => l.locale === "ko")?.id ?? null, outcome: r.outcome, message: r.message ?? "" };
   },
   recordDecision: (id, decision, fixed) => updateReviewDecision(id, { decision, fixedBriefingId: fixed ?? null }),
+  easyTerms: async () => easyRunNote(await ensureEasyTerms()),
   now: () => Date.now(),
 };
 
@@ -575,6 +581,16 @@ export async function runReviewPipeline(opts: PipelineOptions = {}, deps: Pipeli
   }
   const processed: EditionOutcome[] = [];
   let pending = 0;
+  // "쉬운 AI 설명": 시간이 남을 때만 (실패해도 검토 결과에는 영향 없음)
+  const easyTime = () => deps.now() + EASY_TIMEOUT_MS <= deadline + EASY_SLACK_MS;
+  const easy = async (): Promise<string> => {
+    if (dryRun || !deps.easyTerms || !easyTime()) return "";
+    try {
+      return await deps.easyTerms();
+    } catch (e) {
+      return `쉬운 AI 설명 실패: ${(e as Error).message}`;
+    }
+  };
   for (const t of targets) {
     if (deps.now() + REVIEW_SLOT_MS > deadline) {
       pending++;
@@ -587,6 +603,10 @@ export async function runReviewPipeline(opts: PipelineOptions = {}, deps: Pipeli
     }
     if (!r.final) pending++;
     processed.push(r);
+    if (r.published && t.editionType === "daily") {
+      const note = await easy();
+      if (note) r.message += ` · ${note}`;
+    }
     // 누락 재생성: 판 잠금을 푼 뒤 생성(생성도 같은 날짜 잠금) → 시간이 남으면 새 판을 바로 검토, 아니면 다음 스윕이 잇는다
     if (r.regenerate && !dryRun) {
       try {
@@ -606,13 +626,17 @@ export async function runReviewPipeline(opts: PipelineOptions = {}, deps: Pipeli
       }
     }
   }
+  // 따라잡기: 발행 직후 시간이 모자랐거나 관리자 발행 때 실패한 판 (이미 시도한 판은 LLM 없이 바로 끝난다)
+  let catchUp = "";
+  if (!opts.briefingId) catchUp = await easy();
   const notes = processed.filter((p) => p.notify);
+  const lines = [...notes.map((p) => p.message), ...(catchUp ? [`[AiNews] ${catchUp}`] : [])];
   return {
     dryRun,
     processed,
     pending,
-    notify: notes.length > 0,
-    message: notes.map((p) => p.message).join("\n"),
+    notify: lines.length > 0,
+    message: lines.join("\n"),
     costUsd: Math.round(processed.reduce((s, p) => s + p.costUsd, 0) * 1e6) / 1e6,
   };
 }

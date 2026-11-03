@@ -4,6 +4,7 @@ import { PublishError, normalizeWithdrawReason, publishBriefing, withdrawBriefin
 import { isValidEditionDate } from "@/lib/briefing/generate";
 import { BRIEFING_LOCALES, type BriefingLocale } from "@/lib/briefing/types";
 import { isEditionType } from "@/lib/briefing/repository";
+import { easyRunNote, ensureEasyTerms } from "@/lib/briefing/easy-terms-run";
 
 // POST /api/admin/briefing/publish  (관리자 세션 쿠키 필요)
 // body: { date: 'YYYY-MM-DD', version?: number, action?: 'publish' | 'withdraw', locale?: 'ko'|'en'|'zh',
@@ -12,6 +13,7 @@ import { isEditionType } from "@/lib/briefing/repository";
 //         reason?: string (withdraw 에 필수 — 공개 정정 메모 public_note 로 저장, 최대 500자) }
 //  - publish: 그 날짜 ko 초안(version 미지정 시 최신 draft)과 거기서 번역된 en/zh 초안을 발행.
 //             기존 발행본은 superseded 로 바뀐다.
+//             데일리면 이어서 "쉬운 AI 설명"을 만든다 (AI 검토 자동 발행과 같은 ensureEasyTerms, 실패해도 발행은 그대로 — data.easyTerms 에 한 줄)
 //  - withdraw: 발행본 철회 (locale 미지정 시 모든 언어판). 사유가 없으면 400
 export const dynamic = "force-dynamic";
 
@@ -47,7 +49,13 @@ export async function POST(request: NextRequest) {
       editionType,
       acknowledgeDataQuality: b.acknowledgeDataQuality === true,
     });
-    return NextResponse.json({ data: result });
+    let easyTerms = "";
+    if (editionType === "daily" && result.published.some((p) => p.locale === "ko")) {
+      easyTerms = await ensureEasyTerms({ date })
+        .then((r) => easyRunNote(r) || r.detail)
+        .catch((e: unknown) => `쉬운 AI 설명 실패: ${(e as Error).message}`);
+    }
+    return NextResponse.json({ data: { ...result, easyTerms } });
   } catch (e) {
     if (e instanceof PublishError) {
       return NextResponse.json({ error: { message: e.message } }, { status: e.status });

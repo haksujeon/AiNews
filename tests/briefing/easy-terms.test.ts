@@ -84,3 +84,56 @@ test("화면: 근거 기사 키로 붙인다 (숨김으로 primary_ref 가 바�
   assert.equal(out[0].easy_terms?.[0].name, "추론");
   assert.equal(out[1].easy_terms, undefined);
 });
+
+import { ensureEasyTerms, missingStories, type EasyRunDeps } from "../../src/lib/briefing/easy-terms-run";
+import type { StoredBriefingContent } from "../../src/lib/briefing/types";
+
+test("자동 생성: 이미 용어가 있는 기사는 건너뛴다 (사람이 고친 행을 덮어쓰지 않음)", () => {
+  const s2 = { ...story, articleId: "a2", rank: 2 };
+  assert.deepEqual(missingStories([story, s2], new Set(["a1"])).map((s) => s.articleId), ["a2"]);
+});
+
+function runDeps(over: Partial<EasyRunDeps> = {}) {
+  const log = { generate: 0, saved: 0, runs: [] as string[] };
+  const content = {
+    top_stories: [{ rank: 1, title: "t", what: "w", why: "y", refs: ["a1"], primary_ref: "a1" }],
+  } as unknown as StoredBriefingContent;
+  const deps: EasyRunDeps = {
+    loadPublished: async () => ({ id: "b1", date: "2026-11-03", content }),
+    hasRun: async () => false,
+    keyTerms: async () => new Map([["a1", [kt("推理"), kt("算力")]]]),
+    existing: async () => new Set(),
+    generate: async () => (log.generate++, { raw: { stories: [{ id: "S1", terms: [good("推理"), good("算力")] }] }, costUsd: 0.01 }),
+    save: async (_d, by) => ((log.saved += by.size * 3), by.size * 3),
+    recordRun: async (_id, _d, r) => void log.runs.push(r.status),
+    ...over,
+  };
+  return { deps, log };
+}
+
+test("자동 생성: 판 하나당 한 번만 — 기록이 있으면 LLM 을 부르지 않고, 만들 기사가 없어도 기록", async () => {
+  const a = runDeps();
+  const r = await ensureEasyTerms({}, a.deps);
+  assert.equal(r.status, "generated");
+  assert.equal(a.log.saved, 3);
+  assert.deepEqual(a.log.runs, ["generated"]);
+
+  const b = runDeps({ hasRun: async () => true });
+  assert.equal((await ensureEasyTerms({}, b.deps)).status, "skipped");
+  assert.equal(b.log.generate, 0);
+
+  const c = runDeps({ existing: async () => new Set(["a1"]) });
+  assert.equal((await ensureEasyTerms({}, c.deps)).status, "none");
+  assert.equal(c.log.generate, 0);
+  assert.deepEqual(c.log.runs, ["none"]);
+});
+
+test("자동 생성: LLM 오류는 기록하지 않아 다음 스윕이 다시 한다, --force 는 기록을 무시", async () => {
+  const a = runDeps({ generate: async () => { throw new Error("timeout"); } });
+  const r = await ensureEasyTerms({}, a.deps);
+  assert.equal(r.status, "error");
+  assert.deepEqual(a.log.runs, []);
+
+  const f = runDeps({ hasRun: async () => true });
+  assert.equal((await ensureEasyTerms({ force: true }, f.deps)).status, "generated");
+});
