@@ -27,7 +27,7 @@ export function StatisticsContainer({ stats }: StatisticsContainerProps) {
 
   const kpis = stats.kpis;
   const categoryStats = useMemo(() => toCategoryStats(stats.categories, locale), [stats.categories, locale]);
-  const sentimentStats = useMemo(() => toSentimentStats(stats.sentiments), [stats.sentiments]);
+  const sentimentStats = useMemo(() => toSentimentStats(stats.sentiments, locale), [stats.sentiments, locale]);
   const dailyVolume = stats.daily;
   const sourceStats = stats.sources;
   const keywordStats = stats.keywords;

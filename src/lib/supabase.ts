@@ -14,7 +14,7 @@ import { loadDayEditionRows } from './briefing/public';
 import { pickLinkEdition, pickRankEdition, toDayBriefingRef, type DayBriefingRef } from './briefing/day-select';
 import { isEditionPending } from './briefing/sla';
 import { buildWeeklyTrend, type StatisticsData } from './statistics-utils';
-import { addDays, countBy, countByDay, dayBounds, fillDays, mondayOf, regionCounts, termCounts, volumeSummary, type RegionCounts } from './metrics/period';
+import { addDays, countBy, countByDay, dayBounds, fillDays, mondayOf, regionCounts, termCounts, toSentimentShare, volumeSummary, type RegionCounts } from './metrics/period';
 
 // content_cn(원문 전문)은 의도적으로 제외한다 — 공개 페이지/RSC 페이로드에 실리지 않도록.
 // is_hidden 은 상세 페이지가 noindex 여부를 정하는 데 쓴다.
@@ -279,7 +279,8 @@ export async function fetchNewsStatistics(): Promise<StatisticsData> {
       aiRatio: k.total > 0 ? Math.round((k.ai / k.total) * 100) : 0,
     },
     categories,
-    sentiments,
+    // 논조: 주간·월간 리포트와 같은 toSentimentShare — 긍정·중립·부정 세 값만 (표준 밖 라벨 약 0.1% 는 빼고 센다)
+    sentiments: toSentimentShare(sentiments).map((r) => ({ name: r.name, value: r.n })),
     sources,
     keywords: keywords.map(({ term, count }) => ({ term, count })),
     daily,

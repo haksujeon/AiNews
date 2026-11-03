@@ -19,7 +19,7 @@ export function SentimentChart({ data }: SentimentChartProps) {
       <CardContent>
         <StatDonut
           label={t("sentimentAnalysis")}
-          rows={data.map((d) => ({ name: d.name, value: d.value, color: d.color }))}
+          rows={data.map((d) => ({ name: d.label, value: d.value, color: d.color }))}
           unit={(n) => `${n} ${t("articles")}`}
         />
       </CardContent>

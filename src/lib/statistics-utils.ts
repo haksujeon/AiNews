@@ -1,4 +1,4 @@
-import { getCategoryLabel } from "./news-utils";
+import { getCategoryLabel, getSentimentLabel } from "./news-utils";
 import type { RegionCounts } from "./metrics/period";
 
 export interface CategoryStat {
@@ -10,6 +10,7 @@ export interface CategoryStat {
 
 export interface SentimentStat {
   name: string;
+  label: string;
   value: number;
   color: string;
 }
@@ -96,9 +97,10 @@ export function toCategoryStats(rows: CountRow[], locale: string = "ko"): Catego
   }));
 }
 
-export function toSentimentStats(rows: CountRow[]): SentimentStat[] {
+export function toSentimentStats(rows: CountRow[], locale: string): SentimentStat[] {
   return rows.map(({ name, value }) => ({
     name,
+    label: getSentimentLabel(name, locale),
     value,
     color: SENTIMENT_COLORS[name] || "#9ca3af",
   }));
