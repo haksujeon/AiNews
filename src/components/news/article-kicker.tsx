@@ -38,9 +38,12 @@ export function ArticleKicker({ category, sourceName, locale, region, regionTags
       {(place || source) && (
         <span className="text-ink-3">
           {place && (
-            <span data-testid="kicker-region" data-region={region ?? undefined} className="inline-flex items-baseline gap-1">
-              <RegionFlag code={region} />
-              {place}
+            <span data-testid="kicker-region" data-region={region ?? undefined}>
+              {/* 국기·지역명만 묶는다 — 구분자 " · " 를 flex 안에 두면 끝 공백이 접힌다 */}
+              <span className="inline-flex items-center gap-1 align-[-1px]">
+                <RegionFlag code={region} />
+                {place}
+              </span>
               {source && <span aria-hidden="true"> · </span>}
             </span>
           )}
