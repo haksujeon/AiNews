@@ -282,7 +282,11 @@
     "withdrawnLink": "See the corrections log",
     "compactLoading": "Loading the briefing...",
     "compactError": "Couldn't load the briefing.",
-    "compactNotFound": "No briefing was published for this date."
+    "compactNotFound": "No briefing was published for this date.",
+    "easyTitle": "AI terms, made easy",
+    "easyCount": "{count, plural, one {# term} other {# terms}}",
+    "easyDetail": "More",
+    "easyNote": "Written by AI in plain words, based on the term notes in the source articles."
   },
   "briefingAdmin": {
     "nav": "Briefing review",

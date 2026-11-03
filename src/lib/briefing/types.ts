@@ -87,6 +87,24 @@ export interface TopStory<Ref = string> {
   why: string;
   refs: Ref[];
   primary_ref: Ref;
+  /**
+   * "쉬운 AI 설명" (easy-terms.ts). 생성·검증·저장 content 에는 없다 — 화면에 보낼 때(public.ts hydrate)만
+   * briefing_easy_terms 에서 붙인다. 판 검증이 top_stories 를 알려진 필드로만 다시 만들므로 모델이 넣을 수 없다.
+   */
+  easy_terms?: EasyTerm[];
+}
+
+/** "쉬운 AI 설명" 한 용어 (언어 하나). term·pinyin·detail 은 기사 key_terms 그대로, name·easy 만 모델이 쓴다 */
+export interface EasyTerm {
+  /** 중국어 원어 */
+  term: string;
+  pinyin: string;
+  /** 그 언어 이름 */
+  name: string;
+  /** 쉬운 한 줄 (초등 고학년 눈높이) */
+  easy: string;
+  /** 기사 key_terms 의 그 언어 설명 (조금 더 자세히) */
+  detail: string;
 }
 
 export interface SectionItem<Ref = string> {

@@ -282,7 +282,11 @@
     "withdrawnLink": "查看更正记录",
     "compactLoading": "正在加载简报...",
     "compactError": "无法加载简报。",
-    "compactNotFound": "该日期没有已发布的简报。"
+    "compactNotFound": "该日期没有已发布的简报。",
+    "easyTitle": "AI 术语通俗讲",
+    "easyCount": "{count} 个术语",
+    "easyDetail": "详细",
+    "easyNote": "由 AI 根据原文中的术语说明改写为通俗语言。"
   },
   "briefingAdmin": {
     "nav": "简报审核",

@@ -14,6 +14,7 @@ import {
 import { LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
 import type { TopStory } from "@/lib/briefing/types";
 import { BriefingDateLink } from "./briefing-date-link";
+import { EasyTerms } from "./easy-terms";
 
 /*
  * 데일리 브리핑 본문 ("Briefing Desk" 시안 §5.1–5.2).
@@ -172,6 +173,7 @@ export function TopStoryItem({
           </div>
         )}
         <Sources refs={s.refs} briefing={briefing} className={compact ? "mt-2" : "mt-3"} />
+        <EasyTerms terms={s.easy_terms} locale={briefing.locale} className={compact ? "mt-3" : "mt-3.5 max-w-[40rem]"} />
       </div>
     </li>
   );

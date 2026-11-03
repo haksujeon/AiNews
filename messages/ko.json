@@ -282,7 +282,11 @@
     "withdrawnLink": "정정 기록 보기",
     "compactLoading": "브리핑을 불러오는 중...",
     "compactError": "브리핑을 불러오지 못했습니다.",
-    "compactNotFound": "이 날짜에 발행된 브리핑이 없습니다."
+    "compactNotFound": "이 날짜에 발행된 브리핑이 없습니다.",
+    "easyTitle": "쉬운 AI 설명",
+    "easyCount": "용어 {count}개",
+    "easyDetail": "자세히",
+    "easyNote": "AI가 기사 속 용어 설명을 바탕으로 쉽게 풀어 쓴 글입니다."
   },
   "briefingAdmin": {
     "nav": "브리핑 검토",

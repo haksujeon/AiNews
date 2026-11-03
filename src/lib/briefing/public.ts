@@ -10,6 +10,8 @@ import type { BriefingLocale, StoredBriefingContent } from "./types";
 import { EDITION_TYPE, type EditionType } from "./repository";
 import { briefingFixtureRows, type FixtureBriefingRow } from "./fixture";
 import type { DayEditionRow } from "./day-select";
+import { attachEasyTerms } from "./easy-terms";
+import { loadEasyTerms } from "./easy-terms-store";
 
 export interface BriefingArticleRef {
   id: string;
@@ -130,6 +132,10 @@ export async function loadBriefingRefs(row: {
  */
 async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
   const { articles, available_locales } = await loadBriefingRefs(row);
+  const content = pruneToVisible(row.content as StoredBriefingContent, new Set(Object.keys(articles)));
+  // "쉬운 AI 설명": 주요 기사의 근거 기사 키로 붙인다 (없으면 상자 없음)
+  const easy = await loadEasyTerms([...new Set(content.top_stories.flatMap((s) => s.refs))], row.locale);
+  if (easy.size) content.top_stories = attachEasyTerms(content.top_stories, easy);
   return {
     id: row.id,
     edition_date: row.edition_date,
@@ -140,7 +146,7 @@ async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
     published_at: row.published_at ?? "",
     needs_review: row.needs_review,
     available_locales,
-    content: pruneToVisible(row.content as StoredBriefingContent, new Set(Object.keys(articles))),
+    content,
     articles,
   };
 }
