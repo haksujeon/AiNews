@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   Menu,
   Newspaper,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiUrl } from "@/lib/api-path";
@@ -24,6 +25,8 @@ const navItems = [
   { key: "briefings", icon: Newspaper, labelKey: "briefings" },
   { key: "send-history", icon: Mail, labelKey: "sendHistory" },
   { key: "subscribers", icon: Users, labelKey: "subscribers" },
+  // 2026-11-03 메뉴 개편: 공개 "통계"를 관리자로
+  { key: "statistics", icon: BarChart3, labelKey: "statistics" },
 ] as const;
 
 function NavContent({ locale, pathname, onLogout }: {

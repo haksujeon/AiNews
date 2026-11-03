@@ -13,7 +13,12 @@
     "briefing": "브리핑",
     "aiImageLabel": "AI 생성 이미지",
     "aiImageLabelShort": "AI 생성",
-    "close": "닫기"
+    "close": "닫기",
+    "news": "뉴스",
+    "today": "오늘",
+    "home": "홈",
+    "mainNav": "주 메뉴",
+    "bottomNav": "하단 메뉴"
   },
   "filter": {
     "searchPlaceholder": "기사 제목, 내용으로 검색...",
@@ -136,7 +141,8 @@
     "articlesSent": "발송 기사",
     "totalRecipients": "총 수신자",
     "noSends": "뉴스레터 발송 내역이 없습니다.",
-    "briefings": "브리핑 검토"
+    "briefings": "브리핑 검토",
+    "statistics": "통계"
   },
   "statistics": {
     "title": "통계 대시보드",
@@ -175,7 +181,9 @@
     "weeklyDescription": "한 주 동안 중국 AI 업계에서 무엇이 바뀌었는지 지표와 기사로 정리한 주간 리포트입니다.",
     "monthlyTitle": "{month} 월간 중국 AI 리포트: {headline}",
     "monthlyLatestTitle": "월간 중국 AI 리포트",
-    "monthlyDescription": "한 달 동안 중국 AI 업계에서 어떤 흐름이 굳어졌는지 지표와 기사로 정리한 월간 리포트입니다."
+    "monthlyDescription": "한 달 동안 중국 AI 업계에서 어떤 흐름이 굳어졌는지 지표와 기사로 정리한 월간 리포트입니다.",
+    "newsTitle": "뉴스 — 날짜별 중국 AI 기사",
+    "newsDescription": "날마다 수집한 중국 AI 기사를 날짜별로 보고, 기업·키워드·지역·분야로 찾습니다."
   },
   "notFound": {
     "title": "페이지를 찾을 수 없습니다",
@@ -203,7 +211,8 @@
     "dayBriefingWeekend": "주말 합본 브리핑",
     "dayBriefingPending": "브리핑 발행 예정",
     "dayBriefingAria": "{date} 브리핑 열기: {headline}",
-    "dayBriefingWeekendAria": "{range} 주말 합본 브리핑 열기: {headline}"
+    "dayBriefingWeekendAria": "{range} 주말 합본 브리핑 열기: {headline}",
+    "pageTitle": "뉴스"
   },
   "briefing": {
     "kicker": "오늘의 중국 AI 브리핑",

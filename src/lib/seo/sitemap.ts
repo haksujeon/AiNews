@@ -62,7 +62,8 @@ async function pageEntries(): Promise<Entry[]> {
 
   return [
     ...allLocales("/", { changeFrequency: "hourly", priority: 1 }),
-    ...allLocales("/statistics", { changeFrequency: "daily", priority: 0.3 }),
+    // 뉴스 목록 (2026-11-03 메뉴 개편 — 예전 홈 목록). 통계는 관리자 메뉴로 옮겨 sitemap 에서 뺐다
+    ...allLocales("/news", { changeFrequency: "hourly", priority: 0.9 }),
     // 신뢰 페이지(소개·만드는 방법·정정 기록·개인정보 처리방침, P0-6) — footer 와 같은 목록
     ...TRUST_PAGES.flatMap((p) => allLocales(p.path, { changeFrequency: p.key === "corrections" ? "weekly" : "monthly", priority: 0.3 })),
     // 브리핑 첫 화면·지난 판 목록은 발행본이 없으면 noindex 라 넣지 않는다

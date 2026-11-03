@@ -13,7 +13,12 @@
     "briefing": "Briefing",
     "aiImageLabel": "AI-generated image",
     "aiImageLabelShort": "AI-generated",
-    "close": "Close"
+    "close": "Close",
+    "news": "News",
+    "today": "Today",
+    "home": "Home",
+    "mainNav": "Main menu",
+    "bottomNav": "Bottom menu"
   },
   "filter": {
     "searchPlaceholder": "Search by title or content...",
@@ -136,7 +141,8 @@
     "articlesSent": "Articles Sent",
     "totalRecipients": "Total Recipients",
     "noSends": "No newsletter sends found.",
-    "briefings": "Briefing review"
+    "briefings": "Briefing review",
+    "statistics": "Statistics"
   },
   "statistics": {
     "title": "Statistics Dashboard",
@@ -175,7 +181,9 @@
     "weeklyDescription": "A weekly report on what changed in China's AI industry, built from computed figures and articles.",
     "monthlyTitle": "China AI monthly, {month}: {headline}",
     "monthlyLatestTitle": "China AI monthly report",
-    "monthlyDescription": "A monthly report on the trends that took hold in China's AI industry, built from metrics and articles."
+    "monthlyDescription": "A monthly report on the trends that took hold in China's AI industry, built from metrics and articles.",
+    "newsTitle": "News — China AI articles by date",
+    "newsDescription": "Browse China AI articles collected every day by date, and search by company, keyword, region or category."
   },
   "notFound": {
     "title": "Page not found",
@@ -203,7 +211,8 @@
     "dayBriefingWeekend": "Weekend briefing",
     "dayBriefingPending": "Briefing coming",
     "dayBriefingAria": "Open the {date} briefing: {headline}",
-    "dayBriefingWeekendAria": "Open the {range} weekend briefing: {headline}"
+    "dayBriefingWeekendAria": "Open the {range} weekend briefing: {headline}",
+    "pageTitle": "News"
   },
   "briefing": {
     "kicker": "Today's China AI Briefing",

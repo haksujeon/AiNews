@@ -13,7 +13,12 @@
     "briefing": "简报",
     "aiImageLabel": "AI 生成图片",
     "aiImageLabelShort": "AI 生成",
-    "close": "关闭"
+    "close": "关闭",
+    "news": "新闻",
+    "today": "今日",
+    "home": "首页",
+    "mainNav": "主菜单",
+    "bottomNav": "底部菜单"
   },
   "filter": {
     "searchPlaceholder": "按标题或内容搜索...",
@@ -136,7 +141,8 @@
     "articlesSent": "已发送文章",
     "totalRecipients": "收件人总数",
     "noSends": "暂无新闻简报发送记录。",
-    "briefings": "简报审核"
+    "briefings": "简报审核",
+    "statistics": "统计"
   },
   "statistics": {
     "title": "统计仪表板",
@@ -175,7 +181,9 @@
     "weeklyDescription": "用数据和文章梳理一周内中国AI产业变化的周报。",
     "monthlyTitle": "{month}中国AI月报：{headline}",
     "monthlyLatestTitle": "中国AI月报",
-    "monthlyDescription": "用数据和文章总结一个月来中国AI行业形成了哪些趋势的月报。"
+    "monthlyDescription": "用数据和文章总结一个月来中国AI行业形成了哪些趋势的月报。",
+    "newsTitle": "新闻 — 按日期浏览中国AI报道",
+    "newsDescription": "按日期浏览每日采集的中国AI报道，并按公司、关键词、地区或领域查找。"
   },
   "notFound": {
     "title": "页面不存在",
@@ -203,7 +211,8 @@
     "dayBriefingWeekend": "周末合刊简报",
     "dayBriefingPending": "简报待发布",
     "dayBriefingAria": "打开{date}简报：{headline}",
-    "dayBriefingWeekendAria": "打开{range}周末合刊简报：{headline}"
+    "dayBriefingWeekendAria": "打开{range}周末合刊简报：{headline}",
+    "pageTitle": "新闻"
   },
   "briefing": {
     "kicker": "今日中国AI简报",

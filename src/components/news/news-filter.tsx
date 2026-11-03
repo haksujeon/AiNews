@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { Search, X, Grid3X3, List, SlidersHorizontal, CalendarDays } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,8 @@ interface NewsFilterProps {
   onViewModeChange: (mode: "grid" | "list") => void;
   totalCount: number;
   onReset: () => void;
+  /** 처음 열 때 검색창에 커서 (휴대폰 하단 "검색" 탭 → /news?focus=search) */
+  autoFocusSearch?: boolean;
 }
 
 function toDateStr(d: Date): string {
@@ -73,6 +75,7 @@ export function NewsFilter({
   onViewModeChange,
   totalCount,
   onReset,
+  autoFocusSearch = false,
 }: NewsFilterProps) {
   const t = useTranslations("filter");
   const tc = useTranslations("common");
@@ -82,6 +85,15 @@ export function NewsFilter({
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const debouncedSearch = useDebounce(localSearch, 300);
+  const desktopSearchRef = useRef<HTMLInputElement>(null);
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
+
+  // 하단 "검색" 탭·헤더 검색으로 왔으면 보이는 검색창에 커서 (휴대폰 = 위쪽 검색 줄, 데스크톱 = 필터 줄)
+  useEffect(() => {
+    if (!autoFocusSearch) return;
+    const el = window.matchMedia("(min-width: 768px)").matches ? desktopSearchRef.current : mobileSearchRef.current;
+    el?.focus();
+  }, [autoFocusSearch]);
 
   useEffect(() => {
     if (debouncedSearch !== searchQuery) {
@@ -285,12 +297,28 @@ export function NewsFilter({
 
   return (
     <div className="space-y-3">
+      {/* 휴대폰 검색 줄 — 예전에는 필터 시트 안에만 있어 검색이 두 번 눌러야 보였다 (2026-11-03 메뉴 개편) */}
+      <div className="relative md:hidden">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 w-4 h-4" aria-hidden="true" />
+        <Input
+          ref={mobileSearchRef}
+          type="search"
+          enterKeyHint="search"
+          aria-label={t("searchLabel")}
+          placeholder={t("searchPlaceholder")}
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
+          className="h-11 pl-10"
+          data-testid="news-search-mobile"
+        />
+      </div>
       {/* Filter bar */}
       <div className="flex items-center gap-2 border-y border-rule py-1.5">
         {/* Desktop Search */}
         <div className="hidden md:block relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 w-4 h-4" aria-hidden="true" />
           <Input
+            ref={desktopSearchRef}
             type="text"
             aria-label={t("searchLabel")}
             placeholder={t("searchPlaceholder")}

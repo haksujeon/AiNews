@@ -25,6 +25,10 @@ interface NewsContainerProps {
   facets?: { countries: string[]; categories: string[]; regions?: RegionCounts };
   /** 주소의 ?region= (서버가 이 칩으로 첫 페이지를 걸러 보냈다) */
   initialRegion?: RegionChip;
+  /** 주소의 ?q= (헤더·하단 탭 검색 → /news?q=, 서버가 이 검색어로 첫 페이지를 걸러 보냈다) */
+  initialQuery?: string;
+  /** 주소의 ?focus=search (휴대폰 하단 "검색" 탭) — 검색창에 바로 커서 */
+  autoFocusSearch?: boolean;
   isLoading?: boolean;
 }
 
@@ -35,7 +39,7 @@ interface NewsContainerProps {
 // 기사 상세는 카드/리스트 항목의 링크(/news/[id])로 연다.
 // 소프트 이동이면 @modal/(.)news/[id] 가 모달로 가로채고, 직접 접속이면 전체 페이지가 뜬다.
 // 날짜 옆 "그날 브리핑" 은 ?briefing=YYYY-MM-DD 대화상자(DayBriefingDialog)로 연다 — 첫 화면과 무한 스크롤로 받은 날 모두 같은 링크.
-export function NewsContainer({ initialPage, facets, initialRegion = "ALL", isLoading = false }: NewsContainerProps) {
+export function NewsContainer({ initialPage, facets, initialRegion = "ALL", initialQuery = "", autoFocusSearch = false, isLoading = false }: NewsContainerProps) {
   const locale = useLocale();
   const t = useTranslations("list");
   const tc = useTranslations("common");
@@ -49,7 +53,7 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", isLo
   const [listError, setListError] = useState(false);
   const [moreError, setMoreError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCountry, setSelectedCountry] = useState("ALL");
   const [selectedRegion, setSelectedRegion] = useState<RegionChip>(initialRegion);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -77,9 +81,9 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", isLo
   );
 
   // 필터가 바뀌면 서버에서 첫 페이지를 다시 받아온다.
-  // 초기 렌더(필터 없음 + 주소의 지역 칩)는 서버 컴포넌트가 이미 준 데이터를 쓰므로 건너뛴다.
+  // 초기 렌더(필터 없음 + 주소의 지역 칩·검색어)는 서버 컴포넌트가 이미 준 데이터를 쓰므로 건너뛴다.
   const isInitialFilters =
-    !filters.q &&
+    filters.q === initialQuery &&
     filters.country === "ALL" &&
     filters.region === initialRegion &&
     filters.categories.length === 0 &&
@@ -227,6 +231,7 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", isLo
           onViewModeChange={handleViewModeChange}
           totalCount={0}
           onReset={handleReset}
+          autoFocusSearch={autoFocusSearch}
         />
         <NewsContainerSkeleton viewMode={viewMode} />
       </div>
@@ -250,6 +255,7 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", isLo
         onViewModeChange={handleViewModeChange}
         totalCount={total}
         onReset={handleReset}
+        autoFocusSearch={autoFocusSearch}
       />
 
       {/* 진입 애니메이션 없음: 뉴스는 즉시 보여야 한다(스크롤마다 깜박이던 whileInView 제거). */}

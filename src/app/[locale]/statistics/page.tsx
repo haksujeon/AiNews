@@ -1,38 +1,10 @@
-import type { Metadata } from "next";
-import { getTranslations } from "next-intl/server";
-import { fetchNewsStatistics } from "@/lib/supabase";
-import { absoluteUrl, languageAlternates } from "@/lib/site";
+import { permanentRedirect } from "next/navigation";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}): Promise<Metadata> {
+/**
+ * 예전 공개 통계 주소 — 2026-11-03 메뉴 개편으로 통계는 관리자 메뉴(/admin/statistics)로 옮겼다.
+ * 공개 링크·검색 노출은 관리자 로그인 대신 뉴스 목록으로 보낸다 (308).
+ */
+export default async function StatisticsMoved({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "meta" });
-  return {
-    title: t("statisticsTitle"),
-    alternates: {
-      canonical: absoluteUrl(locale, "/statistics"),
-      languages: languageAlternates("/statistics"),
-    },
-  };
-}
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { StatisticsContainer } from "@/components/statistics/statistics-container";
-
-export default async function StatisticsPage() {
-  // 집계는 전부 SQL 에서 — 홈 목록 총계와 같은 모집단(중복·숨김 제외 전체)
-  const stats = await fetchNewsStatistics();
-
-  return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      <main className="flex-1 container mx-auto px-4 py-8">
-        <StatisticsContainer stats={stats} />
-      </main>
-      <Footer />
-    </div>
-  );
+  permanentRedirect(`/${locale}/news`);
 }

@@ -3,6 +3,7 @@ import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getMessages, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing, LOCALE_HTML_LANG } from "@/i18n/routing";
+import { BottomTabs } from "@/components/layout/bottom-tabs";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { fontVariables, PRETENDARD_CSS_HREF } from "@/lib/fonts";
 import { rootUrl } from "@/lib/site";
@@ -72,6 +73,8 @@ export default async function LocaleLayout({
           <NextIntlClientProvider messages={messages}>
             {children}
             {modal}
+            {/* 휴대폰 하단 탭 (768px 미만, 관리자 화면 제외) — 2026-11-03 메뉴 개편 */}
+            <BottomTabs />
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>
