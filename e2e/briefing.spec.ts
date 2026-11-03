@@ -64,8 +64,10 @@ test('390 폭: 가로 스크롤 없음 (숫자 띠는 띠 안에서만 스크롤
   await context.close();
 });
 
-test('홈 띠 링크와 헤더 메뉴 링크가 같은 곳으로 간다', async ({ page }) => {
-  await page.goto(`${BASE_URL}/ko`);
+test('뉴스 목록 띠 링크와 헤더 메뉴 링크가 같은 곳으로 간다', async ({ page }) => {
+  // 2026-11-03: 홈은 "오늘"(브리핑 콘솔), 한 줄 띠는 뉴스 목록(/news)에
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${BASE_URL}/ko/news`);
   const banner = page.getByTestId('briefing-banner');
   await expect(banner).toBeVisible();
   const nav = page.getByTestId('nav-briefing');
@@ -84,7 +86,7 @@ test('아카이브: 200, 판 목록 링크', async ({ page }) => {
 test('홈 배너: 발행본이 없으면 숨김, 있으면 최신 발행본 + 오래된 판이면 날짜 칩', async ({ page, request }) => {
   for (const locale of ['ko', 'en', 'zh']) {
     const api = await request.get(`${BASE_URL}/api/briefing?locale=${locale}`);
-    await page.goto(`${BASE_URL}/${locale}`);
+    await page.goto(`${BASE_URL}/${locale}/news`);
     const banner = page.getByTestId('briefing-banner');
     if (api.status() === 404) {
       await expect(banner, `${locale}: 발행본이 없으면 띠가 없다`).toHaveCount(0);

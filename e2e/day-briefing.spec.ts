@@ -28,7 +28,8 @@ const dialog = (page: Page) => page.getByTestId('day-briefing-dialog');
 const focusKey = (page: Page) => page.evaluate(() => document.activeElement?.getAttribute('data-focus-key') ?? document.activeElement?.tagName);
 
 async function home(page: Page, locale = 'ko', query = '') {
-  await page.goto(`${BASE_URL}/${locale}${query}`);
+  // 날짜별 목록은 /news (2026-11-03 메뉴 개편 — 홈은 "오늘")
+  await page.goto(`${BASE_URL}/${locale}/news${query}`);
   await page.waitForLoadState('networkidle');
 }
 
@@ -49,6 +50,12 @@ async function expectClosedBackOnLink(page: Page, date: string, y: number) {
   await expect.poll(() => focusKey(page)).toBe(`day-briefing-${date}`);
   expect(Math.abs((await page.evaluate(() => window.scrollY)) - y)).toBeLessThanOrEqual(2);
 }
+
+test('홈(오늘)의 ?briefing= 공유 링크도 같은 팝업을 연다', async ({ page }) => {
+  await page.goto(`${BASE_URL}/ko?briefing=${R.koDay}`);
+  await expect(dialog(page)).toBeVisible();
+  await expect(dialog(page).getByRole('heading', { level: 2 })).toHaveText(headline(R.koDay));
+});
 
 test.describe('홈 날짜 브리핑 팝업', () => {
   test('1. 열기: 주소에 ?briefing=, 제목은 판 헤드라인, 팝업에는 h1 없음', async ({ page }) => {

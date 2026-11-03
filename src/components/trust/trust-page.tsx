@@ -30,6 +30,8 @@ export async function TrustPage({
   pageKey,
   draft = false,
   meta,
+  lead,
+  headingText,
   children,
 }: {
   locale: string;
@@ -38,6 +40,9 @@ export async function TrustPage({
   draft?: boolean;
   /** 제목 아래 작은 줄 (판·시행일 등) */
   meta?: ReactNode;
+  /** 본문 위 전체 폭 영역 (소개 = 랜딩, 2026-11-03). 있으면 그 안에 h1 이 있으므로 본문 제목은 h2 + headingText */
+  lead?: ReactNode;
+  headingText?: string;
   children: ReactNode;
 }) {
   const [t, ts] = await Promise.all([
@@ -53,10 +58,15 @@ export async function TrustPage({
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
+      {lead}
       <main id="main" className="container mx-auto flex-1 px-4 pb-16" data-testid={`trust-${pageKey}`}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }} />
         <div className="max-w-3xl border-b-2 border-rule-strong pb-3 pt-8">
-          <h1 className="text-2xl font-[740] tracking-[-0.02em] text-ink sm:text-3xl">{title}</h1>
+          {lead ? (
+            <h2 className="text-2xl font-[740] tracking-[-0.02em] text-ink sm:text-3xl">{headingText ?? title}</h2>
+          ) : (
+            <h1 className="text-2xl font-[740] tracking-[-0.02em] text-ink sm:text-3xl">{title}</h1>
+          )}
           {meta && <p className="mt-1.5 text-[13px] text-ink-3">{meta}</p>}
         </div>
         {draft && showLegalDraft() && (

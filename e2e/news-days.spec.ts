@@ -33,7 +33,7 @@ async function expectExpandedFully(day: Locator) {
 test.describe('홈 날짜별 목록 (주요 4건 + 펼치기)', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${BASE_URL}/ko`);
+    await page.goto(`${BASE_URL}/ko/news`);
     await expect(days(page).first()).toBeVisible();
   });
 
@@ -166,7 +166,7 @@ test.describe('홈 날짜별 목록 (주요 4건 + 펼치기)', () => {
 
 test('390px: 가로 스크롤 없음 (접힘·펼침)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`${BASE_URL}/ko`);
+  await page.goto(`${BASE_URL}/ko/news`);
   await expect(days(page).first()).toBeVisible();
   const noHScroll = () =>
     page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
@@ -178,7 +178,7 @@ test('390px: 가로 스크롤 없음 (접힘·펼침)', async ({ page }) => {
 });
 
 test('zh: 펼치기 문구가 중국어', async ({ page }) => {
-  await page.goto(`${BASE_URL}/zh`);
+  await page.goto(`${BASE_URL}/zh/news`);
   const day = await firstExpandableDay(page);
   await expect(day.getByTestId('news-day-toggle')).toHaveText(/查看当天其余 \d+ 篇/);
   await day.getByTestId('news-day-toggle').click();

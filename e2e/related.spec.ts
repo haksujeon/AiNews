@@ -11,7 +11,7 @@ const SECTIONS = ['sameEvent', 'flow', 'company'] as const;
 type Ids = Record<(typeof SECTIONS)[number], string[]>;
 
 async function homeCardIds(page: Page): Promise<string[]> {
-  await page.goto(`${BASE_URL}/ko`);
+  await page.goto(`${BASE_URL}/ko/news`);
   const links = page.locator('main a[href*="/news/"]');
   await expect(links.first()).toBeVisible();
   const hrefs = await links.evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? ''));
@@ -65,7 +65,7 @@ test('상세 페이지와 모달이 같은 관련 기사 묶음·id·순서를 �
   if (api.flow.length) await expect(page.locator('[data-section="flow"] [data-testid="related-gap"]').first()).toHaveText(/\d+일 (전|후)/);
 
   // 모달 (홈에서 카드 클릭 → 가로채기 라우트, /api/news/related 로 불러온다)
-  await page.goto(`${BASE_URL}/ko`);
+  await page.goto(`${BASE_URL}/ko/news`);
   await page.locator(`main a[href*="/news/${id}"]`).first().click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
@@ -117,7 +117,7 @@ test('ko·zh × 1440·390: 상세·모달 관련 기사 (가로 스크롤 없음
         expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
         if (shotDir) await root.screenshot({ path: `${shotDir}/${name}-${locale}-${vp.width}.png` });
       }
-      await page.goto(`${BASE_URL}/${locale}`);
+      await page.goto(`${BASE_URL}/${locale}/news`);
       await page.locator(`main a[href*="/news/${id}"]`).first().click();
       const dialog = page.getByRole('dialog');
       const root = dialog.getByTestId('related-sections');

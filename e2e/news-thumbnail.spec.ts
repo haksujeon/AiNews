@@ -54,7 +54,7 @@ for (const locale of ['ko', 'zh'] as const) {
 
 test('실제 이미지(AI 커버 아님)에는 라벨이 없다', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(`${BASE_URL}/ko`);
+  await page.goto(`${BASE_URL}/ko/news`);
   const imgs = page.locator('main img:not([src*="/ai-general-cover/"])');
   await expect(imgs.first()).toBeVisible();
   const n = Math.min(await imgs.count(), 8);

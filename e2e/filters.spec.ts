@@ -35,7 +35,7 @@ test('API: 필터 선택지는 공개 분류 3개(설정 순서), 국가 1개 / 
 for (const locale of ['ko', 'zh'] as const) {
   test(`목록 필터 (${locale}): 국가 선택 칸 없음, 분류 칩 3개 — 1440·390`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${BASE_URL}/${locale}`);
+    await page.goto(`${BASE_URL}/${locale}/news`);
     const chips = page.locator('[data-testid="category-chip"]:visible');
     await expect(chips).toHaveCount(3);
     expect(await chips.evaluateAll((els) => els.map((e) => e.getAttribute('data-category')))).toEqual(PUBLIC);
@@ -50,7 +50,7 @@ for (const locale of ['ko', 'zh'] as const) {
     await expect.poll(totalText).not.toBe(before);
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`${BASE_URL}/${locale}`);
+    await page.goto(`${BASE_URL}/${locale}/news`);
     await page.getByRole('button', { name: L[locale].filters }).first().click();
     const sheet = page.getByRole('dialog');
     await expect(sheet).toBeVisible();

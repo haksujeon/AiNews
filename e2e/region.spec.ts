@@ -52,7 +52,7 @@ test('API: 날짜별 목록·펼치기도 같은 칩 조건 — 그날 total = �
 for (const locale of ['ko', 'zh'] as const) {
   test(`지역 칩 (${locale}): 누르면 거르고 주소에 남는다, 카드에 지역 라벨 — 1440·390`, async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${BASE_URL}/${locale}`);
+    await page.goto(`${BASE_URL}/${locale}/news`);
     const chips = page.locator('[data-testid="region-chip"]:visible');
     await expect(chips).toHaveCount(4);
     expect(await chips.evaluateAll((els) => els.map((e) => e.getAttribute('data-region')))).toEqual(CHIPS);
@@ -80,7 +80,7 @@ for (const locale of ['ko', 'zh'] as const) {
 
     // 휴대폰: 시트 안의 칩
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`${BASE_URL}/${locale}`);
+    await page.goto(`${BASE_URL}/${locale}/news`);
     await page.getByRole('button', { name: L[locale].filters }).first().click();
     const sheet = page.getByRole('dialog');
     await expect(sheet).toBeVisible();
@@ -104,7 +104,7 @@ test('카드 배지: 미중 배지는 태그 CN·US 기사에만', async ({ page
   const items = days.days.flatMap((d: { top: { id: string; region_tags: string[] }[] }) => d.top);
   const uc = items.filter((i: { region_tags: string[] }) => i.region_tags?.includes('CN') && i.region_tags?.includes('US'));
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(`${BASE_URL}/ko`);
+  await page.goto(`${BASE_URL}/ko/news`);
   const badges = page.locator('[data-testid="region-badge"][data-badge="us_china"]');
   // 첫 화면(5일)의 주요 기사 중 미중 태그 기사 수 ≥ 보이는 미중 배지 수 (스크롤로 더 받은 날은 세지 않음)
   const firstFive = days.days.slice(0, 5).flatMap((d: { top: { region_tags: string[] }[] }) => d.top)
@@ -113,19 +113,14 @@ test('카드 배지: 미중 배지는 태그 CN·US 기사에만', async ({ page
   if (uc.length) await expect(badges.first()).toHaveText('미중');
 });
 
-for (const locale of ['ko', 'zh'] as const) {
-  test(`통계 (${locale}): 지역 비중 차트`, async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${BASE_URL}/${locale}/statistics`);
-    const chart = page.getByTestId('region-chart');
-    await expect(chart).toBeVisible();
-    await expect(chart).toContainText(L[locale].cn);
-    await expect(chart).toContainText(L[locale].us);
-    await chart.scrollIntoViewIfNeeded();
-    await shot(page, `statistics-region-${locale}-1440`);
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.reload();
-    await page.getByTestId('region-chart').scrollIntoViewIfNeeded();
-    await shot(page, `statistics-region-${locale}-390`);
-  });
-}
+// 2026-11-03 메뉴 개편: 통계는 관리자 메뉴(/admin/statistics, 로그인 필요). 공개 /statistics 는 /news 로 308
+test('통계: 공개 주소는 뉴스로, 관리자 통계는 로그인이 필요하다', async ({ request }) => {
+  for (const locale of ['ko', 'zh'] as const) {
+    const pub = await request.get(`${BASE_URL}/${locale}/statistics`, { maxRedirects: 0 });
+    expect(pub.status()).toBe(308);
+    expect(pub.headers()['location']).toMatch(new RegExp(`/ainews/${locale}/news$`));
+    const adm = await request.get(`${BASE_URL}/${locale}/admin/statistics`, { maxRedirects: 0 });
+    expect([302, 307, 308]).toContain(adm.status());
+    expect(adm.headers()['location']).toMatch(/\/admin\/login/);
+  }
+});

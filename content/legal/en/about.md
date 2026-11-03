@@ -21,7 +21,7 @@ When we add or remove an outlet, we update this page.
 
 - Provide each article's title, a short summary, key terms and an AI-written insight in each language.
 - Show only a 3–5 sentence gist of the article body, always with a link to the original.
-- Publish a daily briefing and a weekly report on the day's main stories. Briefings are published only after an editor has reviewed and approved them.
+- Publish a daily briefing and a weekly report on the day's main stories. A briefing is published only after it passes two separate AI reviews (weekly and monthly reports covering days with incomplete collection are published after an operator checks them).
 - Record every withdrawn or replaced briefing in the [corrections log](/corrections).
 
 ## What we don't do

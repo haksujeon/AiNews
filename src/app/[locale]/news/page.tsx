@@ -7,6 +7,7 @@ import { absoluteUrl, languageAlternates } from "@/lib/site";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { NewsContainer } from "@/components/news/news-container";
+import { BriefingBanner } from "@/components/briefing/briefing-banner";
 
 /**
  * 뉴스 (2026-11-03 메뉴 개편): 날짜별 기사 목록·검색·필터. 예전 홈(/)의 목록을 그대로 옮겼다 — 홈은 "오늘".
@@ -49,6 +50,8 @@ export default async function NewsPage({
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
         <h1 className="mb-4 text-[22px] font-[760] tracking-[-0.015em] text-ink sm:text-[26px]">{t("pageTitle")}</h1>
+        {/* 최신 브리핑 한 줄 띠 (예전 홈과 같은 부품) */}
+        <BriefingBanner locale={locale} />
         <NewsContainer initialPage={page} facets={facets} initialRegion={region} initialQuery={q} autoFocusSearch={focus} />
       </main>
       <Footer />

@@ -7,7 +7,7 @@ test.describe('AiNews UI/UX Tests', () => {
   
   test.beforeEach(async ({ page }) => {
     // 한국어 페이지로 이동
-    await page.goto(`${BASE_URL}/ko`);
+    await page.goto(`${BASE_URL}/ko/news`);
     // 페이지 로드 대기
     await page.waitForLoadState('networkidle');
   });

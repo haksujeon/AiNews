@@ -61,7 +61,7 @@ async function pickFixture(ids: string[]): Promise<Fixture | null> {
 }
 
 async function homeCardIds(page: Page): Promise<string[]> {
-  await page.goto(`${BASE_URL}/ko`);
+  await page.goto(`${BASE_URL}/ko/news`);
   const links = page.locator('main a[href*="/news/"]');
   await expect(links.first()).toBeVisible();
   const hrefs = await links.evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? ''));
