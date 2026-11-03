@@ -619,12 +619,20 @@ export function dayQualityOf(points: DailyPoint[]): DayQuality {
  * COMPLETE_SINCE ~ end 중 end 에서 8주 이내의 같은 모집단 일별 건수.
  */
 export async function periodDayQuality(q: Queryable, start: string, end: string, population: Population = "ai"): Promise<DayQuality> {
+  return dayQualityOf(await periodDailyPoints(q, start, end, population));
+}
+
+/**
+ * [start, end] 일별 건수 + 결손일 판정 (DailyPoint). periodDayQuality·기업 페이지 주별 비중(monthWeeks)이 같이 쓴다.
+ * 기준선: COMPLETE_SINCE ~ end 중 end 에서 8주 이내 (computePeriodMetrics 와 같은 규칙).
+ */
+export async function periodDailyPoints(q: Queryable, start: string, end: string, population: Population = "ai"): Promise<DailyPoint[]> {
   const eightWeeks = addDays(end, -55);
   const since = eightWeeks > COMPLETE_SINCE ? eightWeeks : COMPLETE_SINCE;
   const baseSeries = await countByDay(q, { population, range: { start: since, end } });
   const cur = fillDays(start, end, await countByDay(q, { population, range: { start, end } }));
   const reduced = await reducedDaysFor(q, start, end, population);
-  return dayQualityOf(detectMissingDays(cur, baselineFrom(baseSeries, since, end), reduced));
+  return detectMissingDays(cur, baselineFrom(baseSeries, since, end), reduced);
 }
 
 // ───────────────────────── 월간: 주별 궤적 (순수)
@@ -742,6 +750,11 @@ export interface EntityMention {
 }
 
 const entityText = (a: PeriodArticle) => `${a.title_kr} ${a.title_cn} ${a.summary_kr}`;
+
+/** 기사 한 건에 나온 실체 키 (주간 지표 tallyEntities 와 같은 텍스트·같은 findEntities — 기업 페이지 함께 언급) */
+export function articleEntityKeys(a: Pick<PeriodArticle, "title_kr" | "title_cn" | "summary_kr">): string[] {
+  return findEntities(entityText(a as PeriodArticle)).map((e) => e.key);
+}
 
 interface EntityTally {
   n: number;

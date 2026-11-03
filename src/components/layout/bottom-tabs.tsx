@@ -1,13 +1,13 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Home, List, Newspaper, Search } from "lucide-react";
+import { Building2, Home, List, Newspaper, Search } from "lucide-react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { BRIEFING_PATH } from "@/lib/briefing/view";
 
 /**
- * 휴대폰 하단 탭 (2026-11-03 메뉴 개편, 768px 미만에서만): 홈 · 뉴스 · 브리핑 · 검색.
+ * 휴대폰 하단 탭 (2026-11-03 메뉴 개편, 768px 미만에서만): 홈 · 뉴스 · 브리핑 · 기업 · 검색.
  * 상단 헤더의 주 메뉴와 같은 목적지 (Gate 2 — 메뉴 항목은 mainNavItems 하나).
  * 검색 = /news?focus=search (뉴스 목록 검색창에 커서). 관리자 화면에서는 그리지 않는다.
  * 고정 막대가 마지막 내용을 가리지 않도록 같은 높이의 빈 칸을 흐름에 둔다.
@@ -17,6 +17,7 @@ export function mainNavItems() {
     { key: "home", href: "/", match: (p: string) => p === "/", Icon: Home },
     { key: "news", href: "/news", match: (p: string) => p === "/news" || p.startsWith("/news/"), Icon: List },
     { key: "briefing", href: BRIEFING_PATH, match: (p: string) => p.startsWith(BRIEFING_PATH), Icon: Newspaper },
+    { key: "companies", href: "/companies", match: (p: string) => p === "/companies" || p.startsWith("/companies/"), Icon: Building2 },
   ] as const;
 }
 
@@ -36,7 +37,7 @@ export function BottomTabs() {
         data-testid="bottom-tabs"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
-        <ul className="grid h-16 grid-cols-4">
+        <ul className="grid h-16 grid-cols-5">
           {items.map(({ key, href, match, Icon }) => {
             const active = match(pathname);
             return (

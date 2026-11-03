@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type CSSProperties } from "react";
-import type { Chart, ChartConfiguration } from "chart.js";
+import type { Chart, ChartConfiguration, ChartType } from "chart.js";
 import { cn } from "@/lib/utils";
 
 /**
@@ -100,7 +100,7 @@ export function baseOptions(t: ChartTheme) {
   };
 }
 
-export function ChartCanvas({
+export function ChartCanvas<T extends ChartType = ChartType>({
   build,
   label,
   dataKey,
@@ -109,7 +109,7 @@ export function ChartCanvas({
   onChart,
 }: {
   /** 테마를 받아 설정을 만든다 (테마가 바뀌면 다시 부른다) */
-  build: (t: ChartTheme) => ChartConfiguration;
+  build: (t: ChartTheme) => ChartConfiguration<T>;
   /** 화면 낭독기용 — 값을 모두 담는다 */
   label: string;
   /** 데이터가 바뀌면 바뀌는 키 (다시 그리기) */
@@ -141,7 +141,7 @@ export function ChartCanvas({
       ChartCtor.defaults.color = theme.ink3;
       ChartCtor.defaults.borderColor = theme.rule;
       ChartCtor.defaults.font.family = theme.font;
-      chart = new ChartCtor(el, buildRef.current(theme));
+      chart = new ChartCtor(el, buildRef.current(theme) as unknown as ChartConfiguration);
       onChartRef.current?.(chart);
     };
     loadChart().then((C) => {

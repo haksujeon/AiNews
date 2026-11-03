@@ -9,6 +9,7 @@ import { absoluteUrl, languageAlternates, publishedLanguageAlternates, rootUrl }
 import { listPublishedEditions } from "@/lib/briefing/public";
 import { listPublishedPeriodics } from "@/lib/briefing/periodic/public";
 import { BRIEFING_PATH, briefingDatePath } from "@/lib/briefing/view";
+import { companyDirectory } from "@/lib/company-names";
 import { PERIODIC_PATH, periodicPath } from "@/components/briefing/briefing-tabs";
 import { countPublicNews, listSitemapNews, SITEMAP_ARTICLES_PER_FILE } from "@/lib/seo/data";
 import { TRUST_PAGES } from "@/lib/trust/pages";
@@ -64,6 +65,9 @@ async function pageEntries(): Promise<Entry[]> {
     ...allLocales("/", { changeFrequency: "hourly", priority: 1 }),
     // 뉴스 목록 (2026-11-03 메뉴 개편 — 예전 홈 목록). 통계는 관리자 메뉴로 옮겨 sitemap 에서 뺐다
     ...allLocales("/news", { changeFrequency: "hourly", priority: 0.9 }),
+    // 기업·이슈 (2026-11-03): 허브 + 이름표의 모든 기업 (키가 고정이라 빈 페이지가 없다 — 기사가 없으면 "기사 없음")
+    ...allLocales("/companies", { changeFrequency: "daily", priority: 0.7 }),
+    ...companyDirectory().flatMap((c) => allLocales(`/companies/${c.key}`, { changeFrequency: "daily", priority: 0.5 })),
     // 신뢰 페이지(소개·만드는 방법·정정 기록·개인정보 처리방침, P0-6) — footer 와 같은 목록
     ...TRUST_PAGES.flatMap((p) => allLocales(p.path, { changeFrequency: p.key === "corrections" ? "weekly" : "monthly", priority: 0.3 })),
     // 브리핑 첫 화면·지난 판 목록은 발행본이 없으면 noindex 라 넣지 않는다

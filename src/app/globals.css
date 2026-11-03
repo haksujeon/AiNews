@@ -312,3 +312,16 @@
   background: var(--jade-weak);
   color: var(--ink);
 }
+
+/* 기업·이슈 날짜 띠: 보도된 날 칸이 왼쪽에서 차오른다 (서울의 하루 barFill). 움직임 줄이기면 바로 칠한 상태 */
+@keyframes cx-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.cx-fill {
+  transform-origin: left center;
+  animation: cx-fill 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx-fill { animation: none; }
+}
