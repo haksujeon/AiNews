@@ -139,7 +139,7 @@ async function findTargetsDb(): Promise<Target[]> {
   return out;
 }
 
-async function saveFixedDb(input: ReviewInput, content: Record<string, unknown>, info: Record<string, unknown>, warn: ValidationIssue[]) {
+export async function saveFixedDb(input: ReviewInput, content: Record<string, unknown>, info: Record<string, unknown>, warn: ValidationIssue[]) {
   const row = input.row;
   const periodic = isPeriodic(row.edition_type);
   const ids = periodic ? [...new Set(citedSids(content as unknown as WeeklyContent))] : [...new Set(citedRefs(content as unknown as BriefingContent))];
