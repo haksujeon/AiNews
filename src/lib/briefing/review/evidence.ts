@@ -19,6 +19,7 @@ import { bigrams, jaccard, selectCandidates } from "../select";
 import type { BriefingContent, CandidateArticle, ValidationIssue } from "../types";
 import { articleText, contextFromArticles, toSourceDoc, validateKo } from "../validate";
 import { buildFacts } from "../periodic/prompt";
+import { clipBody } from "../prompt";
 import { validateWeekly } from "../periodic/validate";
 import { validationContext } from "../periodic/generate";
 import type { StoryPoolItem, WeeklyContent } from "../periodic/types";
@@ -160,8 +161,11 @@ function citedOrder(segments: Segment[], articleIds: string[]): string[] {
 
 const clip = (s: string, n: number) => (n <= 0 ? "" : s.length > n ? `${s.slice(0, n)}…` : s);
 
-export async function loadReviewInput(briefingId: string, opts: { includeTranslations?: boolean } = {}): Promise<ReviewInput> {
-  const row = await getBriefingRow(briefingId);
+export async function loadReviewInput(
+  briefingId: string,
+  opts: { includeTranslations?: boolean; /** DB 행 대신 쓸 행 (모델 비교 실험 — 저장하지 않은 판을 같은 근거로 검토) */ row?: BriefingRow } = {}
+): Promise<ReviewInput> {
+  const row = opts.row ?? (await getBriefingRow(briefingId));
   if (!row) throw new Error(`briefing ${briefingId} 없음`);
   if (row.locale !== "ko") throw new Error("AI 검토는 ko 판만 합니다 (en/zh 는 ko 검토의 번역 일관성 검사로)");
   const editionType = row.edition_type;
@@ -229,10 +233,17 @@ export async function loadReviewInput(briefingId: string, opts: { includeTransla
       id: a.id, label, source_name: a.source_name, news_date: a.news_date ?? "", subject_region: a.subject_region ?? null,
       title_kr: a.title_kr, title_cn: a.title_cn, summary_kr: clip(a.summary_kr, fm.summary),
       ai_insights_kr: clip(a.ai_insights_kr, fm.insight), summary_cn: clip(a.summary_cn, fm.summary_cn),
-      content_kr: per >= 120 ? clip(a.content_kr.replace(/\s+/g, " ").trim(), per) : "",
+      // 데일리: 생성기가 본 body_kr(clipBody)은 예산과 상관없이 넣는다 (S2 — 생성기만 본 사실을 '근거 없음'으로 잡던 문제)
+      content_kr: (() => {
+        const t = a.content_kr.replace(/\s+/g, " ").trim();
+        const body = periodic ? "" : clipBody(t);
+        const budget = per >= 120 ? clip(t, per) : "";
+        return budget.length > body.length ? budget : body;
+      })(),
     };
   });
-  const fullText = new Map(citedArts.map((a) => [a.id, [articleText(a), a.content_kr, a.summary_cn].filter(Boolean).join(" ")]));
+  // articleText 가 content_kr 를 포함한다 (S2) — 두 번 넣지 않는다
+  const fullText = new Map(citedArts.map((a) => [a.id, [articleText(a), a.summary_cn].filter(Boolean).join(" ")]));
 
   let metrics: PeriodMetrics | null = null;
   let facts: Record<string, string> | null = null;
@@ -310,7 +321,8 @@ export async function loadReviewInput(briefingId: string, opts: { includeTransla
     revalidate = (c) => ({ content: c, fatal: [{ level: "fatal", rule: "no_metrics", path: "", detail: "지표 스냅숏이 없어 재검증할 수 없음" }], warn: [] });
   } else {
     const hidden = new Set(all.filter((a) => !a.visible).map((a) => a.id));
-    const ctx = contextFromArticles(all, row.mode, hidden, periodStart);
+    const credible = (meta as { china_credible?: unknown }).china_credible;
+    const ctx = contextFromArticles(all, row.mode, hidden, periodStart, typeof credible === "number" ? credible : undefined);
     revalidate = (c) => {
       const { meta: m, ...body } = c as Record<string, unknown> & { meta?: unknown };
       const v = validateKo(body as unknown as BriefingContent, ctx);

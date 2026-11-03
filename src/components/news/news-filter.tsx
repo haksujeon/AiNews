@@ -20,6 +20,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { getCategoryLabel } from "@/lib/news-utils";
 import { REGION_CHIPS, type RegionChip } from "@/lib/region";
+import { RegionFlag } from "./region-flag";
 import type { RegionCounts } from "@/lib/metrics/period";
 import type { DateRange } from "@/lib/news-utils";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -179,7 +180,7 @@ export function NewsFilter({
               if (isMobile) setIsSheetOpen(false);
             }}
             className={`
-              inline-flex items-center px-2.5 py-1 rounded-sm text-[13px] font-medium
+              inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-[13px] font-medium
               transition-colors duration-150 border
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
               ${isSelected
@@ -188,6 +189,7 @@ export function NewsFilter({
               }
             `}
           >
+            {(r === "CN" || r === "US") && <RegionFlag code={r} />}
             {r === "ALL" ? t("regionAll") : t(`region${r}`)}
           </button>
         );

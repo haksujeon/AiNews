@@ -9,7 +9,7 @@
  *  - 실패하면 위반 목록을 주고 1회 수리. 그래도 남으면 그 언어판은 failed (ko 는 영향 없음).
  */
 import type { BriefingContent, CandidateGroup, LlmUsage } from "./types";
-import { chat, parseJsonContent } from "./llm";
+import { TRANSLATE_EFFORT, TRANSLATE_FALLBACK_EFFORT, TRANSLATE_FALLBACK_MODEL, TRANSLATE_MODEL, chat, parseJsonContent, type Effort } from "./llm";
 import {
   buildTranslateRepairPrompt,
   buildTranslateSystemPrompt,
@@ -275,6 +275,8 @@ export interface TranslateResult {
   repaired: boolean;
   usages: LlmUsage[];
   error?: string;
+  /** 번역 모델이 검사를 못 넘어 재시도 모델로 다시 번역했나 */
+  fallback?: boolean;
 }
 
 export async function translateBriefing(
@@ -299,9 +301,10 @@ export async function translateBriefing(
     });
   const system = buildTranslateSystemPrompt(target);
   const user = buildTranslateUserPrompt(payloadOf(ko), hints, nameGlossaryLines(ko));
-  try {
+  // 한 모델로: 번역 → 검사 → 문제가 있으면 1회 수리
+  const attempt = async (model: string, effort: Effort | undefined) => {
     budgetCheck();
-    const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 8000 }, (u) => usages.push(u));
+    const first = await chat({ model, effort, system, messages: [{ role: "user", content: user }], maxTokens: 8000 }, (u) => usages.push(u));
     let content = mergeTranslation(ko, parseJsonContent(first.content));
     let problems = checkTranslation(ko, content, target);
     let repaired = false;
@@ -310,6 +313,8 @@ export async function translateBriefing(
       repaired = true;
       const second = await chat(
         {
+          model,
+          effort,
           system,
           messages: [
             { role: "user", content: user },
@@ -323,7 +328,23 @@ export async function translateBriefing(
       content = mergeTranslation(ko, parseJsonContent(second.content));
       problems = checkTranslation(ko, content, target);
     }
-    return { content: problems.length ? null : content, candidate: content, problems, repaired, usages };
+    return { content, problems, repaired };
+  };
+  try {
+    // 번역 모델은 생성 모델과 따로 (TRANSLATE_MODEL, 기본 Haiku — 2026-11-03 D2). 검사를 못 넘으면 재시도 모델(기본 Sonnet 5.5)로 한 번 더
+    let r = await attempt(TRANSLATE_MODEL, TRANSLATE_EFFORT);
+    let fallback = false;
+    if (r.problems.length && TRANSLATE_FALLBACK_MODEL && TRANSLATE_FALLBACK_MODEL !== TRANSLATE_MODEL) {
+      try {
+        const r2 = await attempt(TRANSLATE_FALLBACK_MODEL, TRANSLATE_FALLBACK_EFFORT);
+        fallback = true;
+        if (r2.problems.length <= r.problems.length) r = r2;
+      } catch (e) {
+        // 재시도 실패(비용 상한·LLM 오류)는 첫 결과를 그대로 쓴다
+        if (!(e instanceof Error)) throw e;
+      }
+    }
+    return { content: r.problems.length ? null : r.content, candidate: r.content, problems: r.problems, repaired: r.repaired || fallback, usages, fallback };
   } catch (e) {
     return { content: null, candidate: null, problems: [], repaired: false, usages, error: (e as Error).message };
   }

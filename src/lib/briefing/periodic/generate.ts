@@ -21,7 +21,7 @@
 import { createHash } from "node:crypto";
 import pool from "@/lib/db";
 import { COMPLETE_SINCE, computePeriodMetrics, type PeriodMetrics, type PeriodStory } from "@/lib/metrics/period";
-import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "../llm";
+import { LlmError, PERIODIC_EFFORT, PERIODIC_MODEL, chat, modelTag, parseJsonContent } from "../llm";
 import { articleText, fitText, glossHanText, toSourceDoc } from "../validate";
 import { SOURCE_ARTICLE_COLUMNS } from "../columns";
 import type { SourceDoc } from "../rules";
@@ -62,7 +62,8 @@ import {
 
 export { resolveWeek };
 
-const PERIODIC_MAX_COST = Number(process.env.PERIODIC_MAX_COST_USD || "0.05");
+// Opus 5.5 주간 실측 $0.23~0.38 (2026-11-03). 월간은 입력이 더 크다 → 상한 $1.50
+const PERIODIC_MAX_COST = Number(process.env.PERIODIC_MAX_COST_USD || "1.50");
 const MIN_BIG_PICTURE = 2;
 
 export interface PeriodicGenerateOptions {
@@ -141,7 +142,7 @@ async function upsertPeriodMetrics(m: PeriodMetrics): Promise<string> {
  * summary_cn 은 숫자 근거(sourceText)에 넣지 않는다 — 통화·고유명사 대조에만 쓴다.
  * 열 목록은 데일리와 같은 columns.ts (subject_region 포함 — 중국 중심 규칙·STORIES 의 지역 표시).
  */
-async function loadSourceText(
+export async function loadSourceText(
   poolItems: StoryPoolItem[]
 ): Promise<{ sourceText: Map<string, string>; docs: Map<string, SourceDoc[]>; idDay: Map<string, string> }> {
   const ids = [...new Set(poolItems.flatMap((p) => p.ids))];
@@ -193,7 +194,7 @@ export function validationContext(
 
 export function computePeriodicInputHash(kind: PeriodicKind, m: PeriodMetrics, poolItems: StoryPoolItem[]): string {
   return createHash("sha256")
-    .update(JSON.stringify({ v: PROMPT_VERSION[kind], model: BRIEFING_MODEL, fp: m.fingerprint, pool: poolItems.map((p) => `${p.sid}:${p.ids.join(",")}`) }))
+    .update(JSON.stringify({ v: PROMPT_VERSION[kind], model: modelTag(PERIODIC_MODEL, PERIODIC_EFFORT), fp: m.fingerprint, pool: poolItems.map((p) => `${p.sid}:${p.ids.join(",")}`) }))
     .digest("hex");
 }
 export const computeWeeklyInputHash = (m: PeriodMetrics, poolItems: StoryPoolItem[]) => computePeriodicInputHash("weekly", m, poolItems);
@@ -311,7 +312,7 @@ export function glossPeriodicHan(c: WeeklyContent): WeeklyContent {
   return out;
 }
 
-interface KoOutcome {
+export interface KoOutcome {
   status: "draft" | "failed";
   content: WeeklyContent | null;
   validation: Record<string, unknown>;
@@ -322,7 +323,8 @@ interface KoOutcome {
   error?: string;
 }
 
-async function generateKo(
+/** 주간·월간 ko 본문 생성 (DB 를 쓰지 않는다 — 모델 비교 실험 scripts/briefing-model-compare.ts 도 부른다) */
+export async function generatePeriodicKo(
   kind: PeriodicKind,
   m: PeriodMetrics,
   poolItems: StoryPoolItem[],
@@ -361,7 +363,7 @@ async function generateKo(
     return out;
   };
   cost.check();
-  const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 6000 }, track);
+  const first = await chat({ system, messages: [{ role: "user", content: user }], model: PERIODIC_MODEL, maxTokens: 6000, effort: PERIODIC_EFFORT }, track);
   const p1 = normalizeWeekly(parseJsonContent(first.content));
   let content = prepare(p1.content, "initial");
   const initialContent = content;
@@ -390,7 +392,7 @@ async function generateKo(
     try {
       cost.check();
       messages.push({ role: "user", content: buildWeeklyRepairPrompt(content, repairProblems(report), [], kind) });
-      const reply = await chat({ system, messages, maxTokens: 6000 }, track);
+      const reply = await chat({ system, messages, model: PERIODIC_MODEL, maxTokens: 6000, effort: PERIODIC_EFFORT }, track);
       messages.push({ role: "assistant", content: reply.content });
       const p2 = normalizeWeekly(parseJsonContent(reply.content));
       const label = round === 1 ? "repair" : `repair${round}`;
@@ -487,16 +489,16 @@ export async function generatePeriodic(kind: PeriodicKind, opts: PeriodicGenerat
       const row = await insertBriefing({
         editionType: kind, date: start, periodStart: start, periodEnd: end, metricsId,
         locale: "ko", status: "generating", mode: "normal", content: {}, articleIds: [], inputArticleIds,
-        candidateCount: m.volume.total, inputHash, model: BRIEFING_MODEL, promptVersion,
+        candidateCount: m.volume.total, inputHash, model: PERIODIC_MODEL, promptVersion,
       });
       const cost = new CostTracker(PERIODIC_MAX_COST);
       let ko: KoOutcome;
       try {
-        ko = await generateKo(kind, m, poolItems, ctx, cost);
+        ko = await generatePeriodicKo(kind, m, poolItems, ctx, cost);
       } catch (e) {
         const msg = e instanceof LlmError || e instanceof BudgetExceeded ? e.message : `예상치 못한 오류: ${(e as Error).message}`;
         const u = sumUsage(cost.usages);
-        await finishGenerating(row.id, { status: "failed", content: {}, articleIds: [], validation: null, model: BRIEFING_MODEL, promptVersion, ...u, error: msg });
+        await finishGenerating(row.id, { status: "failed", content: {}, articleIds: [], validation: null, model: PERIODIC_MODEL, promptVersion, ...u, error: msg });
         return { ...h, inputHash, metricsId, outcome: "failed", id: row.id, version: row.version, status: "failed", costUsd: u.costUsd, message: msg };
       }
       const meta: PeriodicMeta = {
@@ -511,7 +513,7 @@ export async function generatePeriodic(kind: PeriodicKind, opts: PeriodicGenerat
       const u = sumUsage(cost.usages);
       await finishGenerating(row.id, {
         status: ko.status, content: stored?.content ?? {}, articleIds: stored?.articleIds ?? [], validation: ko.validation,
-        model: BRIEFING_MODEL, promptVersion, ...u, error: ko.error ?? null,
+        model: PERIODIC_MODEL, promptVersion, ...u, error: ko.error ?? null,
       });
       return {
         ...h, inputHash, metricsId, outcome: ko.status === "draft" ? "generated" : "failed", id: row.id, version: row.version,

@@ -1,13 +1,13 @@
 /**
  * reviewBriefing(id) — 판 한 버전(ko)을 생성 모델보다 강한 별도 모델로 검토한다.
  *
- *  모델: BRIEFING_REVIEW_MODEL (기본 anthropic-api-sonnet-4-6, LiteLLM). temperature 를 보내지 않는다.
+ *  모델: BRIEFING_REVIEW_MODEL (기본 anthropic-api-sonnet-5-5 effort high, LiteLLM). temperature 를 보내지 않는다.
  *  thinking: 끈다 (이 별칭은 기본 꺼짐 — 명시). 근거를 그대로 인용하게 해 근거 대조를 강제하고, 사고 토큰 비용(출력 단가 $15/M)을 아낀다.
  *  finish_reason=stop 만 성공 (llm.ts). 시간 초과 280초, 재시도 1회(긴 응답의 재시도는 비싸다).
  *  점수·판정은 코드(score.ts)가 계산하고, 모델 판정과 다르면 엄격한 쪽을 쓴다.
  *  근거 인용(e)이 인용 기사 본문에 그대로 있는지 코드가 확인해 evidence_verified 로 남긴다.
  */
-import { LlmError, chat, parseJsonContent, type ChatRequest, type ChatResponse } from "../llm";
+import { LlmError, chat, effortFromEnv, parseJsonContent, type ChatRequest, type ChatResponse } from "../llm";
 import type { LlmUsage } from "../types";
 import { loadReviewInput, type ReviewInput } from "./evidence";
 import { quoteMatch } from "./fix";
@@ -19,7 +19,13 @@ import { scoreReview, stricter } from "./score";
 import { insertReview } from "./store";
 import type { ReviewResult, ReviewTrigger, Segment } from "./types";
 
-export const REVIEW_MODEL = process.env.BRIEFING_REVIEW_MODEL || "anthropic-api-sonnet-4-6";
+/**
+ * 검토 모델 — 2026-11-03 사용자 결정 D2: Sonnet 4.6 → Sonnet 5.5 effort high.
+ * 보정 24판: 사실 오류 재현율 77.5% → 87.5~94.4%, 1회 $0.128 → $0.103 (model-compare-2026-11/REPORT.md §1).
+ * BRIEFING_REVIEW_MODEL / BRIEFING_REVIEW_EFFORT 로 덮어쓸 수 있다 (Sonnet 4.6 은 effort 없으면 사고 끔).
+ */
+export const REVIEW_MODEL = process.env.BRIEFING_REVIEW_MODEL || "anthropic-api-sonnet-5-5";
+export const REVIEW_EFFORT = effortFromEnv(process.env.BRIEFING_REVIEW_EFFORT) ?? (REVIEW_MODEL === "anthropic-api-sonnet-5-5" ? "high" : undefined);
 const REVIEW_MAX_TOKENS = 20_000;
 const REVIEW_TIMEOUT_MS = 280_000;
 
@@ -176,7 +182,7 @@ export async function reviewBriefing(
   let rawText: string | undefined;
   try {
     const res = opts.rawOverride !== undefined ? { content: opts.rawOverride } : await deps.chat(
-      { model: REVIEW_MODEL, system, messages: [{ role: "user", content: user }], maxTokens: REVIEW_MAX_TOKENS, timeoutMs: REVIEW_TIMEOUT_MS, maxAttempts: 2 },
+      { model: REVIEW_MODEL, system, messages: [{ role: "user", content: user }], maxTokens: REVIEW_MAX_TOKENS, timeoutMs: REVIEW_TIMEOUT_MS, maxAttempts: 2, effort: REVIEW_EFFORT },
       (u) => usages.push(u)
     );
     rawText = res.content;

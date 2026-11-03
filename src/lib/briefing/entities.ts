@@ -91,7 +91,8 @@ ENTITIES.find((e) => e.key === "iluvatar")?.aliases.push("텐셴수");
 // "애플 인텔리전스"(Apple Intelligence)의 "인텔" 은 인텔이 아니다 (round 2 재생성 10-31: zh 번역 이름표 오탐)
 {
   const intel = ENTITIES.find((e) => e.key === "intel");
-  if (intel) intel.aliases = intel.aliases.map((a) => (a === "인텔" ? /인텔(?!리전스|리젠스)/ : a));
+  // 2026-11-03: "스타더스트 인텔리전트" 도 오탐 → 인텔리(Intelli-) 전부 제외
+  if (intel) intel.aliases = intel.aliases.map((a) => (a === "인텔" ? /인텔(?!리)/ : a));
 }
 ENTITIES.find((e) => e.key === "jd")?.aliases.push(/\bJD\b/);
 ENTITIES.find((e) => e.key === "baai")?.aliases.push("Beijing Academy of Artificial Intelligence");
@@ -115,9 +116,15 @@ export const PRODUCT_NAMES: NameEntry[] = [
 
 const HAN = /[\u3400-\u9fff]/;
 const HANGUL = /[가-힣]/;
+/**
+ * 사람 이름 별칭 — 기업 판정(findEntities)에는 쓰지만 번역 이름표에는 넣지 않는다.
+ * 2026-11-03: ko "량원펑 2,800억 위안" 의 en "Liang Wenfeng" 을 "DeepSeek 이 없다" 고 떨어뜨렸다.
+ */
+const PERSON_ALIASES = new Set(["량원펑", "梁文锋"]);
+
 /** 실체 → 이름표 한 줄 (정규식 별칭은 표기 대조에만 쓰고 이름표에는 넣지 않는다) */
 export function nameEntryOf(e: Entity): NameEntry {
-  const strs = e.aliases.filter((a): a is string => typeof a === "string");
+  const strs = e.aliases.filter((a): a is string => typeof a === "string" && !PERSON_ALIASES.has(a));
   return {
     key: e.key,
     ko: strs.filter((a) => HANGUL.test(a)),

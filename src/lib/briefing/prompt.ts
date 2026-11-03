@@ -24,7 +24,9 @@ import { isChinaCandidate } from "./rules";
 // v4.3: 중국 주체 = 기사 대상 지역(region: CN, 대만·홍콩 포함) — ARTICLES 에 region 표시, cn 은 region 기준(없을 때만 제목 실체),
 //   subject 는 근거 기사에 나온 주체만 (근거 없는 주체·항목은 치명)
 // v4.4 (재감사 round 2): 삭제 전 부분 수리(문제 칸만 다시 씀), "지난 N월" 금지(판과 같은 달), 같은 기사를 두 주요 기사에 쓰지 않기
-export const PROMPT_VERSION = "ko-v4.4-2026-11-02";
+// v4.5 (2026-11-03 결정 D3·S2): 중국 주체는 믿을 만한 후보가 있을 때만 3건 이상 — 모자라면 지어내지 말고 있는 만큼(반려하지 않음),
+//   ARTICLES 상위 묶음에 body_kr(본문 요지) 추가, insight_kr 은 AI 해설이라 사실·평가 근거가 아님, 근거 없는 분석 덧붙이기 금지
+export const PROMPT_VERSION = "ko-v4.5-2026-11-03";
 // v6: 이름 힌트에 중국어 요약 앞부분(고유명사 표기용), 범위 "7~10%" 를 "7%至10%" 로 써도 됨
 // v7 (2026-11-02 재감사 round 2): NAME_GLOSSARY(entities.ts 이름표 ko = en = zh) — 번역본 이름을 이름표와 대조, 작은 수·소수점 표기도 대조
 export const TRANSLATE_PROMPT_VERSION = "tr-v7-2026-11-02";
@@ -66,10 +68,10 @@ export function buildSystemPrompt(mode: EditionMode): string {
 1. 근거는 아래 ARTICLES 에 있는 내용뿐입니다. 사전 지식으로 사실·수치·인물·날짜를 보태지 마십시오.
 2. 모든 항목은 refs 에 근거 기사 id(A01 형식)를 1개 이상 답니다. 존재하지 않는 id 를 만들지 마십시오.
 3. refs 에는 그 항목의 사실을 실제로 담은 기사만 넣습니다. 그 문장에 나오는 기업·인물·제품 이름이 등장하지 않는 기사는 refs 에 넣지 마십시오.
-4. 숫자(금액·%·MW·토큰·인원 등)는 근거 기사 title_kr/summary_kr/insight_kr 에 나온 값과 단위를 그대로 씁니다. 환산·반올림·합산 금지.
+4. 숫자(금액·%·MW·토큰·인원 등)는 근거 기사 title_kr/summary_kr/body_kr 에 나온 값과 단위를 그대로 씁니다. 환산·반올림·합산 금지.
 5. 순위("2위")·배수("3배")·비교("최초", "최대") 같은 서열 표현은 근거 기사에 그 표현이 그대로 있을 때만 씁니다. "2점 뒤졌다"를 "2위"로 바꾸는 식의 추론을 하지 마십시오.
 6. clusters 에는 "같은 주체가 같은 행위를 한 같은 사건"을 다룬 기사만 묶습니다(예: 같은 기업의 같은 모델 발표를 여러 매체가 보도). "칩·메모리", "구현형 AI" 같은 주제 묶음은 금지입니다. 묶인 사건은 하나의 이야기로 쓰고 refs 에 모두 넣습니다.
-7. 중국 중심: top_stories 상위 5건 중 3건 이상(목표 4건)은 중국 기업·기관이 주체인 이야기여야 합니다(3건 미만이면 판 전체가 반려됩니다). 해외 이야기는 상위 5건에 많아야 1~2건입니다. "중국 주체"는 근거 기사의 region(기사 대상 지역)이 CN 인 이야기입니다(대만·홍콩 기사도 CN). ARTICLES 의 cn:true 는 region 이 CN 인 후보(region 이 없으면 제목에 중국 기업·기관이 나오는 후보)입니다. region 이 CN 이 아닌 기사(US 등)를 근거로 쓴 이야기는 subject_is_chinese:true 로 표시해도 중국 주체로 세지 않습니다. 다 쓴 뒤 상위 5건의 subject_is_chinese:true 수를 세어 보십시오. subject 에는 refs 기사에 실제로 나오는 주체만 씁니다(근거 기사에 없는 기업을 주체로 만들면 그 항목이 폐기됩니다). 같은 사건(같은 주체의 같은 발표·같은 서류)을 top_stories 두 칸에 나누지 마십시오. 해외 기업 소식은 중국 시장 영향이나 중국 매체의 시각이 드러나게 씁니다. subject_is_chinese 를 정직하게 표시하십시오.
+7. 중국 중심: 근거가 충분한 중국 주체 이야기가 있으면 top_stories 상위 5건 중 3건 이상(목표 4건)을 중국 기업·기관이 주체인 이야기로 채웁니다. 근거가 충분한 중국 이야기가 모자란 날에는 억지로 채우지 말고 있는 만큼만 쓰십시오(판은 반려되지 않습니다. 그런 날의 안내 문장은 시스템이 붙이므로 lede 에 해외 소식 비중에 대한 말을 쓰지 마십시오). 근거 기사에 없는 중국 항목을 만들면 판 전체가 반려됩니다. 해외 이야기는 보통 상위 5건에 많아야 1~2건입니다. "중국 주체"는 근거 기사의 region(기사 대상 지역)이 CN 인 이야기입니다(대만·홍콩 기사도 CN). ARTICLES 의 cn:true 는 region 이 CN 인 후보(region 이 없으면 제목에 중국 기업·기관이 나오는 후보)입니다. region 이 CN 이 아닌 기사(US 등)를 근거로 쓴 이야기는 subject_is_chinese:true 로 표시해도 중국 주체로 세지 않습니다. 다 쓴 뒤 상위 5건의 subject_is_chinese:true 수를 세어 보십시오. subject 에는 refs 기사에 실제로 나오는 주체만 씁니다(근거 기사에 없는 기업을 주체로 만들면 그 항목이 폐기됩니다). 같은 사건(같은 주체의 같은 발표·같은 서류)을 top_stories 두 칸에 나누지 마십시오. 해외 기업 소식은 중국 시장 영향이나 중국 매체의 시각이 드러나게 씁니다. subject_is_chinese 를 정직하게 표시하십시오.
 8. AI·반도체·로봇·AI 비즈니스와 무관한 기사, 특히 정치·외교 기사(정상·총리·대통령 발언 등)는 선정하지 말고 excluded 에 사유와 함께 적습니다. 행사 모집 공고·홍보성 기사도 낮게 봅니다.
 9. 한국어 문장에 한자를 쓰지 마십시오(용어 원어는 term_of_the_day.term 에만). 중국 기업·인물명은 기사 title_kr/summary_kr 의 한국어 표기를 따르되 한자 병기는 하지 않습니다.
 10. 과장·추측·투자 권유 금지. 논쟁적인 주장은 "~라고 주장"처럼 주체를 밝힙니다. 평가가 엇갈리면 함께 적습니다. 존댓말이 아닌 간결한 평서문(~했다, ~이다)으로 씁니다.
@@ -81,6 +83,7 @@ export function buildSystemPrompt(mode: EditionMode): string {
 16. PREVIOUS_EDITION 에 이미 나온 사건은 새 사실이 있을 때만 쓰고, 그때는 title 을 "후속:"으로 시작합니다.
 17. 매출·영업이익·손실·기업가치·시가총액 금액을 "확보·유치·조달" 같은 거래 금액처럼 쓰지 마십시오. 금액은 단위까지 기사 그대로("162억 9,000만 달러"를 "162억 달러"로 자르지 않음).
 18. "두 매체가 전했다"처럼 매체 수를 쓸 때는 그 기사의 sources 수 그대로 씁니다. 출력 문장에 지시·메모(괄호 설명, "~ 대신 ~")를 남기지 마십시오.
+19. body_kr 은 기사 본문 요지(원문에서 만든 사실 요약)로, 사실·숫자 근거로 씁니다. insight_kr 은 AI가 쓴 해설이라 사실 근거가 아닙니다. why·lede 에는 기사에 나온 사실에서 읽히는 의미만 쓰고, 기사에 없는 평가·비교·전망(경쟁 판도 변화, 격차 분석, "독립 검증이 필요하다", "장벽을 낮춘다" 등)을 덧붙이지 마십시오. 의미를 말할 근거가 없으면 사실을 한 문장 더 쓰는 편이 낫습니다.
 ${short ? "\n오늘은 기사가 적은 날입니다(짧은 판). top_stories 1~3건만 쓰고 sections 는 비웁니다. headline 은 \"오늘은 조용한 하루\"처럼 솔직하게 씁니다.\n" : ""}
 중요도 판단 기준(높은 순): 여러 매체가 함께 다룬 사건(event_sources = 같은 사건을 다룬 매체 수, 제목이 달라도 같은 사건이면 함께 셈) > 대형 모델·칩·인프라의 구체적 발표 > 큰 금액의 투자·인수·상장 > 정책·규제 > 산업 분석/칼럼. 업계 영향이 큰 중국 기업(바이트댄스·알리바바·텐센트·화웨이·딥시크·문샷·지푸·미니맥스·바이두·샤오미 등)을 우선합니다. 한 매체만 다룬 해외 연구 논문은 상위 5건에 넣지 않습니다. ARTICLES 는 사전 점수(score) 순으로 정렬되어 있습니다(참고용).
 
@@ -88,8 +91,21 @@ ${short ? "\n오늘은 기사가 적은 날입니다(짧은 판). top_stories 1~
 ${schema}`;
 }
 
+/** body_kr 을 넣는 상위 묶음 수와 글자 상한 (S2) */
+export const BODY_GROUPS = 25;
+export const BODY_MAX = 450;
+/** 생성 입력의 body_kr 과 같은 자르기 — AI 검토 근거(review/evidence.ts)도 이것을 써서 "본 근거 = 검토 근거" (S2) */
+export function clipBody(t: string): string {
+  const x = t.replace(/\s+/g, " ").trim();
+  if (x.length <= BODY_MAX) return x;
+  // 문장 끝에서 자른다 (말줄임표 없이)
+  const cut = x.slice(0, BODY_MAX);
+  const end = cut.lastIndexOf(". ");
+  return end > BODY_MAX * 0.5 ? cut.slice(0, end + 1) : cut;
+}
+
 export function buildUserPrompt(date: string, groups: CandidateGroup[], previous: PreviousEdition | null = null): string {
-  const lines = groups.map((g) => {
+  const lines = groups.map((g, i) => {
     const a = g.primary;
     const terms = (a.key_terms ?? [])
       .slice(0, 4)
@@ -108,6 +124,8 @@ export function buildUserPrompt(date: string, groups: CandidateGroup[], previous
       title_cn: a.title_cn,
       summary_kr: a.summary_kr,
       insight_kr: a.ai_insights_kr,
+      // S2: 점수 상위 묶음만 본문 요지 (입력 길이 상한 — 후보 40건 전부면 호출당 약 1만 토큰 늘어난다)
+      ...(i < BODY_GROUPS && a.content_kr ? { body_kr: clipBody(a.content_kr) } : {}),
       terms,
     });
   });

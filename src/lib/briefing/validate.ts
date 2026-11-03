@@ -15,7 +15,9 @@
  * | subject_not_in_refs: 주요 기사 subject 가 근거 기사 어디에도 없음 | 치명 (중국 할당을 채우려 만든 주체) |
  * | han_in_ko: 한국어 본문에 한자 (괄호 병기 포함) | 치명 (2026-11-02 QA: 수리 뒤에도 남은 채 draft 가 됐다) |
  * | length: 글자 수 상한 초과 (여유 없음)     | 치명 (예전 15% 여유 삭제) |
- * | china_centric: 상위 5건 중 중국 주체 ≥ 3 | 치명 (수리 호출 대상. 수리 뒤에도 미달이면 판 전체 failed).
+ * | china_centric: 상위 5건 중 중국 주체 ≥ min(3, 믿을 만한 중국 후보 수) | 치명 (수리 호출 대상. 수리 뒤에도 미달이면 판 전체 failed).
+ * |   2026-11-03 결정 D3: 믿을 만한 중국 후보(상위 15위 안 또는 2개 이상 매체가 다룬 중국 사건)가 3건보다 적으면 있는 만큼만 요구한다
+ * |   (모자란 할당을 채우려고 근거 없는 중국 항목을 지어내던 문제 — 10-28 v5 「바이두 OCR」). 그때는 경고 china_short 와 lede 안내 문장.
  *   중국 주체 = 근거 기사 subject_region(CN, 대만·홍콩 포함) 다수 + subject_is_chinese 표시 (rules.ts isChinaSubject) |
  * | cluster_topic: 묶음 기사 전부에 공통 주체 | 경고 (주제 묶음은 clusters 에서 뺌) |
  * | term_pinyin_spacing: 병음 띄어쓰기만 다름 | 경고 (DB 표기로 교정) |
@@ -57,6 +59,7 @@ import {
   claimIssues,
   entityNotInOriginal,
   headlineTopIssue,
+  isChinaCandidate,
   isChinaSubject,
   leakedInstruction,
   moneyIssues,
@@ -83,7 +86,32 @@ export interface ValidationContext {
   events?: Map<string, string>;
   /** 짧은 id → 같은 사건을 다룬 매체 수 (eventSources ?? sources). 핵심 기사 삭제 경고 (dropped_key_story) */
   eventOutlets?: Map<string, number>;
+  /**
+   * 믿을 만한 중국 주체 후보 사건 수 (chinaCredibleCount). 중국 중심 규칙은 min(3, 이 값) 만 요구한다 (결정 D3).
+   * 없으면(예전 판 재검증) 예전처럼 3건.
+   */
+  chinaCredible?: number;
 }
+
+/** 믿을 만한 중국 후보: 점수 상위 CHINA_CREDIBLE_TOP 묶음 안이거나 2개 이상 매체가 다룬 사건 */
+export const CHINA_CREDIBLE_TOP = 15;
+
+/**
+ * 믿을 만한 중국 주체 후보 "사건" 수 (같은 사건의 여러 묶음은 하나로 — groupEvents).
+ * 후보 목록은 점수 순(A01..)이다. 생성 때 meta.china_credible 로 저장해 관리자 재검증·AI 검토도 같은 값을 쓴다 (Gate 2).
+ */
+export function chinaCredibleCount(groups: CandidateGroup[], events: Map<string, string> = groupEvents(groups)): number {
+  const keys = new Set<string>();
+  groups.forEach((g, i) => {
+    const outlets = (g.eventSources?.length ? g.eventSources : g.sources).length;
+    if ((i < CHINA_CREDIBLE_TOP || outlets >= 2) && isChinaCandidate(g.primary)) keys.add(events.get(g.shortId) ?? g.shortId);
+  });
+  return keys.size;
+}
+
+/** 중국 할당 미달 안내 (lede 마지막 문장, 결정 D3) — 이미 비슷한 뜻이 있으면 붙이지 않는다 */
+export const CHINA_SHORT_NOTE = "오늘은 해외 소식의 비중이 크다.";
+const CHINA_SHORT_NOTE_RE = /해외\s?(?:소식|기사|이야기|기업)[^.。]*(?:비중|많|크)|중국\s?(?:소식|기사|발표)[^.。]*(?:적|드물|뜸)/;
 
 export function toSourceDoc(a: CandidateArticle): SourceDoc {
   return {
@@ -98,8 +126,9 @@ export function toSourceDoc(a: CandidateArticle): SourceDoc {
   };
 }
 
+/** 숫자·이름 근거 텍스트. S2(2026-11-03): 생성기가 본문 요지(body_kr)를 보므로 content_kr 도 근거에 넣는다 (본 근거 = 검사 근거) */
 export function articleText(a: CandidateArticle): string {
-  return [a.title_kr, a.summary_kr, a.ai_insights_kr, a.title_cn].filter(Boolean).join(" ");
+  return [a.title_kr, a.summary_kr, a.ai_insights_kr, a.content_kr, a.title_cn].filter(Boolean).join(" ");
 }
 
 function articleTitle(a: CandidateArticle): string {
@@ -127,7 +156,8 @@ export function contextFromGroups(
     outlets.set(g.shortId, g.sources);
     eventOutlets.set(g.shortId, (g.eventSources?.length ? g.eventSources : g.sources).length);
   }
-  return { sourceText, titleText, keyTerms, hidden, mode, docs, outlets, editionDate, events: groupEvents(groups), eventOutlets };
+  const events = groupEvents(groups);
+  return { sourceText, titleText, keyTerms, hidden, mode, docs, outlets, editionDate, events, eventOutlets, chinaCredible: chinaCredibleCount(groups, events) };
 }
 
 /**
@@ -161,7 +191,9 @@ export function contextFromArticles(
   articles: CandidateArticle[],
   mode: EditionMode,
   hidden: Set<string> = new Set(),
-  editionDate?: string
+  editionDate?: string,
+  /** 생성 때 저장한 meta.china_credible (없으면 예전처럼 3건 요구) */
+  chinaCredible?: number
 ): ValidationContext {
   const sourceText = new Map<string, string>();
   const titleText = new Map<string, string>();
@@ -175,7 +207,7 @@ export function contextFromArticles(
     docs.set(a.id, [toSourceDoc(a)]);
     outlets.set(a.id, [a.source_name]);
   }
-  return { sourceText, titleText, keyTerms, hidden, mode, docs, outlets, editionDate };
+  return { sourceText, titleText, keyTerms, hidden, mode, docs, outlets, editionDate, chinaCredible };
 }
 
 // ───────────────────────── 결정적 정리 (수리 호출 전)
@@ -579,8 +611,9 @@ export function chinaCentricCount(c: BriefingContent, ctx?: Pick<ValidationConte
   return c.top_stories.slice(0, 5).filter((s) => isChinaSubject(s, s.refs.map((r) => ctx?.docs?.get(r) ?? []))).length;
 }
 
-export function chinaCentricRequired(mode: EditionMode, topCount: number): number {
-  return mode === "normal" ? Math.min(3, topCount) : 0;
+export function chinaCentricRequired(mode: EditionMode, topCount: number, credible?: number): number {
+  const base = mode === "normal" ? Math.min(3, topCount) : 0;
+  return credible === undefined ? base : Math.min(base, credible);
 }
 
 // ───────────────────────── 본 검증
@@ -683,9 +716,28 @@ export function validateKo(
   fatal.push(...duplicateStoryIssues(content, ctx));
 
   const china = chinaCentricCount(content, ctx);
-  const need = chinaCentricRequired(ctx.mode, content.top_stories.length);
+  const need = chinaCentricRequired(ctx.mode, content.top_stories.length, ctx.chinaCredible);
+  const target = chinaCentricRequired(ctx.mode, content.top_stories.length);
   if (china < need)
-    fatal.push({ level: "fatal", rule: "china_centric", path: "top_stories", detail: `상위 5건 중 중국 주체 ${china}건 (필요 ${need}건)` });
+    fatal.push({ level: "fatal", rule: "china_centric", path: "top_stories", detail: `상위 5건 중 중국 주체 ${china}건 (필요 ${need}건${need < target ? ` — 믿을 만한 중국 후보 ${ctx.chinaCredible}건` : ""})` });
+  else if (china >= target && CHINA_SHORT_NOTE_RE.test(content.lede)) {
+    // 중국 할당을 채운 날 모델이 쓴 "해외 소식 비중" 문장은 사실과 맞지 않는다 → 그 문장만 지운다 (2026-11-03 재실험 10-27)
+    const kept = content.lede.split(/(?<=[.!?。])\s+/).filter((x) => !CHINA_SHORT_NOTE_RE.test(x));
+    if (kept.length) {
+      warn.push({ level: "warn", rule: "china_short_note", path: "lede", detail: `중국 주체 ${china}건 — 맞지 않는 해외 소식 비중 문장 삭제` });
+      content.lede = kept.join(" ");
+    }
+  } else if (china < target) {
+    // 결정 D3: 믿을 만한 중국 후보가 모자란 날 — 지어내지 않고 있는 만큼 싣는다. lede 에 안내 문장 (상한 안에 들어갈 때만, 결정적)
+    warn.push({ level: "warn", rule: "china_short", path: "top_stories", detail: `중국 주체 ${china}건 < ${target}건 (믿을 만한 중국 후보 ${ctx.chinaCredible}건) — 허용` });
+    if (!CHINA_SHORT_NOTE_RE.test(content.lede)) {
+      const next = `${content.lede.trim()} ${CHINA_SHORT_NOTE}`;
+      if (next.length <= 200) {
+        content.lede = next;
+        warn.push({ level: "warn", rule: "china_short_note", path: "lede", detail: `lede 에 안내 문장 추가: ${CHINA_SHORT_NOTE}` });
+      } else warn.push({ level: "warn", rule: "china_short_note", path: "lede", detail: "lede 가 길어 안내 문장을 붙이지 못함 — 관리자 확인" });
+    }
+  }
 
   const cited = new Set(citedRefs(content));
   return {

@@ -33,6 +33,7 @@ function art(id: string, title_cn: string, source = "36Kr", extra: Partial<Ranka
   return { id, source_name: source, category: "ai-biz", title_cn, title_kr: id, summary_kr: "", ...extra };
 }
 
+// 2026-11-03: 인텔 별칭이 "인텔리전트"(톈쉬 인텔리전트)를 인텔로 잡던 오탐을 고쳐 다시 찍음 (그 기사의 인텔 가산 제거).
 // 스냅숏은 2026-11-02 편집 QA 가중(매체 수 4·사건 단위 매체 수·해외 단일 매체 논문 감점·중국 주요 기업 큰 금액)으로 다시 찍었다.
 // 점수 공식을 바꾸면 이 스냅숏도 의도적으로 다시 찍는다 (input_hash 가 바뀌어 판이 다시 생성된다).
 test("브리핑 후보 선정: 스냅숏과 같다 (점수 공식이 바뀌면 의도적으로 갱신)", () => {

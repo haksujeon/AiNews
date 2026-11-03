@@ -134,7 +134,9 @@ export async function saveEditedBriefing(
   })[];
   const hidden = new Set(articles.filter((a) => !a.visible).map((a) => a.id));
   // 생성 때와 같은 의미 규칙(예전 사건 시점 등)을 쓰도록 판 시작일을 넘긴다
-  const ctx = contextFromArticles(articles, row.mode, hidden, row.period_start ?? row.edition_date);
+  // 중국 할당은 생성 때 저장한 믿을 만한 중국 후보 수로 (결정 D3, 생성과 같은 기준 — Gate 2)
+  const credible = (stored as { meta?: { china_credible?: unknown } }).meta?.china_credible;
+  const ctx = contextFromArticles(articles, row.mode, hidden, row.period_start ?? row.edition_date, typeof credible === "number" ? credible : undefined);
 
   const { meta, ...body } = stored;
   const edited = applyTextPatch(body as BriefingContent, patch);

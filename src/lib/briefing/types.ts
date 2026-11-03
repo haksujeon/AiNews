@@ -47,6 +47,8 @@ export interface CandidateArticle {
   key_terms: KeyTerm[];
   /** 중국어 원문 요약 (통화·고유명사 대조용 — 숫자 근거에는 넣지 않는다) */
   summary_cn?: string;
+  /** 본문 요지(원문에서 만든 한국어 3~5문장, 평균 약 900자). S2(2026-11-03): 생성 입력·숫자 근거에 넣는다 */
+  content_kr?: string;
   /** 베이징 날짜 YYYY-MM-DD */
   news_date?: string;
   /** 기사 대상 지역 (ai_news_ex.subject_region, region.ts). 중국 중심 규칙(rules.ts isChinaSubject)·프롬프트 지역 표시 */
@@ -151,6 +153,8 @@ export interface StoredBriefingContent extends BriefingContent<string> {
     group_count: number; // 정치 제외·전재 묶음 후 이야기 수 (물량 규칙 기준)
     cited_count: number; // 인용한 기사 수 ("M건 정리")
     china_centric_count: number; // 상위 5건 중 중국 주체 수
+    /** 믿을 만한 중국 후보 사건 수 (결정 D3, 2026-11-03~ 판). 중국 중심 규칙은 min(3, 이 값) */
+    china_credible?: number;
     prompt_version: string;
     ai_generated: true;
     /** 판 기간의 수집 품질 (주간·월간과 같은 결손일 판정). 결손일이 있으면 화면에 데이터 알림 */

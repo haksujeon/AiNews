@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { getCategoryLabel, getSourceName } from "@/lib/news-utils";
 import { isScopeCategory } from "@/lib/categories";
 import { regionBadgeLabel, regionBadges, regionLabel } from "@/lib/region";
+import { RegionFlag } from "./region-flag";
 
 interface ArticleKickerProps {
   category: string | null;
@@ -15,8 +16,9 @@ interface ArticleKickerProps {
 }
 
 /**
- * 제목 위 한 줄 메타: 카테고리 텍스트 라벨 + (대상 지역 · ) 원어 매체명 + 미중/한국 글자 배지.
- * 색 배지/국기/감성 점 대신 글자만 쓴다. 포인트 색(jade)은 범위 내(AI) 분류에만 준다(categories.ts).
+ * 제목 위 한 줄 메타: 카테고리 텍스트 라벨 + (국기 대상 지역 · ) 원어 매체명 + 미중/한국 배지.
+ * 2026-11-03 사용자 요청: 미국/중국 구분을 국기로 보여 준다 (글자 라벨은 그대로 — 국기는 장식, region-flag.tsx).
+ * 포인트 색(jade)은 범위 내(AI) 분류에만 준다(categories.ts).
  * 카드·리스트·관련 기사·상세·모달이 모두 이 컴포넌트를 쓴다.
  */
 export function ArticleKicker({ category, sourceName, locale, region, regionTags, className }: ArticleKickerProps) {
@@ -36,7 +38,8 @@ export function ArticleKicker({ category, sourceName, locale, region, regionTags
       {(place || source) && (
         <span className="text-ink-3">
           {place && (
-            <span data-testid="kicker-region" data-region={region ?? undefined}>
+            <span data-testid="kicker-region" data-region={region ?? undefined} className="inline-flex items-baseline gap-1">
+              <RegionFlag code={region} />
               {place}
               {source && <span aria-hidden="true"> · </span>}
             </span>
@@ -45,13 +48,21 @@ export function ArticleKicker({ category, sourceName, locale, region, regionTags
         </span>
       )}
       {badges.map((b) => (
-        // 국기 대신 글자 배지 — 괘선 테두리만, 색 없음
+        // 국기 + 글자 배지 — 괘선 테두리, 미중 = 미국·중국 국기 두 개
         <span
           key={b}
           data-testid="region-badge"
           data-badge={b}
-          className="rounded-[2px] border border-rule px-[3px] text-[11px] font-semibold leading-[1.35] text-ink-2"
+          className="inline-flex items-center gap-[3px] rounded-[2px] border border-rule px-[3px] text-[11px] font-semibold leading-[1.35] text-ink-2"
         >
+          {b === "us_china" ? (
+            <>
+              <RegionFlag code="US" />
+              <RegionFlag code="CN" />
+            </>
+          ) : (
+            <RegionFlag code="KR" />
+          )}
           {regionBadgeLabel(b, locale)}
         </span>
       ))}

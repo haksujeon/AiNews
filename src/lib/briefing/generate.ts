@@ -10,7 +10,7 @@
  *     → 그래도 실패면 대체 판(fallback.ts): 짧은 판(검증 통과 주요 기사 ≥ 3) 또는 제목만 판(mode headlines). 판 없는 날을 만들지 않는다
  *     감사 기록: validation.edits[] (회차·위치·사유·고치기 전/후 원문), 핵심 기사 삭제는 경고 dropped_key_story
  *  3. ko 가 draft 면 en / zh 값만 번역 + 재검증 (각 언어판은 독립적으로 draft/failed)
- *  4. 토큰·비용·지연·LiteLLM request id 를 행마다 기록. 1회 실행 비용 상한(BRIEFING_MAX_COST_USD, 기본 $0.10)
+ *  4. 토큰·비용·지연·LiteLLM request id 를 행마다 기록. 1회 실행 비용 상한(BRIEFING_MAX_COST_USD, 기본 $0.60 — Sonnet 5.5)
  *  5. 주말 합본(결정 D7, 규칙은 sla.ts): 토요일 판 = 토·일 기사, period_start~period_end 에 기록.
  *     일요일 날짜는 생성하지 않는다(토요일 합본에 들어감). force 로도 만들지 않는다 — 관리자 "다시 생성"(force)이
  *     일요일 단독판을 만들어 합본과 같은 기사를 두 번 싣게 됐다(2026-11-01 초안). 꼭 필요하면 sunday 옵션(CLI --sunday).
@@ -27,13 +27,14 @@ import type {
   StoredBriefingContent,
   ValidationReport,
 } from "./types";
-import { BRIEFING_MODEL, LlmError, chat, parseJsonContent } from "./llm";
+import { BRIEFING_EFFORT, BRIEFING_MODEL, LlmError, TRANSLATE_EFFORT, TRANSLATE_MODEL, chat, modelTag, parseJsonContent } from "./llm";
 import { PROMPT_VERSION, TRANSLATE_PROMPT_VERSION, buildRepairPrompt, buildSystemPrompt, buildTargetedRepairPrompt, buildUserPrompt } from "./prompt";
 import { computeInputHash, editionModeFor, selectCandidates } from "./select";
 import { isChinaCandidate } from "./rules";
 import {
   HEADLINE_MAX,
   LIMITS,
+  chinaCredibleCount,
   citedRefs,
   contextFromGroups,
   dropFatalItems,
@@ -68,7 +69,8 @@ import { beijingDate, periodDayQuality } from "@/lib/metrics/period";
 import pool from "@/lib/db";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_COST = Number(process.env.BRIEFING_MAX_COST_USD || "0.10");
+// Sonnet 5.5 일간 ko 실측 $0.12~0.23 (수리 포함) + 번역 2개 약 $0.01 → 상한 $0.60. 넘으면 제목만 판으로 떨어진다 (2026-11-03)
+const MAX_COST = Number(process.env.BRIEFING_MAX_COST_USD || "0.60");
 
 /** 베이징(Asia/Shanghai) 오늘 날짜 YYYY-MM-DD — 주간·월간과 같은 beijingDate (metrics/period.ts) */
 export function beijingToday(now = new Date()): string {
@@ -110,7 +112,7 @@ export function sumUsage(list: LlmUsage[]) {
 }
 
 /** 짧은 id → uuid 로 되돌린 저장용 content. 전재 형제도 refs 에 넣는다 (두 매체 모두 표기). */
-function toStored(
+export function toStored(
   c: BriefingContent,
   groups: CandidateGroup[],
   locale: BriefingLocale,
@@ -139,7 +141,7 @@ function toStored(
   return { content: { ...content, meta: { ...meta, locale, cited_count: articleIds.length } }, articleIds };
 }
 
-interface KoOutcome {
+export interface KoOutcome {
   status: "draft" | "failed";
   content: BriefingContent | null;
   validation: Record<string, unknown>;
@@ -242,7 +244,8 @@ export function applyTargetedRepair(c: BriefingContent, asked: string[], raw: un
   return { content: out, edits };
 }
 
-async function generateKo(
+/** ko 본문 생성(수리·부분 수리·삭제·대체 판 포함). DB 를 쓰지 않는다 — 모델 비교 실험(scripts/briefing-model-compare.ts)도 이 함수를 부른다 */
+export async function generateKo(
   dateLabel: string,
   mode: EditionMode,
   groups: CandidateGroup[],
@@ -274,7 +277,7 @@ async function generateKo(
     return m.content;
   };
   cost.check();
-  const first = await chat({ system, messages: [{ role: "user", content: user }], maxTokens: 8000 }, track);
+  const first = await chat({ system, messages: [{ role: "user", content: user }], model: BRIEFING_MODEL, maxTokens: 8000, effort: BRIEFING_EFFORT }, track);
   const parsed1 = normalizeContent(parseJsonContent(first.content));
   let cur = validateKo(prepare(parsed1.content, "initial"), ctx, parsed1.issues);
   validation.initial = cur.report;
@@ -299,7 +302,7 @@ async function generateKo(
       cost.check();
       const extra = repairHints(cur.content, cur.report, groups);
       messages.push({ role: "user", content: buildRepairPrompt(cur.content, cur.report.fatal, extra) });
-      const reply = await chat({ system, messages, maxTokens: 8000 }, track);
+      const reply = await chat({ system, messages, model: BRIEFING_MODEL, maxTokens: 8000, effort: BRIEFING_EFFORT }, track);
       messages.push({ role: "assistant", content: reply.content });
       const parsed = normalizeContent(parseJsonContent(reply.content));
       const repaired = validateKo(prepare(parsed.content, label), ctx, parsed.issues);
@@ -345,7 +348,7 @@ async function generateKo(
     try {
       cost.check();
       const reply = await chat(
-        { system, messages: [...messages, { role: "user", content: buildTargetedRepairPrompt(fields) }], maxTokens: 2000 },
+        { system, messages: [...messages, { role: "user", content: buildTargetedRepairPrompt(fields) }], model: BRIEFING_MODEL, maxTokens: 2000, effort: BRIEFING_EFFORT },
         track
       );
       const raw = parseJsonContent(reply.content);
@@ -460,7 +463,8 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
     const articles = await loadCandidateArticles(period.periodStart, period.periodEnd);
     const sel = selectCandidates(articles);
     const mode = editionModeFor(sel.totalGroups);
-    const inputHash = computeInputHash(sel.groups, `${PROMPT_VERSION}|${TRANSLATE_PROMPT_VERSION}|${mode}`, BRIEFING_MODEL);
+    // 모델·effort(생성·번역)가 바뀌면 같은 입력도 다시 생성한다
+    const inputHash = computeInputHash(sel.groups, `${PROMPT_VERSION}|${TRANSLATE_PROMPT_VERSION}|${mode}|${modelTag(TRANSLATE_MODEL, TRANSLATE_EFFORT)}`, modelTag(BRIEFING_MODEL, BRIEFING_EFFORT));
     const base = { date, mode, candidateCount: articles.length, inputHash };
     const inputArticleIds = sel.groups.flatMap((g) => [g.primary.id, ...g.siblings.map((s) => s.id)]);
     // 수집 품질: 주간·월간과 같은 결손일 판정 (축소·부분 수집일이 있으면 화면에 데이터 알림)
@@ -471,6 +475,8 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
       mode,
       candidate_count: articles.length,
       group_count: sel.totalGroups,
+      // 믿을 만한 중국 후보 사건 수 (결정 D3) — 관리자 재검증·AI 검토가 생성과 같은 중국 할당 기준을 쓴다
+      china_credible: chinaCredibleCount(sel.groups),
       prompt_version: PROMPT_VERSION,
       ai_generated: true as const,
     };
@@ -569,8 +575,9 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
           ...periodCols, date, locale: target, status: ok ? "draft" : "failed", mode: finalMode,
           content: st?.content ?? {}, articleIds: st?.articleIds ?? stored?.articleIds ?? [], inputArticleIds,
           candidateCount: articles.length, inputHash,
-          validation: { prompt_version: TRANSLATE_PROMPT_VERSION, repaired: tr.repaired, problems: tr.problems },
-          sourceBriefingId: koRow.id, model: BRIEFING_MODEL, promptVersion: TRANSLATE_PROMPT_VERSION, ...u, error,
+          validation: { prompt_version: TRANSLATE_PROMPT_VERSION, repaired: tr.repaired, problems: tr.problems, ...(tr.fallback ? { fallback_model: true } : {}) },
+          // 재시도 모델로 다시 번역했으면 마지막 호출 모델 (기록용)
+          sourceBriefingId: koRow.id, model: tr.usages.at(-1)?.model ?? TRANSLATE_MODEL, promptVersion: TRANSLATE_PROMPT_VERSION, ...u, error,
         });
         locales.push({ locale: target, id: row.id, version: row.version, status: ok ? "draft" : "failed", fatal: tr.problems.length, warn: 0, costUsd: u.costUsd, error: error ?? undefined });
       }

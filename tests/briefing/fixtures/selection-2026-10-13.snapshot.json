@@ -835,16 +835,16 @@
   },
   {
    "shortId": "A40",
-   "primary": "22b7e9af-ee3f-48ac-b9f6-ce9314d74e32",
+   "primary": "4884a57f-456f-4f6e-b705-30ffedc2f352",
    "siblings": [],
    "sources": [
-    "36Kr"
+    "Huxiu"
    ],
    "score": 6.2,
    "scoreDetail": {
     "coverage": 4,
-    "source": 0.8,
-    "category": 0.8,
+    "source": 0.6,
+    "category": 1,
     "company": 0.6,
     "number": 0,
     "event": 0,

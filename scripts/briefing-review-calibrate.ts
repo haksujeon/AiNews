@@ -6,6 +6,7 @@
  *  - 판마다 같은 프롬프트 버전의 보정 검토(trigger calibration)가 이미 있으면 다시 부르지 않는다 (--fresh 면 새로).
  *  - 비용 상한: LiteLLM_SpendLogs 에서 지금까지의 보정 검토 request_id 의 spend 합을 읽어, 상한 − 0.2 를 넘으면 새 검토를 멈춘다.
  *  - 감사 결과는 프롬프트에 넣지 않는다 (비교에만 쓴다).
+ *  - 검토 모델(BRIEFING_REVIEW_MODEL)별로 따로 비교한다 (2026-11-03 모델 비교 — 다른 모델의 검토와 섞지 않음)
  *  - 결과: <out-dir>/calibration.json, <out-dir>/CALIBRATION.md
  */
 import { loadEnvConfig } from "@next/env";
@@ -58,7 +59,7 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
 
   const pool = (await import("../src/lib/db")).default;
-  const { reviewBriefing } = await import("../src/lib/briefing/review/review");
+  const { reviewBriefing, REVIEW_MODEL } = await import("../src/lib/briefing/review/review");
   const { REVIEW_PROMPT_VERSION } = await import("../src/lib/briefing/review/prompt");
   const { policyFromEnv, decide, minScoreFor } = await import("../src/lib/briefing/review/policy");
   const { scoreReview, stricter, verdictOfRecommendation, RUBRIC_PASS_SCORE } = await import("../src/lib/briefing/review/score");
@@ -86,8 +87,8 @@ async function main() {
     if (!flag("no-run")) {
       for (const a of audits) {
         const { rows } = await pool.query(
-          `SELECT id FROM briefing_reviews WHERE briefing_id = $1::uuid AND trigger = 'calibration' AND prompt_version = $2 AND status = 'done' LIMIT 1`,
-          [a.id, REVIEW_PROMPT_VERSION]
+          `SELECT id FROM briefing_reviews WHERE briefing_id = $1::uuid AND trigger = 'calibration' AND prompt_version = $2 AND model = $3 AND status = 'done' LIMIT 1`,
+          [a.id, REVIEW_PROMPT_VERSION, REVIEW_MODEL]
         );
         if (rows.length && !flag("fresh")) continue;
         if (spent + 0.17 > cap) {
@@ -108,8 +109,8 @@ async function main() {
     for (const a of audits) {
       const { rows } = await pool.query(
         `SELECT r.*, b.content, b.edition_type AS et FROM briefing_reviews r JOIN daily_briefings b ON b.id = r.briefing_id
-          WHERE r.briefing_id = $1::uuid AND r.trigger = 'calibration' AND r.prompt_version = $2 AND r.status = 'done' ORDER BY r.created_at DESC LIMIT 1`,
-        [a.id, ver]
+          WHERE r.briefing_id = $1::uuid AND r.trigger = 'calibration' AND r.prompt_version = $2 AND r.model = $3 AND r.status = 'done' ORDER BY r.created_at DESC LIMIT 1`,
+        [a.id, ver, REVIEW_MODEL]
       );
       const r = rows[0];
       const human = verdictOfRecommendation(a.recommendation);
@@ -166,6 +167,7 @@ async function main() {
     spent = await spentSoFar();
     const summary = {
       promptVersion: ver,
+      model: REVIEW_MODEL,
       spentUsd: Math.round(spent * 1e4) / 1e4,
       recall: { all: recallTable(cmps.all), first: recallTable(cmps.first), v2: recallTable(cmps.v2) },
       falseAlarm: { all: falseAlarm(cmps.all), first: falseAlarm(cmps.first), v2: falseAlarm(cmps.v2) },
