@@ -251,7 +251,9 @@ export async function generateKo(
   groups: CandidateGroup[],
   cost: CostTracker,
   editionDate: string,
-  previous: PreviousEdition | null
+  previous: PreviousEdition | null,
+  /** 반드시 넣을 묶음 짧은 id (누락 재생성) */
+  mustInclude: string[] = []
 ): Promise<KoOutcome> {
   const usages: LlmUsage[] = [];
   const track = (u: LlmUsage) => {
@@ -260,9 +262,9 @@ export async function generateKo(
   };
   const ctx = contextFromGroups(groups, mode, new Set(), editionDate);
   const system = buildSystemPrompt(mode);
-  const user = buildUserPrompt(dateLabel, groups, previous);
+  const user = buildUserPrompt(dateLabel, groups, previous, mustInclude);
   const minTop = mode === "normal" ? 3 : 1;
-  const validation: Record<string, unknown> = { prompt_version: PROMPT_VERSION };
+  const validation: Record<string, unknown> = { prompt_version: PROMPT_VERSION, ...(mustInclude.length ? { must_include: mustInclude } : {}) };
   // 감사 기록 (2026-11-02 재감사 §7-8): 회차마다 결정적 정리·부분 수리·삭제 전 원문과 사유. 예전 trimmed_sentences(모든 회차 합집합)는 쓰인 회차 것만
   const edits: ContentEdit[] = [];
   const trimmedByRound: Record<string, string[]> = {};
@@ -463,8 +465,11 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
     const articles = await loadCandidateArticles(period.periodStart, period.periodEnd);
     const sel = selectCandidates(articles);
     const mode = editionModeFor(sel.totalGroups);
+    // 누락 재생성: uuid → 후보 묶음 짧은 id (대표·전재 형제 어느 쪽이든). 후보 40개 밖이면 넣을 수 없다
+    const must = new Set(opts.mustInclude ?? []);
+    const mustShort = sel.groups.filter((g) => must.has(g.primary.id) || g.siblings.some((x) => must.has(x.id))).map((g) => g.shortId);
     // 모델·effort(생성·번역)가 바뀌면 같은 입력도 다시 생성한다
-    const inputHash = computeInputHash(sel.groups, `${PROMPT_VERSION}|${TRANSLATE_PROMPT_VERSION}|${mode}|${modelTag(TRANSLATE_MODEL, TRANSLATE_EFFORT)}`, modelTag(BRIEFING_MODEL, BRIEFING_EFFORT));
+    const inputHash = computeInputHash(sel.groups, `${PROMPT_VERSION}|${TRANSLATE_PROMPT_VERSION}|${mode}|${modelTag(TRANSLATE_MODEL, TRANSLATE_EFFORT)}${mustShort.length ? `|must:${mustShort.join(",")}` : ""}`, modelTag(BRIEFING_MODEL, BRIEFING_EFFORT));
     const base = { date, mode, candidateCount: articles.length, inputHash };
     const inputArticleIds = sel.groups.flatMap((g) => [g.primary.id, ...g.siblings.map((s) => s.id)]);
     // 수집 품질: 주간·월간과 같은 결손일 판정 (축소·부분 수집일이 있으면 화면에 데이터 알림)
@@ -520,7 +525,7 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
     let ko: KoOutcome;
     try {
       const previous = await previousEditionSummary(period.periodStart);
-      ko = await generateKo(dateLabel, mode, sel.groups, cost, period.periodStart, previous);
+      ko = await generateKo(dateLabel, mode, sel.groups, cost, period.periodStart, previous, mustShort);
     } catch (e) {
       const msg = e instanceof LlmError || e instanceof BudgetExceeded ? e.message : `예상치 못한 오류: ${(e as Error).message}`;
       if (!(e instanceof LlmError || e instanceof BudgetExceeded)) {
@@ -533,6 +538,8 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
       ko = { status: "draft", content: hl, validation: { prompt_version: PROMPT_VERSION, fallback: "headlines", fallback_reason: msg, final: headlinesReport(hl, msg) }, usages: [...cost.usages], mode: "headlines" };
     }
 
+    // 누락 재생성 표시 (대체 판으로 떨어져도 남긴다 — 같은 판을 다시 누락 재생성하지 않게)
+    if (opts.regenReason) ko.validation.regen_reason = opts.regenReason;
     const finalReport = ko.validation.final as ValidationReport | undefined;
     const china = finalReport?.stats.chinaCentric ?? 0;
     const finalMode: EditionMode = ko.mode ?? mode;

@@ -13,6 +13,8 @@ import type { BriefingRow } from "../../src/lib/briefing/repository";
 import { dailyRow, fakeInput, reviewerJson } from "./review-fixtures";
 
 interface Harness {
+  regens: { date: string; must: string[]; reason: string }[];
+  retrans: { locales: string[]; notes: string[]; preferFallback: boolean }[];
   deps: PipelineDeps;
   published: { id: string; version: number }[];
   saved: Record<string, unknown>[];
@@ -22,7 +24,7 @@ interface Harness {
 }
 
 function harness(replies: ((input: ReviewInput) => unknown)[], inputs: Map<string, ReviewInput>): Harness {
-  const h: Harness = { deps: null as unknown as PipelineDeps, published: [], saved: [], decisions: [], stored: [], chats: 0 };
+  const h: Harness = { regens: [], retrans: [], deps: null as unknown as PipelineDeps, published: [], saved: [], decisions: [], stored: [], chats: 0 };
   let current: ReviewInput | null = null;
   let n = 0;
   h.deps = {
@@ -63,10 +65,16 @@ function harness(replies: ((input: ReviewInput) => unknown)[], inputs: Map<strin
       return { id: "fixed-1", version: row.version };
     },
     saveTranslations: async () => {},
-    retranslate: async () => [
-      { locale: "en", content: { headline: "x" }, candidate: null, problems: [], repaired: false, usages: [] },
-      { locale: "zh", content: { headline: "x" }, candidate: null, problems: [], repaired: false, usages: [] },
-    ],
+    retranslate: async (_ko, _input, locales = ["en", "zh"], optsFor) => {
+      h.retrans.push({ locales: [...locales], notes: locales.flatMap((l) => optsFor?.(l).reviewNotes ?? []), preferFallback: locales.every((l) => optsFor?.(l).preferFallback === true) });
+      return locales.map((l) => ({ locale: l, content: { headline: "x" }, candidate: null, problems: [], repaired: false, usages: [] }));
+    },
+    regenerate: async (t, must, reason) => {
+      h.regens.push({ date: t.date, must, reason });
+      const row = dailyRow({ id: "regen-1", version: 9, validation: { final: { fatal: [], warn: [] }, regen_reason: reason } as BriefingRow["validation"] });
+      inputs.set("regen-1", fakeInput(row));
+      return { koId: "regen-1", outcome: "generated", message: "" };
+    },
     recordDecision: async (reviewId, decision) => {
       h.decisions.push({ reviewId, decision: decision as Record<string, unknown> });
     },
@@ -215,4 +223,62 @@ test("검토 응답이 스키마 오류면 결정 없이 다음 호출로 (발�
   assert.equal(h.published.length, 0);
   assert.equal(r.processed[0].final, false);
   assert.equal(r.pending, 1);
+});
+
+// 2026-11-03: 번역만 문제인 판 → 검토 지적을 넘겨 재시도 모델로 다시 번역 → 처음부터 2회 검토
+test("번역만 문제(번역 major, 문장 오류 0) → 지적 사항으로 재번역(Sonnet 우선) → 2회 통과 후 발행, ko 새 버전 없음", async () => {
+  const trBad = (i: ReviewInput) =>
+    reviewerJson(i, {}, { translation: [{ loc: "en", s: "S01", sev: "major", issue: "added a date not in Korean" }], verdict: "FIXABLE" });
+  const h = harness([trBad, pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(h.saved.length, 0, "ko 는 그대로");
+  assert.deepEqual(h.retrans.map((x) => x.locales), [["en"]]);
+  assert.equal(h.retrans[0].preferFallback, true);
+  assert.match(h.retrans[0].notes[0], /added a date/);
+  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["retranslated", "confirm_pending", "published"]);
+  assert.equal(h.decisions[0].decision.final, false);
+  assert.deepEqual(h.published, [{ id: ORIG.id, version: 3 }]);
+  assert.equal(r.processed[0].published, true);
+});
+
+test("번역 재시도는 판당 1회 — 다시 번역해도 번역 major 가 남으면 초안 유지", async () => {
+  const trBad = (i: ReviewInput) =>
+    reviewerJson(i, {}, { translation: [{ loc: "zh", s: "S01", sev: "major", issue: "wrong name" }], verdict: "FIXABLE" });
+  const h = harness([trBad, trBad], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(h.retrans.length, 1);
+  assert.equal(h.published.length, 0);
+  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["retranslated", "hold"]);
+});
+
+// 2026-11-03: 누락만 문제인 판 → 반드시 넣을 기사로 다시 생성 → 새 판을 2회 검토
+test("누락만 문제(중요 누락, 문장 오류 0, 점수 미달) → 판 잠금 밖에서 다시 생성 → 새 판 2회 통과 후 발행", async () => {
+  const omit = (i: ReviewInput) => reviewerJson(i, {}, { omissions: [{ c: "C1", important: true, why: "여러 매체가 다룬 큰 이야기" }], verdict: "FIXABLE" });
+  let locked = 0;
+  const h = harness([omit, pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const lock = h.deps.lock;
+  h.deps.lock = async (t, fn) => {
+    locked++;
+    try { return await lock(t, fn); } finally { locked--; }
+  };
+  const regen = h.deps.regenerate;
+  h.deps.regenerate = async (t, m, r) => {
+    assert.equal(locked, 0, "재생성은 판 잠금 밖에서");
+    return regen(t, m, r);
+  };
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy, budgetMs: 10_000_000 }, h.deps);
+  assert.deepEqual(h.regens.map((x) => x.must), [["33333333-3333-4333-8333-333333333333"]]);
+  assert.match(h.regens[0].reason, /바이두 새 칩/);
+  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["regenerate_omission", "confirm_pending", "published"]);
+  assert.deepEqual(h.published, [{ id: "regen-1", version: 9 }]);
+  assert.match(r.message, /다시 생성/);
+});
+
+test("이미 누락 재생성한 판(validation.regen_reason)은 또 재생성하지 않고 초안 유지", async () => {
+  const omit = (i: ReviewInput) => reviewerJson(i, {}, { omissions: [{ c: "C1", important: true, why: "큰 이야기" }], verdict: "FIXABLE" });
+  const row = dailyRow({ validation: { final: { fatal: [], warn: [] }, regen_reason: "이전 재생성" } as BriefingRow["validation"] });
+  const h = harness([omit], new Map([[row.id, fakeInput(row)]]));
+  await runReviewPipeline({ briefingId: row.id, policy }, h.deps);
+  assert.equal(h.regens.length, 0);
+  assert.equal(h.decisions.at(-1)!.decision.action, "hold");
 });

@@ -279,11 +279,19 @@ export interface TranslateResult {
   fallback?: boolean;
 }
 
+export interface TranslateOptions {
+  /** AI 검토가 앞 번역에서 찾은 문제 — 번역 입력에 붙여 같은 실수를 피하게 한다 (2026-11-03 번역만 문제인 판 재번역) */
+  reviewNotes?: string[];
+  /** 번역 모델(Haiku)을 건너뛰고 재시도 모델(Sonnet)로 바로 */
+  preferFallback?: boolean;
+}
+
 export async function translateBriefing(
   ko: BriefingContent,
   target: Target,
   groups: CandidateGroup[],
-  budgetCheck: () => void
+  budgetCheck: () => void,
+  opts: TranslateOptions = {}
 ): Promise<TranslateResult> {
   const usages: LlmUsage[] = [];
   const byId = new Map(groups.map((g) => [g.shortId, g.primary]));
@@ -300,7 +308,12 @@ export async function translateBriefing(
       };
     });
   const system = buildTranslateSystemPrompt(target);
-  const user = buildTranslateUserPrompt(payloadOf(ko), hints, nameGlossaryLines(ko));
+  const notes = (opts.reviewNotes ?? []).filter(Boolean).slice(0, 12);
+  const user =
+    buildTranslateUserPrompt(payloadOf(ko), hints, nameGlossaryLines(ko)) +
+    (notes.length
+      ? `\n\nREVIEW_NOTES (a reviewer found these problems in a previous translation of this briefing — do not repeat them; translate each field faithfully, adding nothing):\n${notes.map((n) => `- ${n}`).join("\n")}`
+      : "");
   // 한 모델로: 번역 → 검사 → 문제가 있으면 1회 수리
   const attempt = async (model: string, effort: Effort | undefined) => {
     budgetCheck();
@@ -332,6 +345,10 @@ export async function translateBriefing(
   };
   try {
     // 번역 모델은 생성 모델과 따로 (TRANSLATE_MODEL, 기본 Haiku — 2026-11-03 D2). 검사를 못 넘으면 재시도 모델(기본 Sonnet 5.5)로 한 번 더
+    if (opts.preferFallback && TRANSLATE_FALLBACK_MODEL) {
+      const r0 = await attempt(TRANSLATE_FALLBACK_MODEL, TRANSLATE_FALLBACK_EFFORT);
+      return { content: r0.problems.length ? null : r0.content, candidate: r0.content, problems: r0.problems, repaired: true, usages, fallback: true };
+    }
     let r = await attempt(TRANSLATE_MODEL, TRANSLATE_EFFORT);
     let fallback = false;
     if (r.problems.length && TRANSLATE_FALLBACK_MODEL && TRANSLATE_FALLBACK_MODEL !== TRANSLATE_MODEL) {

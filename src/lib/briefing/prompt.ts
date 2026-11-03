@@ -104,7 +104,7 @@ export function clipBody(t: string): string {
   return end > BODY_MAX * 0.5 ? cut.slice(0, end + 1) : cut;
 }
 
-export function buildUserPrompt(date: string, groups: CandidateGroup[], previous: PreviousEdition | null = null): string {
+export function buildUserPrompt(date: string, groups: CandidateGroup[], previous: PreviousEdition | null = null, mustInclude: string[] = []): string {
   const lines = groups.map((g, i) => {
     const a = g.primary;
     const terms = (a.key_terms ?? [])
@@ -132,7 +132,11 @@ export function buildUserPrompt(date: string, groups: CandidateGroup[], previous
   const prev = previous
     ? `PREVIOUS_EDITION (${previous.date} 판 — 같은 사건이면 새 사실만, title 을 "후속:"으로): ${[previous.headline, ...previous.titles].join(" / ")}\n`
     : "";
-  return `EDITION_DATE: ${date} (베이징 시간 기준 발행일)\n${prev}ARTICLES (${lines.length}건, 한 줄에 하나):\n${lines.join("\n")}`;
+  // 누락 재생성 (2026-11-03): 앞선 판 AI 검토가 "중요한데 빠졌다"고 지적한 사건
+  const must = mustInclude.length
+    ? `MUST_INCLUDE: ${mustInclude.join(", ")} — 앞선 판 검토에서 중요한데 빠졌다고 지적된 사건입니다. 근거 기사로 확인되는 사실만으로 top_stories 또는 sections 에 반드시 넣으십시오 (중국 중심 규칙과 다른 규칙은 그대로).\n`
+    : "";
+  return `EDITION_DATE: ${date} (베이징 시간 기준 발행일)\n${prev}${must}ARTICLES (${lines.length}건, 한 줄에 하나):\n${lines.join("\n")}`;
 }
 
 /**

@@ -3,7 +3,7 @@
  *
  *   npx tsx scripts/briefing-review.ts prompt <briefing-id>               (프롬프트 크기만, LLM 호출 없음)
  *   npx tsx scripts/briefing-review.ts review <briefing-id> [--no-store] [--no-translations] [--trigger manual|calibration|dry_run]
- *   npx tsx scripts/briefing-review.ts pipeline [--dry-run] [--id <briefing-id>] [--type daily|weekly|monthly] [--date YYYY-MM-DD]
+ *   npx tsx scripts/briefing-review.ts pipeline [--dry-run] [--id <briefing-id> [--reopen]] [--type daily|weekly|monthly] [--date YYYY-MM-DD] [--budget 초]
  *     (정기 실행과 같은 runReviewPipeline. --dry-run 은 수정본을 메모리에서만 만들고 결정만 기록 — 발행·새 버전 저장 없음)
  *
  * 환경변수는 .env.local 등에서 Next 와 같은 방식(@next/env)으로 읽는다.
@@ -68,6 +68,8 @@ async function main() {
         trigger: flag("dry-run") ? "dry_run" : "pipeline",
         // dry-run 은 이어 갈 상태를 저장하지 않으므로 한 번에 끝까지 (검토 3회 + 재번역). 정기 실행은 250초 예산
         budgetMs: arg("budget") ? Number(arg("budget")) * 1000 : flag("dry-run") ? 900_000 : undefined,
+        // --reopen (--id 와 함께만): 이 판의 예전 결정(초안 유지 등)을 무시하고 지금 규칙으로 다시 처리
+        reopen: flag("reopen") && Boolean(arg("id")),
       });
       console.log(JSON.stringify(r, null, 1));
       return;

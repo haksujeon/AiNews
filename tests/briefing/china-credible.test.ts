@@ -79,3 +79,10 @@ test("중국 할당을 채운 날 모델이 쓴 '해외 소식 비중' 문장은
   assert.equal(r.content.lede, "첫 문장이다.");
   assert.ok(r.report.warn.some((w) => w.rule === "china_short_note"));
 });
+
+test("누락 재생성: buildUserPrompt 에 MUST_INCLUDE 가 붙는다 (없으면 붙지 않음)", async () => {
+  const { buildUserPrompt } = await import("../../src/lib/briefing/prompt");
+  const g = groupsOf(articles.slice(0, 3));
+  assert.match(buildUserPrompt("2026-10-28", g, null, [g[1].shortId]), new RegExp(`MUST_INCLUDE: ${g[1].shortId}`));
+  assert.doesNotMatch(buildUserPrompt("2026-10-28", g, null), /MUST_INCLUDE/);
+});

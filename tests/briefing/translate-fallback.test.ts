@@ -51,3 +51,26 @@ test("번역: 번역 모델이 수리 뒤에도 검사를 못 넘으면 재시�
     globalThis.fetch = realFetch;
   }
 });
+
+test("재번역 옵션: preferFallback 이면 Sonnet 으로 바로, 검토 지적은 REVIEW_NOTES 로 입력에", async () => {
+  process.env.LITELLM_BASE_URL = "http://litellm.test";
+  process.env.LITELLM_API_KEY = "test";
+  const realFetch = globalThis.fetch;
+  const calls: { model: string; user: string }[] = [];
+  globalThis.fetch = (async (_u: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    calls.push({ model: body.model, user: body.messages.at(-1).content });
+    const out = { ...ko, headline: "DeepSeek releases a new model", lede: "DeepSeek released a new model." };
+    return new Response(JSON.stringify({ id: "x", usage: { prompt_tokens: 1, completion_tokens: 1 }, choices: [{ finish_reason: "stop", message: { content: JSON.stringify(out) } }] }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+  try {
+    const r = await translateBriefing(ko, "en", [], () => {}, { preferFallback: true, reviewNotes: ["headline: added a date"] });
+    assert.deepEqual(calls.map((c) => c.model), ["anthropic-api-sonnet-5-5"]);
+    assert.match(calls[0].user, /REVIEW_NOTES[\s\S]*added a date/);
+    assert.ok(r.content);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

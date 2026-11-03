@@ -26,6 +26,7 @@ import { planFixes, type FixPlan } from "./fix";
 import { decide, decideHeadlines, policyFromEnv, type Decision, type ReviewPolicy } from "./policy";
 import { corpusFor, defaultDeps as defaultReviewDeps, reviewBriefing, type ReviewDeps } from "./review";
 import { retranslate, type RetranslateResult } from "./retranslate";
+import type { TranslateOptions } from "../translate";
 import { applySegmentEdits, isPeriodic, segmentContent, type EditOutcome } from "./segments";
 import { reviewThatProduced, reviewsOf, updateReviewDecision } from "./store";
 import type { ReviewResult, ReviewTrigger } from "./types";
@@ -65,6 +66,8 @@ export interface EditionOutcome {
   steps: StepLog[];
   decision: Decision | null;
   costUsd: number;
+  /** 누락 재생성 요청 (runReviewPipeline 이 판 잠금을 푼 뒤 실행) */
+  regenerate?: { mustInclude: string[]; reason: string };
 }
 
 export interface PipelineResult {
@@ -90,7 +93,14 @@ export interface PipelineDeps {
   publish: (t: Target, row: BriefingRow) => Promise<{ published: { locale: string; id: string; version: number }[] }>;
   saveFixed: (input: ReviewInput, content: Record<string, unknown>, info: Record<string, unknown>, warn: ValidationIssue[]) => Promise<{ id: string; version: number }>;
   saveTranslations: (koId: string, input: ReviewInput, tr: RetranslateResult[]) => Promise<void>;
-  retranslate: (koStored: Record<string, unknown>, input: ReviewInput) => Promise<RetranslateResult[]>;
+  retranslate: (
+    koStored: Record<string, unknown>,
+    input: ReviewInput,
+    locales?: readonly ("en" | "zh")[],
+    optsFor?: (l: "en" | "zh") => TranslateOptions
+  ) => Promise<RetranslateResult[]>;
+  /** 누락 재생성 (2026-11-03): 반드시 넣을 기사로 다시 생성 — 생성 잠금을 잡으므로 판 잠금 밖에서 부른다 */
+  regenerate: (t: Target, mustInclude: string[], reason: string) => Promise<{ koId: string | null; outcome: string; message: string }>;
   recordDecision: (reviewId: string, decision: unknown, fixedBriefingId?: string | null) => Promise<void>;
   now: () => number;
 }
@@ -205,7 +215,13 @@ export const defaultPipelineDeps: PipelineDeps = {
     publishBriefing({ date: t.date, version: row.version, briefingId: row.id, editionType: t.editionType, editedBy: "ai-review", onlyIfLatest: true, noSupersede: true }),
   saveFixed: saveFixedDb,
   saveTranslations: saveTranslationsDb,
-  retranslate: (ko, input) => retranslate(ko, input.candidateArticles),
+  retranslate: (ko, input, locales, optsFor) => retranslate(ko, input.candidateArticles, () => {}, undefined, locales, optsFor),
+  regenerate: async (t, mustInclude, reason) => {
+    // 동적 import: generate → review 순환 참조를 피한다
+    const { generateBriefing } = await import("../generate");
+    const r = await generateBriefing({ date: t.date, mustInclude, regenReason: reason });
+    return { koId: r.locales.find((l) => l.locale === "ko")?.id ?? null, outcome: r.outcome, message: r.message ?? "" };
+  },
   recordDecision: (id, decision, fixed) => updateReviewDecision(id, { decision, fixedBriefingId: fixed ?? null }),
   now: () => Date.now(),
 };
@@ -264,12 +280,18 @@ export function attemptFix(input: ReviewInput, review: ReviewResult): FixAttempt
   return { plan, edit, content: re.content, newFatal, warn: re.warn, reason: null };
 }
 
-async function processEdition(target: Target, o: Required<Pick<PipelineOptions, "dryRun" | "trigger">> & { deadline: number; policy: ReviewPolicy }, deps: PipelineDeps): Promise<EditionOutcome> {
+async function processEdition(
+  target: Target,
+  o: Required<Pick<PipelineOptions, "dryRun" | "trigger">> & { deadline: number; policy: ReviewPolicy; reopen?: boolean },
+  deps: PipelineDeps
+): Promise<EditionOutcome> {
   const steps: StepLog[] = [];
   let cost = 0;
-  const out = (final: boolean, notify: boolean, message: string, decision: Decision | null, published = false): EditionOutcome => ({
-    target, final, published, notify, message, steps, decision, costUsd: Math.round(cost * 1e6) / 1e6,
+  const out = (final: boolean, notify: boolean, message: string, decision: Decision | null, published = false, regenerate?: EditionOutcome["regenerate"]): EditionOutcome => ({
+    target, final, published, notify, message, steps, decision, costUsd: Math.round(cost * 1e6) / 1e6, ...(regenerate ? { regenerate } : {}),
   });
+  // 번역만 다시 한 버전인가 (판당 1회 — 2026-11-03)
+  let trRetried = false;
   let input = await deps.loadInput(target.briefingId);
   // 대체 판(생성이 끝내 실패한 날)은 outcome 이 generated 라 생성 알림이 없다 → 검토 알림에 항상 표시
   const fb = input.genLog.fallback;
@@ -321,16 +343,21 @@ async function processEdition(target: Target, o: Required<Pick<PipelineOptions, 
     // 1) 검토 (정기 실행은 저장된 검토를 이어 쓴다 — 재개)
     let review: ReviewResult | null = null;
     if (!o.dryRun) {
-      const prior = await deps.pipelineReviews(input.row.id);
+      // reopen: 예전 기록을 무시 (이 호출 안의 상태는 메모리 passed·trRetried 로 이어 간다)
+      const prior = o.reopen ? [] : await deps.pipelineReviews(input.row.id);
       if (prior.some((p) => p.final)) {
         steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: prior[0].id, verdict: null, score: null, action: "skipped", detail: "이미 최종 결정됨" });
         return out(true, false, `${head}: 이미 결정됨`, null);
       }
       // 1차 통과(confirm_pending) 기록은 통과 목록으로, 그 뒤 확인 검토를 새로 한다 (재개 — 다음 호출이 이어 감)
-      // 최종 결정이 없는 버전: 1차 통과 기록 + (있으면) 결정 전에 멈춘 검토를 이어 쓴다
-      const fromDb = prior.filter((p) => p.status === "done" && p.result && p.action === "confirm_pending").map((p) => p.result!).reverse();
+      // 최종 결정이 없는 버전: 1차 통과 기록 + (있으면) 결정 전에 멈춘 검토를 이어 쓴다.
+      // 번역만 다시 했으면(retranslated) 그 앞 검토는 옛 번역을 본 것이라 쓰지 않는다
+      const cut = prior.findIndex((p) => p.action === "retranslated");
+      if (cut >= 0) trRetried = true;
+      const fresh = cut >= 0 ? prior.slice(0, cut) : prior;
+      const fromDb = fresh.filter((p) => p.status === "done" && p.result && p.action === "confirm_pending").map((p) => p.result!).reverse();
       passed = [...fromDb, ...passed.filter((x) => !fromDb.some((d) => d.id && d.id === x.id))];
-      const done = prior.find((p) => p.status === "done" && p.result && p.action !== "confirm_pending");
+      const done = fresh.find((p) => p.status === "done" && p.result && p.action !== "confirm_pending");
       if (done?.result) review = done.result;
       else if (prior.filter((p) => p.status === "error").length >= MAX_ERROR_REVIEWS) {
         const msg = `${head} v${versionLabel}: AI 검토 ${MAX_ERROR_REVIEWS}회 실패 — 초안 유지, 관리자 확인 필요 ${adminUrl(input.row.id)}`;
@@ -411,6 +438,45 @@ async function processEdition(target: Target, o: Required<Pick<PipelineOptions, 
     const nonClaim = failing.filter((c) => !CLAIM_RULES.has(c.rule) && !(flaggedAny && target.editionType === "daily" && c.rule.startsWith("translation")));
     const hard = counts.wrong + counts["number-unit"];
     const flagged = review.claims.some((c) => c.label !== "correct");
+    // 2026-11-03 사용자 결정: 번역만 문제인 판 → 재번역 후 재검토, 누락만 문제인 판 → 반드시 넣을 기사로 다시 생성 후 재검토 (판당 1회씩)
+    const daily = target.editionType === "daily";
+    const important = review.omissions.filter((x) => x.important && x.article_ids.length);
+    const isTr = (rule: string) => rule.startsWith("translation");
+    const omissionOnly = daily && !flagged && important.length > 0 && failing.length > 0 && failing.every((c) => c.rule === "verdict_pass" || c.rule === "score" || isTr(c.rule));
+    const regenDone = Boolean((input.row.validation as { regen_reason?: unknown } | null)?.regen_reason);
+    if (omissionOnly && !regenDone) {
+      const must = [...new Set(important.flatMap((x) => x.article_ids))];
+      const reason = `AI 검토 누락: ${important.map((x) => x.title).join(" / ").slice(0, 200)}`;
+      const action = o.dryRun ? "would_regenerate" : "regenerate_omission";
+      await rec({ ...decision, final: true, action, must_include: must, reason });
+      steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: "hold", detail: `누락 재생성 — ${reason}` });
+      return out(true, true, `${head} v${versionLabel}: AI 검토 ${review.verdict} ${review.score}점, 문장 오류 없음 — 중요한 누락 ${important.length}건을 넣어 다시 생성${o.dryRun ? " (dry-run: 생성 안 함)" : ""}`, decision, false, o.dryRun ? undefined : { mustInclude: must, reason });
+    }
+    const trOnly = daily && !flagged && failing.length > 0 && failing.some((c) => isTr(c.rule)) && failing.every((c) => isTr(c.rule) || c.rule === "verdict_pass");
+    if (trOnly && !trRetried) {
+      const majors = review.translation.filter((t) => t.severity === "major");
+      const locales = (["en", "zh"] as const).filter((l) => majors.some((t) => t.locale === l) || failing.some((c) => c.rule === `translation_${l}`));
+      const tr = await deps.retranslate(input.row.content, input, locales, (l) => ({
+        preferFallback: true,
+        reviewNotes: review!.translation.filter((t) => t.locale === l).map((t) => `${t.path}: ${t.issue}`),
+      }));
+      cost += tr.reduce((sum, t) => sum + t.usages.reduce((a, u) => a + u.costUsd, 0), 0);
+      trRetried = true;
+      // 결정은 최종이 아니다 — 새 번역으로 처음부터 다시 requiredPasses 회 검토
+      await rec({ ...decision, final: false, action: "retranslated", locales, ok: tr.map((t) => `${t.locale}:${t.content ? "draft" : "failed"}`) });
+      steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: "fixed", detail: `번역만 다시 (${tr.map((t) => `${t.locale} ${t.content ? "통과" : "실패"}`).join(", ")})` });
+      passed = [];
+      if (o.dryRun) {
+        const kept = input.translations.filter((t) => !locales.includes(t.locale));
+        const fresh = tr.map((t) => ({ id: "dry-run", locale: t.locale, version: 0, status: t.content ? "draft" : "failed", problems: t.problems, content: t.content ?? t.candidate ?? {} }));
+        input = inputWithContent(input, input.row.content, [...kept, ...fresh], input.row.version);
+      } else {
+        await deps.saveTranslations(input.row.id, input, tr);
+        input = await deps.loadInput(input.row.id);
+      }
+      continue;
+    }
+
     let holdReason: string | null = null;
     if (nonClaim.length) holdReason = nonClaim.map((c) => c.detail).join(" / ");
     else if (hard >= 3 || (review.score ?? 0) <= 3) holdReason = `재생성 필요 (wrong+number-unit ${hard}건, ${review.score}점)`;
@@ -490,6 +556,8 @@ export interface PipelineOptions {
   /** 이 호출의 시간 예산 (기본 250초) */
   budgetMs?: number;
   policy?: ReviewPolicy;
+  /** briefingId 와 함께만: 예전 정기 검토·결정 기록을 무시하고 지금 규칙으로 다시 처리 (CLI --reopen, 2026-11-03) */
+  reopen?: boolean;
 }
 
 export async function runReviewPipeline(opts: PipelineOptions = {}, deps: PipelineDeps = defaultPipelineDeps): Promise<PipelineResult> {
@@ -512,13 +580,31 @@ export async function runReviewPipeline(opts: PipelineOptions = {}, deps: Pipeli
       pending++;
       continue;
     }
-    const r = await deps.lock(t, () => processEdition(t, { dryRun, trigger, deadline, policy }, deps));
+    const r = await deps.lock(t, () => processEdition(t, { dryRun, trigger, deadline, policy, reopen: Boolean(opts.reopen && opts.briefingId) }, deps));
     if (!r) {
       pending++;
       continue;
     }
     if (!r.final) pending++;
     processed.push(r);
+    // 누락 재생성: 판 잠금을 푼 뒤 생성(생성도 같은 날짜 잠금) → 시간이 남으면 새 판을 바로 검토, 아니면 다음 스윕이 잇는다
+    if (r.regenerate && !dryRun) {
+      try {
+        const g = await deps.regenerate(t, r.regenerate.mustInclude, r.regenerate.reason);
+        r.message += ` → 다시 생성: ${g.outcome}${g.message ? ` (${g.message})` : ""}`;
+        if (g.koId && g.outcome === "generated") {
+          const nt: Target = { ...t, briefingId: g.koId };
+          if (deps.now() + REVIEW_SLOT_MS > deadline) pending++;
+          else {
+            const r2 = await deps.lock(nt, () => processEdition(nt, { dryRun, trigger, deadline, policy }, deps));
+            if (!r2 || !r2.final) pending++;
+            if (r2) processed.push(r2);
+          }
+        }
+      } catch (e) {
+        r.message += ` → 다시 생성 실패: ${(e as Error).message}`;
+      }
+    }
   }
   const notes = processed.filter((p) => p.notify);
   return {

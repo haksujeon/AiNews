@@ -203,6 +203,13 @@ export interface GenerateOptions {
   dryRun?: boolean;
   /** 일요일 단독판을 굳이 만들 때만 (CLI --sunday). force 로는 만들지 않는다 — 토요일 합본과 같은 기사가 두 번 실림 */
   sunday?: boolean;
+  /**
+   * 반드시 넣을 기사 uuid (2026-11-03: AI 검토가 "중요한데 빠졌다"고 지적한 사건으로 다시 생성 — review/pipeline.ts 누락 재생성).
+   * 후보 묶음에 있는 것만 프롬프트 MUST_INCLUDE 로 준다. 입력 해시에 들어가 같은 입력이어도 다시 생성된다
+   */
+  mustInclude?: string[];
+  /** 다시 생성한 이유 (validation.regen_reason 에 기록 — 같은 판을 또 누락 재생성하지 않는 표시) */
+  regenReason?: string;
 }
 
 export interface LocaleOutcome {
