@@ -105,7 +105,7 @@ test.describe('홈 날짜별 목록 (주요 4건 + 펼치기)', () => {
   test('검색 필터: 걸러진 기사 안에서 날마다 4건 이하 + 펼치기 개수 일치', async ({ page }) => {
     const totalText = page.getByText(/총 [\d,]+개의 기사/).first();
     const beforeText = await totalText.textContent().catch(() => null);
-    await page.locator('input[placeholder*="검색"]').first().fill('OpenAI');
+    await page.locator('input[placeholder*="검색"]:visible').first().fill('OpenAI');
     await expect(async () => {
       const t = await totalText.textContent();
       expect(t).not.toBe(beforeText);

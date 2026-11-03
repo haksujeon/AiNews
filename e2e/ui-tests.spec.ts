@@ -49,7 +49,7 @@ test.describe('AiNews UI/UX Tests', () => {
   });
 
   test('검색 디바운스 테스트', async ({ page }) => {
-    const searchInput = page.locator('input[placeholder*="검색"]').first();
+    const searchInput = page.locator('input[placeholder*="검색"]:visible').first();
     
     // 검색창 찾기
     await expect(searchInput).toBeVisible();
@@ -81,7 +81,7 @@ test.describe('AiNews UI/UX Tests', () => {
     await expect(listBtn).toHaveAttribute('aria-pressed', 'true');
     
     // 리스트 레이아웃 확인
-    const listLayout = page.locator('[class*="space-y"]').first();
+    const listLayout = page.locator('main [class*="space-y"]:visible').first();
     await expect(listLayout).toBeVisible();
     console.log('✅ 리스트 뷰 전환 완료');
     
@@ -89,7 +89,7 @@ test.describe('AiNews UI/UX Tests', () => {
     await gridBtn.click();
     await page.waitForTimeout(300);
     
-    const gridLayout = page.locator('[class*="grid"]').first();
+    const gridLayout = page.locator('main [class*="grid"]:visible').first();
     await expect(gridLayout).toBeVisible();
     console.log('✅ 그리드 뷰 전환 완료');
   });
