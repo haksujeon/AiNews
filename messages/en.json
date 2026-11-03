@@ -666,7 +666,17 @@
     "topNews": "Top news",
     "topNewsMeta": "{date} · top of {total}",
     "allNews": "All news",
-    "allNewsMore": "All news · {count} more from this day"
+    "allNewsMore": "All news · {count} more from this day",
+    "flowTitle": "Today’s flow",
+    "flowMeta": "{date} · {total} articles",
+    "regionTitle": "Whose story is it",
+    "sourcesTitle": "Which outlets wrote",
+    "weekTitle": "Articles, last 7 days",
+    "weekNote": "{total} in 7 days",
+    "weekHatch": "hatched = incomplete collection, yellow line = usual volume",
+    "incomplete": "Incomplete collection",
+    "count": "{count, plural, one {# article} other {# articles}}",
+    "expected": "Usually about {count}"
   },
   "landing": {
     "eyebrow": "China AI news · 한국어 · English · 中文",

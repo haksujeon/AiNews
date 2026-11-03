@@ -40,3 +40,38 @@ export async function fetchPublicTotal(): Promise<number> {
   const { rows } = await pool.query(`SELECT count(*)::int AS n FROM ai_news_ex WHERE ${where}`, values);
   return rows[0]?.n ?? 0;
 }
+
+/**
+ * "오늘의 흐름" 차트 데이터 (2026-11-03, 차트 = Chart.js 결정 A).
+ * 통계·주간 리포트와 같은 metrics/period 함수(regionCounts·countBy·countByDay·periodDayQuality)와 같은 모집단("ai") — Gate 2.
+ * day = 주요 뉴스와 같은 날(가장 최근 기사 날짜). week = 그날까지 7일, 수집 미완 날 표시.
+ */
+export interface DayFlow {
+  day: string;
+  total: number;
+  region: { CN: number; US: number; OTHER: number; unclassified: number };
+  sources: { name: string; value: number }[];
+  /** incomplete = 수집 미완(주간 리포트와 같은 detectMissingDays), expected = 그날 기대 건수(미완일 때만) */
+  week: { date: string; count: number; incomplete: boolean; expected: number | null }[];
+}
+
+export async function fetchDayFlow(day: string): Promise<DayFlow> {
+  const { regionCounts, countBy, countByDay, fillDays, periodDayQuality, addDays } = await import("./metrics/period");
+  const start = addDays(day, -6);
+  const opts = { population: "ai" as const, range: { start: day, end: day } };
+  const [rc, src, days, dq] = await Promise.all([
+    regionCounts(pool, opts),
+    countBy(pool, "source_name", { ...opts, limit: 6 }),
+    countByDay(pool, { population: "ai", range: { start, end: day } }),
+    periodDayQuality(pool, start, day),
+  ]);
+  const bad = new Set(dq.incomplete_days);
+  const exp = new Map(dq.days.map((d) => [d.day, d.expected]));
+  return {
+    day,
+    total: rc.total,
+    region: { ...rc.buckets, unclassified: rc.unclassified },
+    sources: src.map((r) => ({ name: r.name, value: r.value })),
+    week: fillDays(start, day, days).map((d) => ({ date: d.date, count: d.count, incomplete: bad.has(d.date), expected: bad.has(d.date) ? exp.get(d.date) ?? null : null })),
+  };
+}

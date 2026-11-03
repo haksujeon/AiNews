@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatDonut } from "@/components/charts/stat-charts";
 import type { SentimentStat } from "@/lib/statistics-utils";
 
 interface SentimentChartProps {
@@ -11,35 +11,17 @@ interface SentimentChartProps {
 
 export function SentimentChart({ data }: SentimentChartProps) {
   const t = useTranslations("statistics");
-
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{t("sentimentAnalysis")}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={280}>
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={60}
-              outerRadius={100}
-              dataKey="value"
-              nameKey="name"
-              paddingAngle={2}
-            >
-              {data.map((entry) => (
-                <Cell key={entry.name} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip
-              formatter={(value) => [`${value} ${t("articles")}`, ""]}
-            />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
+        <StatDonut
+          label={t("sentimentAnalysis")}
+          rows={data.map((d) => ({ name: d.name, value: d.value, color: d.color }))}
+          unit={(n) => `${n} ${t("articles")}`}
+        />
       </CardContent>
     </Card>
   );

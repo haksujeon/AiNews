@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatBars } from "@/components/charts/stat-charts";
 import type { RegionCounts } from "@/lib/metrics/period";
 
 interface RegionChartProps {
@@ -17,7 +17,7 @@ export function RegionChart({ data }: RegionChartProps) {
     { name: t("regionCN"), value: data.buckets.CN, pct: data.cn_pct },
     { name: t("regionUS"), value: data.buckets.US, pct: data.us_pct },
     { name: t("regionOTHER"), value: data.buckets.OTHER, pct: data.other_pct },
-  ].map((r) => ({ ...r, name: `${r.name} ${r.pct}%` }));
+  ];
 
   return (
     <Card data-testid="region-chart">
@@ -25,14 +25,15 @@ export function RegionChart({ data }: RegionChartProps) {
         <CardTitle className="text-base">{t("regionDistribution")}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 16 }}>
-            <XAxis type="number" allowDecimals={false} />
-            <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 12 }} />
-            <Tooltip formatter={(value) => [`${value} ${t("articles")}`, ""]} />
-            <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <StatBars
+          horizontal
+          height={170}
+          label={t("regionDistribution")}
+          rows={rows.map((r) => ({ name: `${r.name} ${r.pct}%`, value: r.value }))}
+          // 홈 "오늘의 흐름" 도넛과 같은 지역 색 (중국·미국·그 밖)
+          color={(th, i) => [th.cn, th.us, th.other][i]}
+          unit={(n) => `${n} ${t("articles")}`}
+        />
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
           {t("regionNote", { classified: data.classified, uschina: data.us_china, korea: data.korea, unclassified: data.unclassified })}
         </p>

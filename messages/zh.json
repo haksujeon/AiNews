@@ -666,7 +666,17 @@
     "topNews": "要闻",
     "topNewsMeta": "{date} · {total}条中的前列",
     "allNews": "查看全部新闻",
-    "allNewsMore": "查看全部新闻 · 当天还有{count}条"
+    "allNewsMore": "查看全部新闻 · 当天还有{count}条",
+    "flowTitle": "今日动向",
+    "flowMeta": "{date} · 共{total}条",
+    "regionTitle": "报道的是哪个国家",
+    "sourcesTitle": "哪些媒体在写",
+    "weekTitle": "近7天报道量",
+    "weekNote": "7天共{total}条",
+    "weekHatch": "斜线 = 采集不完整的日期，黄线 = 平时数量",
+    "incomplete": "采集不完整",
+    "count": "{count}条",
+    "expected": "平时约{count}条"
   },
   "landing": {
     "eyebrow": "中国AI新闻 · 한국어 · English · 中文",

@@ -666,7 +666,17 @@
     "topNews": "주요 뉴스",
     "topNewsMeta": "{date} · {total}건 중 상위",
     "allNews": "모든 뉴스 보기",
-    "allNewsMore": "모든 뉴스 보기 · 이날 기사 {count}건 더"
+    "allNewsMore": "모든 뉴스 보기 · 이날 기사 {count}건 더",
+    "flowTitle": "오늘의 흐름",
+    "flowMeta": "{date} · {total}건 기준",
+    "regionTitle": "어느 나라 이야기인가",
+    "sourcesTitle": "어느 매체가 썼나",
+    "weekTitle": "최근 7일 기사량",
+    "weekNote": "7일 {total}건",
+    "weekHatch": "빗금 = 수집이 덜 된 날, 노란 선 = 평소 건수",
+    "incomplete": "수집 미완",
+    "count": "{count}건",
+    "expected": "평소 약 {count}건"
   },
   "landing": {
     "eyebrow": "중국 AI 뉴스 · 한국어 · English · 中文",

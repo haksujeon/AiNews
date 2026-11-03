@@ -8,7 +8,7 @@ import { parseRegionChip } from "@/lib/region";
 import { absoluteUrl, languageAlternates } from "@/lib/site";
 import { isLocale } from "@/i18n/routing";
 import { getPublishedBriefing } from "@/lib/briefing/public";
-import { fetchLatestBatch } from "@/lib/today";
+import { fetchDayFlow, fetchLatestBatch } from "@/lib/today";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { DayBriefingDialog } from "@/components/news/day-briefing-dialog";
@@ -16,6 +16,7 @@ import { TodayLive } from "@/components/today/today-live";
 import { TodayBriefing } from "@/components/today/today-briefing";
 import { TodayTopNews } from "@/components/today/today-top-news";
 import { IntroStrip } from "@/components/today/intro-strip";
+import { TodayFlow } from "@/components/today/today-flow";
 
 /**
  * 홈 = "오늘" (2026-11-03 메뉴 개편). 무엇이 중요한가: LIVE 수집 띠 · 브리핑 콘솔(주요 기사 펼치기) · 숫자·기업·용어 · 주요 뉴스.
@@ -65,6 +66,15 @@ export default async function TodayPage({
     }),
   ]);
 
+  // 오늘의 흐름: 주요 뉴스와 같은 날 (차트 데이터 — 통계·주간 리포트와 같은 metrics 함수)
+  const day = page?.days[0]?.date;
+  const flow = day
+    ? await fetchDayFlow(day).catch((e) => {
+        console.warn("[today] flow", e);
+        return null;
+      })
+    : null;
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -74,6 +84,7 @@ export default async function TodayPage({
         <h1 className="sr-only">{t("pageTitle")}</h1>
         <TodayBriefing briefing={briefing} locale={locale} />
         <TodayTopNews day={page?.days[0]} locale={locale} />
+        {flow && flow.total > 0 && <TodayFlow flow={flow} />}
       </main>
       <Footer />
       {/* ?briefing= 팝업 (뉴스 목록과 같은 대화상자). useSearchParams 를 쓰므로 Suspense 안 */}

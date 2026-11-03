@@ -129,6 +129,12 @@
   --chart-5: #c4c6ca;
   /* 비교 기간(지난주) 회색: 종이 대비 3.34:1 (기존 chart-4 #9a9da4 는 2.62:1 로 미달) */
   --chart-prev: #868a92;
+  /* 지역·강조 (Chart.js 공개 차트, 2026-11-03): 중국·미국·그 밖·보조 강조·수집 미완 빗금 */
+  --chart-cn: #c8402a;
+  --chart-us: #2453a6;
+  --chart-other: #a3a8a4;
+  --chart-amber: #b07a0e;
+  --chart-hatch: #c9ccc8;
   --sidebar: var(--paper);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--ink);
@@ -178,6 +184,11 @@
   --chart-5: #45484e;
   /* 비교 기간 회색: 다크 종이 대비 3.63:1 */
   --chart-prev: #6b6f78;
+  --chart-cn: #ff8a6b;
+  --chart-us: #7fa8ff;
+  --chart-other: #6d726f;
+  --chart-amber: #f0b43c;
+  --chart-hatch: #3a3d42;
   --sidebar: var(--paper);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--ink);
