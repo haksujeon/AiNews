@@ -24,14 +24,16 @@ export async function retranslate(
   koStored: Record<string, unknown>,
   articles: Map<string, CandidateArticle>,
   budgetCheck: () => void = () => {},
-  translate: typeof translateBriefing = translateBriefing
+  translate: typeof translateBriefing = translateBriefing,
+  /** 다시 번역할 언어 (기본 둘 다 — CLI 는 실패한 언어만) */
+  locales: readonly ("en" | "zh")[] = ["en", "zh"]
 ): Promise<RetranslateResult[]> {
   const { meta, ...rest } = koStored as Record<string, unknown> & { meta?: Record<string, unknown> };
   const body = structuredClone(rest) as unknown as BriefingContent;
   if (body.term_of_the_day) body.term_of_the_day = { ...body.term_of_the_day, explanation: undefined };
   const groups = pseudoGroups(articles.values());
   const out: RetranslateResult[] = [];
-  for (const target of ["en", "zh"] as const) {
+  for (const target of locales) {
     let tr: TranslateResult;
     try {
       tr = await translate(body, target, groups, budgetCheck);

@@ -1,6 +1,7 @@
 /**
  * AI 검토 파이프라인 통합 테스트 (LLM·DB 모의) — 실행: npm run test:unit
  *  검토 → (수정 → 재검토) → 자동 발행 / 초안 유지, 자동 발행 스위치, dry-run(저장·발행 없음), 재생성 필요 판.
+ *  2026-11-03: 자동 발행은 독립 검토 2회(BRIEFING_REVIEW_PASSES 기본 2) 모두 통과해야 한다.
  *  발행은 검토한 정확한 행(id·version)으로만 부른다.
  */
 import { test } from "node:test";
@@ -90,32 +91,58 @@ const fixable = (i: ReviewInput) =>
   );
 const policy = policyFromEnv({ BRIEFING_AUTO_PUBLISH: "on" });
 
-test("PASS → 검토한 정확한 행(id·version)으로 자동 발행, 결정 기록", async () => {
-  const h = harness([pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+test("PASS ×2 → 검토한 정확한 행(id·version)으로 자동 발행, 결정 기록 (1차 confirm_pending → 확인 검토 → published)", async () => {
+  const h = harness([pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
   const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
   assert.deepEqual(h.published, [{ id: ORIG.id, version: 3 }]);
   assert.equal(r.processed[0].published, true);
   assert.equal(r.notify, true);
-  assert.match(r.message, /자동 발행/);
-  assert.equal(h.decisions.at(-1)!.decision.action, "published");
+  assert.match(r.message, /2회 통과.*자동 발행/);
+  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["confirm_pending", "published"]);
+  assert.equal(h.decisions[0].decision.final, false);
   assert.equal(h.saved.length, 0);
 });
 
+test("1차 PASS → 확인 검토 FIXABLE → 발행하지 않고 그 검토로 수정 → 새 버전은 다시 2회 통과해야 발행", async () => {
+  const h = harness([pass, fixable, pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(h.saved.length, 1);
+  assert.deepEqual(h.published, [{ id: "fixed-1", version: 4 }]);
+  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["confirm_pending", "fixed", "confirm_pending", "published"]);
+});
+
+test("재개: 1차 통과(confirm_pending) 기록이 있으면 확인 검토만 하고 발행", async () => {
+  const h = harness([pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const first = { id: "rev-old", status: "done", final: false, action: "confirm_pending", result: { id: "rev-old", score: 9.5 } as never };
+  h.deps.pipelineReviews = async () => [first];
+  const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(h.chats, 1);
+  assert.deepEqual(h.published, [{ id: ORIG.id, version: 3 }]);
+  assert.match(r.message, /2회 통과\(9\.5·/);
+});
+
+test("BRIEFING_REVIEW_PASSES=1 → 예전처럼 검토 1회 통과로 발행", async () => {
+  const h = harness([pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  await runReviewPipeline({ briefingId: ORIG.id, policy: policyFromEnv({ BRIEFING_AUTO_PUBLISH: "on", BRIEFING_REVIEW_PASSES: "1" }) }, h.deps);
+  assert.deepEqual(h.published, [{ id: ORIG.id, version: 3 }]);
+  assert.equal(h.chats, 1);
+});
+
 test("FIXABLE → 근거로 고친 새 버전 저장 → 재검토 PASS → 새 버전을 발행", async () => {
-  const h = harness([fixable, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const h = harness([fixable, pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
   const r = await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
   assert.equal(h.saved.length, 1);
   const fixed = h.saved[0] as { headline: string; companies_to_watch: unknown[] };
   assert.equal(fixed.headline, "즈푸, GLM-6 공개");
   assert.equal(fixed.companies_to_watch.length, 0, "근거 없는 문장은 지워 항목이 빠진다");
   assert.deepEqual(h.published, [{ id: "fixed-1", version: 4 }]);
-  assert.deepEqual(h.stored.map((s) => s.round), [0, 1]);
-  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["fixed", "published"]);
-  assert.equal(r.processed[0].steps.map((s) => s.action).join(","), "reviewed,fixed,reviewed,published");
+  assert.deepEqual(h.stored.map((s) => s.round), [0, 1, 1]);
+  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["fixed", "confirm_pending", "published"]);
+  assert.equal(r.processed[0].steps.map((s) => s.action).join(","), "reviewed,fixed,reviewed,reviewed,reviewed,published");
 });
 
 test("자동 발행 스위치 off → 통과해도 발행하지 않고 알림", async () => {
-  const h = harness([pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const h = harness([pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
   const r = await runReviewPipeline({ briefingId: ORIG.id, policy: policyFromEnv({ BRIEFING_AUTO_PUBLISH: "off" }) }, h.deps);
   assert.equal(h.published.length, 0);
   assert.equal(h.decisions.at(-1)!.decision.action, "switch_off");
@@ -123,12 +150,12 @@ test("자동 발행 스위치 off → 통과해도 발행하지 않고 알림", 
 });
 
 test("dry-run → 수정본을 메모리에서만 만들고 저장·발행하지 않는다", async () => {
-  const h = harness([fixable, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const h = harness([fixable, pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
   const r = await runReviewPipeline({ briefingId: ORIG.id, dryRun: true, policy }, h.deps);
   assert.equal(h.saved.length, 0);
   assert.equal(h.published.length, 0);
-  assert.deepEqual(h.stored.map((s) => s.trigger), ["dry_run", "dry_run"]);
-  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["fixed_in_memory", "would_publish"]);
+  assert.deepEqual(h.stored.map((s) => s.trigger), ["dry_run", "dry_run", "dry_run"]);
+  assert.deepEqual(h.decisions.map((d) => d.decision.action), ["fixed_in_memory", "confirm_pending", "would_publish"]);
   assert.match(r.message, /dry-run/);
 });
 

@@ -5,6 +5,7 @@
  * 기본값 (환경 변수로 조정, 보정 결과는 ainews-reports/p0-plan/P0-PLAN.md D8):
  *  - BRIEFING_AUTO_PUBLISH=on|off        (기본 off — 켜야 AI 검토 통과 판을 발행한다. 꺼져 있으면 판정만 기록·알림 = 관리자 발행)
  *    보정 v6 에서 목표 3(사실 오류 재현율 ≥ 80%)을 못 채워(77.5%, 막는 라벨 기준 60%) 기본값을 off 로 둔다. 켜는 것은 사용자 승인 뒤.
+ *  - 독립 검토 BRIEFING_REVIEW_PASSES 회(기본 2) 모두 아래 조건 통과 (2026-11-03 — 1회 통과면 확인 검토를 한 번 더, pipeline.ts)
  *  - 판정 PASS (코드 기준표 판정과 모델 판정 중 엄격한 쪽)
  *  - wrong · number-unit · misattributed 0건, overclaim ≤ 1, unsupported ≤ 0
  *  - 점수 ≥ 9.0 (데일리) / ≥ 7.5 (주간·월간)   BRIEFING_REVIEW_MIN_SCORE_DAILY / _PERIODIC
@@ -30,6 +31,11 @@ export interface ReviewPolicy {
   blockingLabels: ("wrong" | "number-unit" | "misattributed")[];
   /** 수정 루프 최대 횟수 */
   maxFixRounds: number;
+  /**
+   * 자동 발행에 필요한 독립 검토 통과 횟수 (BRIEFING_REVIEW_PASSES, 기본 2 — 2026-11-03 사용자 결정 "2번 검증하고 기준 통과면 자동 발행").
+   * 보정: Sonnet 5.5 1회는 실행마다 판정이 바뀌는 판 6/23 → 2회 모두 통과 모의에서 사람 9.3점 판만 발행 (model-compare-2026-11/REPORT.md §1)
+   */
+  requiredPasses: number;
 }
 
 const num = (v: string | undefined, d: number) => {
@@ -47,6 +53,7 @@ export function policyFromEnv(env: Record<string, string | undefined> = process.
     maxUnsupported: num(env.BRIEFING_REVIEW_MAX_UNSUPPORTED, 0),
     blockingLabels: ["wrong", "number-unit", "misattributed"],
     maxFixRounds: Math.max(0, Math.min(2, num(env.BRIEFING_REVIEW_MAX_FIX_ROUNDS, 2))),
+    requiredPasses: Math.max(1, Math.min(3, num(env.BRIEFING_REVIEW_PASSES, 2))),
   };
 }
 

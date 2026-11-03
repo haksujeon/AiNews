@@ -85,7 +85,7 @@ export interface PipelineDeps {
   /** 이 버전을 만든 검토의 round (+1 이 이 버전의 round). 없으면 null */
   producedByRound: (briefingId: string) => Promise<number | null>;
   /** 이 버전의 정기(pipeline) 검토 기록, 최신순 */
-  pipelineReviews: (briefingId: string) => Promise<{ id: string; status: string; final: boolean; result: ReviewResult | null }[]>;
+  pipelineReviews: (briefingId: string) => Promise<{ id: string; status: string; final: boolean; result: ReviewResult | null; /** 기록된 결정 action (confirm_pending = 1차 통과, 확인 검토 대기) */ action?: string }[]>;
   publishable: (t: Target, version: number) => Promise<{ ok: boolean; detail: string }>;
   publish: (t: Target, row: BriefingRow) => Promise<{ published: { locale: string; id: string; version: number }[] }>;
   saveFixed: (input: ReviewInput, content: Record<string, unknown>, info: Record<string, unknown>, warn: ValidationIssue[]) => Promise<{ id: string; version: number }>;
@@ -142,7 +142,8 @@ async function saveFixedDb(input: ReviewInput, content: Record<string, unknown>,
   return inserted;
 }
 
-async function saveTranslationsDb(koId: string, input: ReviewInput, tr: RetranslateResult[]) {
+/** 재번역 결과 저장 (AI 검토 수정 후 재번역·CLI scripts/briefing-retranslate.ts 공용) */
+export async function saveTranslationsDb(koId: string, input: ReviewInput, tr: RetranslateResult[], promptVersion = "ai-review-retranslate") {
   const row = input.row;
   for (const t of tr) {
     const shown = t.content ?? t.candidate;
@@ -153,8 +154,9 @@ async function saveTranslationsDb(koId: string, input: ReviewInput, tr: Retransl
       date: row.edition_date, periodStart: row.period_start ?? row.edition_date, periodEnd: row.period_end ?? row.edition_date,
       locale: t.locale, status: ok ? "draft" : "failed", mode: row.mode, content: shown ?? {}, articleIds: ids,
       inputArticleIds: row.input_article_ids ?? [], candidateCount: row.candidate_count, inputHash: row.input_hash,
-      validation: { prompt_version: "ai-review-retranslate", repaired: t.repaired, problems: t.problems }, sourceBriefingId: koId,
-      model: u[0]?.model ?? row.model, promptVersion: "ai-review-retranslate",
+      validation: { prompt_version: promptVersion, repaired: t.repaired, problems: t.problems }, sourceBriefingId: koId,
+      // 재시도 모델(Sonnet)로 다시 번역했으면 마지막 호출 모델
+      model: u.at(-1)?.model ?? row.model, promptVersion,
       llmRequestIds: u.map((x) => x.requestId).filter((x): x is string => Boolean(x)),
       inputTokens: u.reduce((s, x) => s + x.inputTokens, 0), outputTokens: u.reduce((s, x) => s + x.outputTokens, 0),
       costUsd: Math.round(u.reduce((s, x) => s + x.costUsd, 0) * 1e6) / 1e6, error: ok ? null : t.error ?? `번역 재검증 실패 (${t.problems.length}건)`,
@@ -175,6 +177,7 @@ export const defaultPipelineDeps: PipelineDeps = {
         id: r.id,
         status: r.status,
         final: Boolean(r.decision?.final),
+        action: typeof r.decision?.action === "string" ? r.decision.action : undefined,
         result:
           r.status === "done"
             ? ({
@@ -311,6 +314,8 @@ async function processEdition(target: Target, o: Required<Pick<PipelineOptions, 
   let round = o.dryRun ? 0 : ((await deps.producedByRound(target.briefingId)) ?? -1) + 1;
   let parentReviewId: string | null = null;
   let versionLabel: number | string = input.row.version;
+  // 이 버전에서 먼저 통과한 독립 검토들 (자동 발행은 policy.requiredPasses 회 모두 통과해야 — 2026-11-03)
+  let passed: ReviewResult[] = [];
 
   for (;;) {
     // 1) 검토 (정기 실행은 저장된 검토를 이어 쓴다 — 재개)
@@ -321,7 +326,11 @@ async function processEdition(target: Target, o: Required<Pick<PipelineOptions, 
         steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: prior[0].id, verdict: null, score: null, action: "skipped", detail: "이미 최종 결정됨" });
         return out(true, false, `${head}: 이미 결정됨`, null);
       }
-      const done = prior.find((p) => p.status === "done" && p.result);
+      // 1차 통과(confirm_pending) 기록은 통과 목록으로, 그 뒤 확인 검토를 새로 한다 (재개 — 다음 호출이 이어 감)
+      // 최종 결정이 없는 버전: 1차 통과 기록 + (있으면) 결정 전에 멈춘 검토를 이어 쓴다
+      const fromDb = prior.filter((p) => p.status === "done" && p.result && p.action === "confirm_pending").map((p) => p.result!).reverse();
+      passed = [...fromDb, ...passed.filter((x) => !fromDb.some((d) => d.id && d.id === x.id))];
+      const done = prior.find((p) => p.status === "done" && p.result && p.action !== "confirm_pending");
       if (done?.result) review = done.result;
       else if (prior.filter((p) => p.status === "error").length >= MAX_ERROR_REVIEWS) {
         const msg = `${head} v${versionLabel}: AI 검토 ${MAX_ERROR_REVIEWS}회 실패 — 초안 유지, 관리자 확인 필요 ${adminUrl(input.row.id)}`;
@@ -335,7 +344,7 @@ async function processEdition(target: Target, o: Required<Pick<PipelineOptions, 
         steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: null, verdict: null, score: null, action: "pending", detail: "시간 예산 부족 — 다음 호출에서 이어 감" });
         return out(false, false, `${head}: 검토 대기`, null);
       }
-      const r = await reviewBriefing(input.row.id, { trigger: o.trigger, round, parentReviewId, input, policy: o.policy, store: true }, deps.review);
+      const r = await reviewBriefing(input.row.id, { trigger: o.trigger, round, parentReviewId: passed.at(-1)?.id ?? parentReviewId, input, policy: o.policy, store: true }, deps.review);
       review = r.result;
       cost += review.costUsd;
       steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: review.status === "done" ? "reviewed" : "error", detail: review.error ?? review.summary });
@@ -363,22 +372,30 @@ async function processEdition(target: Target, o: Required<Pick<PipelineOptions, 
       if (review!.id) await deps.recordDecision(review!.id, d, fixed);
     };
 
+    if (decision.eligible && passed.length + 1 < o.policy.requiredPasses) {
+      // 1차 통과 → 같은 판을 독립적으로 한 번 더 검토 (같은 모델의 실행 간 흔들림을 거른다). 결정은 아직 최종이 아니다
+      await rec({ ...decision, final: false, action: "confirm_pending", pass: passed.length + 1, required: o.policy.requiredPasses });
+      steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: "reviewed", detail: `검토 ${passed.length + 1}/${o.policy.requiredPasses} 통과 — 확인 검토` });
+      passed = [...passed, review];
+      continue;
+    }
+    const passScores = [...passed.map((p) => p.score), review.score].join("·");
     if (decision.eligible) {
       if (o.dryRun) {
         await rec({ ...decision, final: true, action: "would_publish" });
         steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: "would_publish", detail: decision.summary });
-        return out(true, true, `${head} v${versionLabel} (dry-run): 자동 발행 조건 통과 — ${review.verdict} ${review.score}점, ${errSummary}`, decision);
+        return out(true, true, `${head} v${versionLabel} (dry-run): 자동 발행 조건 통과(검토 ${passed.length + 1}회 ${passScores}점) — ${errSummary}`, decision);
       }
       if (!decision.publish) {
         await rec({ ...decision, final: true, action: "switch_off" });
         steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: "switch_off", detail: decision.summary });
-        return out(true, true, `${head} v${versionLabel}: AI 검토 통과(${review.score}점)했지만 자동 발행이 꺼져 있음 — 관리자 발행 필요 ${adminUrl(input.row.id)}`, decision);
+        return out(true, true, `${head} v${versionLabel}: AI 검토 ${passed.length + 1}회 통과(${passScores}점)했지만 자동 발행이 꺼져 있음 — 관리자 발행 필요 ${adminUrl(input.row.id)}`, decision);
       }
       try {
         const res = await deps.publish(target, input.row);
         await rec({ ...decision, final: true, action: "published", published: res.published });
         steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: "published", detail: res.published.map((p) => `${p.locale} v${p.version}`).join(", ") });
-        return out(true, true, `${head} v${versionLabel}: AI 검토 통과(${review.score}점) → 자동 발행 (${res.published.map((p) => p.locale).join("·")}) ${adminUrl(input.row.id)}`, decision, true);
+        return out(true, true, `${head} v${versionLabel}: AI 검토 ${passed.length + 1}회 통과(${passScores}점) → 자동 발행 (${res.published.map((p) => p.locale).join("·")}) ${adminUrl(input.row.id)}`, decision, true);
       } catch (e) {
         const msg = e instanceof PublishError ? e.message : (e as Error).message;
         await rec({ ...decision, final: true, action: "hold", publish_error: msg });
@@ -441,6 +458,7 @@ async function processEdition(target: Target, o: Required<Pick<PipelineOptions, 
         parentReviewId = review.id;
         round += 1;
         versionLabel = nextVersion;
+        passed = []; // 새 버전은 처음부터 다시 requiredPasses 회 통과해야 한다
         input = o.dryRun
           ? inputWithContent(input, fx.content, translations, input.row.version)
           : await deps.loadInput(nextId);
