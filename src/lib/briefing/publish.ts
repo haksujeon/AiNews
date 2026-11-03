@@ -1,7 +1,7 @@
 /**
  * 발행·철회. 관리자 수동 발행과 AI 검토 자동 발행(2026-11-02 결정 D8 변경, review/pipeline.ts)이 이 함수 하나를 쓴다 (Gate 2).
  *
- *  - 발행 단위는 ko 판 한 버전 + 그 ko 에서 번역된 en/zh 중 draft 인 것.
+ *  - 발행 단위는 ko 판 한 버전 + 그 ko 에서 번역된 en/zh 중 언어마다 최신 draft 하나 (재번역으로 여러 개일 수 있다).
  *    (en/zh 가 failed 여도 ko 발행은 막지 않는다. 그 언어는 발행본이 없게 된다)
  *  - 같은 날짜의 기존 발행본은 먼저 'superseded' 로 돌린다 (부분 유니크 인덱스 때문에 순서가 중요).
  *  - 검증 치명 위반이 남은 판은 발행하지 않는다.
@@ -88,7 +88,11 @@ export async function publishBriefing(opts: {
     const { rows } = await client.query(
       `UPDATE daily_briefings
           SET status = 'published', published_at = now(), updated_at = now(), edited_by = COALESCE($3, edited_by)
-        WHERE (id = $1 OR (source_briefing_id = $1 AND status = 'draft')) AND edition_date = $2::date AND edition_type = $4
+        WHERE (id = $1 OR id IN (
+                 -- 언어마다 그 ko 에서 나온 최신 draft 하나만 (재번역으로 같은 ko 의 zh draft 가 둘이면 유니크 인덱스 위반 — 2026-11-03 11-02 v3)
+                 SELECT DISTINCT ON (locale) id FROM daily_briefings
+                  WHERE source_briefing_id = $1 AND status = 'draft' ORDER BY locale, version DESC))
+          AND edition_date = $2::date AND edition_type = $4
         RETURNING locale, id, version`,
       [ko.id, opts.date, opts.editedBy ?? null, editionType]
     );
