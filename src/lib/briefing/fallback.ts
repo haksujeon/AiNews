@@ -29,15 +29,15 @@ export function fallbackHeadline(c: BriefingContent): string {
     .flatMap((e) => e.aliases.filter((a): a is string => typeof a === "string" && title.includes(a)))
     .sort((a, b) => title.indexOf(a) - title.indexOf(b))[0];
   const subject = (s?.subject ?? "").replace(/\s?[(（][^)）]*[)）]/g, "").trim() || alias || "";
-  const withSubject = `${subject} 등 오늘의 중국 AI 주요 소식`;
-  return subject && withSubject.length <= HEADLINE_MAX ? withSubject : "오늘의 중국 AI 주요 소식";
+  const withSubject = `${subject} 등 중국 AI 주요 소식`;
+  return subject && withSubject.length <= HEADLINE_MAX ? withSubject : "중국 AI 주요 소식";
 }
 
 /** 대체 판 리드: 주요 기사 제목을 이은 문장 (200자 안, 넘으면 뒤 제목부터 뺀다). 숫자·표현은 검증을 거친 제목 그대로 */
 export function fallbackLede(c: BriefingContent): { lede: string; refs: string[] } {
   const tops = c.top_stories.slice(0, 3);
   for (let n = tops.length; n >= 1; n--) {
-    const lede = `오늘의 주요 소식: ${tops
+    const lede = `주요 소식: ${tops
       .slice(0, n)
       .map((s) => s.title.replace(/[.。]$/, ""))
       .join(" / ")}.`;

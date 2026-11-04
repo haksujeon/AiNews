@@ -45,7 +45,7 @@ export async function TodayBriefing({ briefing, locale }: { briefing: PublicBrie
       >
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <span className="rounded-[3px] bg-jade-bright px-2 py-0.5 font-mono text-[11.5px] font-bold text-console">
-            {dated ? tb("bannerLabelLatest") : tb("bannerLabel")}
+            {dated ? tb("bannerLabelLatest") : tb("kicker")}
           </span>
           <span className="font-mono text-[13px] text-white/65">
             {date} · {t("coverage", { total: c.meta?.candidate_count ?? 0, cited: c.meta?.cited_count ?? Object.keys(briefing.articles).length })} ·{" "}
