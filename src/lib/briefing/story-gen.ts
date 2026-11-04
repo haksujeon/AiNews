@@ -88,19 +88,19 @@ export function buildLensPlans(raw: unknown, story: { title: string; subject: st
 
 // ───────────────────────── SELECT · SYNTH (시범 v0.2 그대로)
 
-export const SELECT_SYSTEM = `오늘 기사(TODAY)와 같은 이야기 줄기에 속하는 과거 기사를 고릅니다. 관점(LENS)이 주어집니다.
-- company: 같은 회사의, 오늘 기사와 같은 종류의 일(예: 오늘이 제품 출시면 앞선 제품·기능 발표, 오늘이 투자면 앞선 투자). 같은 회사라도 다른 종류의 일은 고르지 않습니다. 단, 오늘 일을 이해하는 데 꼭 필요한 배경(예: 손실 기사에 대한 앞선 매출 발표)은 고릅니다.
-- topic: 다른 회사들의, 오늘 기사와 같은 주제의 중요한 앞선 사건(오늘 기사의 회사가 주인공인 기사는 고르지 않습니다). 주제 설명(TOPIC)을 따릅니다. 같은 사건을 여러 매체가 쓴 경우 하나만 고릅니다.
+export const SELECT_SYSTEM = `이번 기사(TODAY)와 같은 이야기 줄기에 속하는 과거 기사를 고릅니다. 관점(LENS)이 주어집니다.
+- company: 같은 회사의, 이번 기사와 같은 종류의 일(예: 이번 기사가 제품 출시면 앞선 제품·기능 발표, 이번 기사가 투자면 앞선 투자). 같은 회사라도 다른 종류의 일은 고르지 않습니다. 단, 이번 일을 이해하는 데 꼭 필요한 배경(예: 손실 기사에 대한 앞선 매출 발표)은 고릅니다.
+- topic: 다른 회사들의, 이번 기사와 같은 주제의 중요한 앞선 사건(이번 기사의 회사가 주인공인 기사는 고르지 않습니다). 주제 설명(TOPIC)을 따릅니다. 같은 사건을 여러 매체가 쓴 경우 하나만 고릅니다.
 최대 12개, 중요한 순이 아니라 줄기를 이루는 것만. 고를 것이 2개 미만이면 빈 배열.
 JSON 하나만: {"picked":["C001", ...], "thread_title":"이 줄기를 한 줄로(한국어 25자 이내)"}`;
 
-export const SYNTH_SYSTEM = `당신은 중국 AI 뉴스 사이트의 해설 기자입니다. 오늘 기사(TODAY)를 AI를 잘 모르는 일반 독자가 이해하도록, 이 이야기가 어떻게 여기까지 왔는지를 과거 기사(PAST)만으로 정리합니다.
+export const SYNTH_SYSTEM = `당신은 중국 AI 뉴스 사이트의 해설 기자입니다. 이번 기사(TODAY)를 AI를 잘 모르는 일반 독자가 이해하도록, 이 이야기가 어떻게 여기까지 왔는지를 과거 기사(PAST)만으로 정리합니다.
 규칙
 1. 근거는 PAST 와 TODAY 뿐. 사전 지식으로 사실·숫자·날짜를 보태지 않습니다.
 2. timeline 3~6개, 오래된 순. 항목마다 date(PAST 날짜 MM-DD), text(쉬운 말 한 문장, 한국어 70자 이내), refs(PAST id 1개 이상). 같은 날 같은 사건은 한 항목.
 3. 보도·추진·검토와 확정을 구분합니다("~를 추진한다고 보도됐다" / "~를 마쳤다"). 기사마다 숫자가 다르면 고치지 말고 그 기사의 숫자를 씁니다.
 4. 숫자는 근거 기사 값·단위 그대로, 한 항목에 최대 2개. 환산·합산 금지.
-5. background: 이 줄기를 처음 보는 독자를 위한 두 문장(150자 이내). now: 오늘 기사가 이 흐름에서 무엇이 새로운지 한 문장(TODAY 근거, 90자 이내).
+5. background: 이 줄기를 처음 보는 독자를 위한 두 문장(150자 이내). now: 이번 기사가 이 흐름에서 무엇이 새로운지 한 문장(TODAY 근거, 90자 이내).
 6. 업계 용어·영문 약어는 풀어 씁니다. 회사·제품 이름은 한국 언론 표기. 한국어에 한자 금지. ~습니다/~됐습니다 체.
 7. 기사에 없는 인과("~때문에")·평가·전망을 넣지 않습니다.
 9. 영문 약어·회계·법률 용어를 쓰지 않습니다: GAAP → 회계 기준, S-1·투자설명서 → 상장 신청 서류, SEC → 미국 증권 당국, IPO → 상장, 파라미터 → 모델 크기, 오픈 웨이트 → 가중치 공개. 같은 분야 이름은 한 가지로(구현지능·체화지능 → "몸을 가진 AI(체화 지능)" 처음 한 번 뒤 "체화 지능").
@@ -284,6 +284,7 @@ export function checkTranslated(src: TranslatableLens[], raw: unknown, target: "
       if (HANGUL_RE.test(b)) p.push(`item ${i} ${f}: Korean characters left`);
       if (target === "en" && hasHan(b)) p.push(`item ${i} ${f}: Chinese characters in English`);
       if (!sameNumbers(a, b)) p.push(`item ${i} ${f}: numbers differ from source`);
+      if (/今天|昨天|\btoday\b|\byesterday\b/i.test(b)) p.push(`item ${i} ${f}: do not write "today"/"yesterday" — say "this story"`);
       for (const n of nameIssues(a, b, target)) p.push(`item ${i} ${f}: ${n}`);
     }
     if (p.length) issues.push(...p);
