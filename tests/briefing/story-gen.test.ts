@@ -37,6 +37,7 @@ test("코드 검사: 날짜·근거·숫자·한자·항목 수", () => {
   const bad = { ...good, now: "深度", timeline: [{ date: "09-02", text: "매출 99억", refs: ["P01"] }, { date: "10-05", text: "둘", refs: ["P09"] }] };
   const p = checkStory(bad, picked).join(" / ");
   for (const w of ["항목 수 2", "날짜 09-02", "숫자 99", "없는 근거", "now 한자"]) assert.ok(p.includes(w), `${w} ← ${p}`);
+  assert.ok(checkStory({ ...good, background: "오늘 기사는 흐름의 끝입니다." }, picked).includes("오늘·어제 표현"));
   const row = toKoRow("a1", "company", "줄기", good, picked);
   assert.equal(row.timeline[0].date, "2026-09-01");
   assert.equal(row.timeline[0].refs[0].title, "기사 1");

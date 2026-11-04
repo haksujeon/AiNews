@@ -13,7 +13,7 @@ import { HANGUL_RE, hasHan } from "../text/han";
 export type Lens = "company" | "topic";
 export type StoryLocale = "ko" | "zh" | "en";
 
-export const STORY_PROMPT_VERSION = "story-v1";
+export const STORY_PROMPT_VERSION = "story-v1.1";
 /** 고르기·엮기 모델 (시범과 같은 Sonnet 5.5). STORY_MODEL 로 덮어쓴다 */
 export const STORY_MODEL = process.env.STORY_MODEL || "anthropic-api-sonnet-5-5";
 /** 후보 기사: 오늘 판 이전 240일, 최대 150건 (시범 값) */
@@ -105,6 +105,7 @@ export const SYNTH_SYSTEM = `당신은 중국 AI 뉴스 사이트의 해설 기�
 7. 기사에 없는 인과("~때문에")·평가·전망을 넣지 않습니다.
 9. 영문 약어·회계·법률 용어를 쓰지 않습니다: GAAP → 회계 기준, S-1·투자설명서 → 상장 신청 서류, SEC → 미국 증권 당국, IPO → 상장, 파라미터 → 모델 크기, 오픈 웨이트 → 가중치 공개. 같은 분야 이름은 한 가지로(구현지능·체화지능 → "몸을 가진 AI(체화 지능)" 처음 한 번 뒤 "체화 지능").
 10. caution: 같은 대상(예: 같은 회사의 같은 계약 금액)의 숫자가 기사마다 다르면 그 사실을 한 문장으로(예: "컴퓨팅 계약 규모는 보도마다 숫자가 다릅니다."). 없으면 "".
+11. 메일은 다음 날 아침에 읽힙니다. "오늘"·"어제"를 쓰지 않습니다. 이번 기사를 가리킬 때는 "이번 기사"라고 씁니다.
 8. PAST 가 2개 미만이면 {"skip": true}.
 JSON 하나만: {"background":"","timeline":[{"date":"MM-DD","text":"","refs":["P01"]}],"now":"","caution":"","skip":false}`;
 
@@ -172,6 +173,9 @@ export function checkStory(out: SynthOut, picked: Candidate[]): string[] {
   }
   for (const f of ["background", "now", "caution"] as const) if (HAN_CHAR.test(String(out[f] ?? ""))) probs.push(`${f} 한자`);
   if (tl.some((it) => HAN_CHAR.test(String(it.text ?? "")))) probs.push("연대기 한자");
+  // 판은 다음 날 아침 메일·사이트로 읽힌다 (2026-11-04 사용자 지적: "오늘"이 아니라 전일). 저장 행은 덮어쓰지 않으므로 여기서 막는다
+  const all = [out.background, out.now, out.caution, ...tl.map((it) => it.text)].map((x) => String(x ?? "")).join(" ");
+  if (/오늘|어제/.test(all)) probs.push("오늘·어제 표현");
   if (!String(out.background ?? "").trim() || !String(out.now ?? "").trim()) probs.push("배경·이번 기사 빈칸");
   return probs;
 }
