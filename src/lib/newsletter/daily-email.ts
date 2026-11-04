@@ -168,7 +168,7 @@ export function editionDateLabel(locale: BriefingLocale, start: string, end?: st
   return a.m === b.m ? t.range(a.m, a.d, a.w, b.d, b.w) : `${t.date(a.m, a.d, a.w)} ~ ${t.date(b.m, b.d, b.w)}`;
 }
 
-/** PC 본문 폭 (2026-11-04 사용자 결정 880px). 620px 이하(휴대폰)는 한 칸 · 좌우 18px */
+/** PC 본문 폭 (2026-11-04 사용자 결정 880px). 480px 이하(휴대폰)는 한 칸 — 620 에서 낮춤: 전달 팝업·좁은 읽기 창에서도 2열 (사용자 결정 2026-11-04) · 좌우 18px */
 export const MAIL_WIDTH = 880;
 /** Gmail 은 HTML 102KB 를 넘으면 잘라서 아래(수신 거부 포함)를 숨긴다 → 넘으면 뒤 기사부터 히스토리를 줄인다 */
 export const MAIL_SIZE_LIMIT = 95_000;
@@ -331,7 +331,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   const html = `<!doctype html>
 <html lang="${b.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(subject)}</title>
 <style>
-@media only screen and (max-width:620px){
+@media only screen and (max-width:480px){
   .px{padding-left:18px!important;padding-right:18px!important}
   .col{display:block!important;width:100%!important;padding:0 0 14px!important;border-left:0!important}
   .wrap{border-radius:0!important}
