@@ -92,6 +92,21 @@ export interface TopStory<Ref = string> {
    * briefing_easy_terms 에서 붙인다. 판 검증이 top_stories 를 알려진 필드로만 다시 만들므로 모델이 넣을 수 없다.
    */
   easy_terms?: EasyTerm[];
+  /**
+   * "지금까지의 이야기" (story-context.ts, 시범). easy_terms 와 같이 화면에 보낼 때만 briefing_story_context 에서 붙인다.
+   * 관점 순서: company → topic
+   */
+  story_context?: StoryContext[];
+}
+
+/** "지금까지의 이야기" 한 관점 */
+export interface StoryContext {
+  lens: "company" | "topic";
+  title: string;
+  background: string;
+  timeline: { date: string; text: string; refs: { id: string; source: string; title: string }[] }[];
+  now: string;
+  caution?: string | null;
 }
 
 /** "쉬운 AI 설명" 한 용어 (언어 하나). term·pinyin·detail 은 기사 key_terms 그대로, name·easy 만 모델이 쓴다 */

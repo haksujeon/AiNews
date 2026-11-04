@@ -76,7 +76,9 @@
     "gistNote": "以上为AI译文开头的3–5句要点，完整内容请阅读原文。",
     "categoryLabel": "分类",
     "toneLabel": "论调",
-    "sourceLabel": "来源"
+    "sourceLabel": "来源",
+    "insightDetailShow": "查看详细分析",
+    "insightDetailHide": "收起详细分析"
   },
   "related": {
     "title": "相关报道",
@@ -286,7 +288,13 @@
     "easyTitle": "AI 术语通俗讲",
     "easyCount": "{count} 个术语",
     "easyDetail": "详细",
-    "easyNote": "由 AI 根据原文中的术语说明改写为通俗语言。"
+    "easyNote": "由 AI 根据原文中的术语说明改写为通俗语言。",
+    "storyTitle": "来龙去脉",
+    "storyBeta": "试用",
+    "storyLensCompany": "公司脉络",
+    "storyLensTopic": "主题脉络",
+    "storyNow": "本次报道",
+    "storyNote": "试用功能：由 AI 仅根据过往报道整理。日期为报道日期，可点击来源核对。"
   },
   "briefingAdmin": {
     "nav": "简报审核",

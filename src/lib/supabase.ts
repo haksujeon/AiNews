@@ -20,7 +20,8 @@ import { addDays, countBy, countByDay, dayBounds, fillDays, mondayOf, regionCoun
 // is_hidden 은 상세 페이지가 noindex 여부를 정하는 데 쓴다.
 const DETAIL_FIELDS = `${LIST_FIELDS},
   content_kr, content_en,
-  ai_insights_cn, ai_insights_kr, ai_insights_en, key_terms, is_hidden`;
+  ai_insights_cn, ai_insights_kr, ai_insights_en,
+  ai_insights_detail_cn, ai_insights_detail_kr, ai_insights_detail_en, key_terms, is_hidden`;
 
 /** 일별 추이 차트가 보여 줄 최대 일수. 데이터 기간이 이보다 짧으면 전체 기간. */
 export const STATS_DAILY_WINDOW_DAYS = 90;

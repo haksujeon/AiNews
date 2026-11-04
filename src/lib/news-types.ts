@@ -19,6 +19,10 @@ export interface NewsItem {
   ai_insights_cn: string | null;
   ai_insights_kr: string | null;
   ai_insights_en: string | null;
+  /** "자세히" 단계 인사이트 (2026-11-04, src/lib/insights.ts). 옛 기사는 null — 화면이 "자세히" 버튼을 숨긴다 */
+  ai_insights_detail_cn?: string | null;
+  ai_insights_detail_kr?: string | null;
+  ai_insights_detail_en?: string | null;
   key_terms: { term: string; pinyin?: string; explanation_kr: string; explanation_en?: string; explanation_zh?: string }[] | null;
   sentiment: string | null;
   category: string | null;

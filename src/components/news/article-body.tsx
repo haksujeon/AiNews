@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useId, useState } from "react";
 import { useTranslations } from "next-intl";
+import { ChevronDown } from "lucide-react";
 import type { NewsItem } from "@/lib/supabase";
 import type { PublicNewsItem } from "@/lib/news-gist";
 import { cn } from "@/lib/utils";
@@ -8,6 +10,7 @@ import {
   formatDate,
   getSummary,
   getAiInsights,
+  getAiInsightsDetail,
   getSourceName,
   getTermExplanation,
 } from "@/lib/news-utils";
@@ -86,6 +89,7 @@ export function ArticleBody({
   const summary = getSummary(news, locale);
   const gist = news.gist;
   const aiInsights = getAiInsights(news, locale);
+  const aiInsightsDetail = getAiInsightsDetail(news, locale);
 
   return (
     <div className="space-y-8">
@@ -103,6 +107,7 @@ export function ArticleBody({
         >
           <Heading className="mb-2 text-xs font-semibold text-jade">{t("aiInsights")}</Heading>
           <p className="text-[15px] leading-[1.8] text-ink">{aiInsights}</p>
+          {aiInsightsDetail && <InsightDetail text={aiInsightsDetail} />}
           <p className="mt-3 text-xs leading-relaxed text-ink-3">{t("aiInsightDisclosure")}</p>
         </section>
       )}
@@ -131,6 +136,52 @@ export function ArticleBody({
           </a>
         </p>
       )}
+    </div>
+  );
+}
+
+/** 펼침 상태 기억 (보는 사람 브라우저에만). 읽기·쓰기 실패해도 접힘으로 정상 동작 */
+const INSIGHT_DETAIL_KEY = "ainews.insightDetail";
+
+/**
+ * "자세히" 단계 인사이트 (2026-11-04, src/lib/insights.ts). 쉬운 글 아래 버튼 → 같은 상자 안에서 펼친다.
+ * 마지막에 고른 상태(펼침/접힘)를 기억해 다음 기사에도 적용한다. 첫 렌더는 항상 접힘(서버와 같은 모양) → 마운트 뒤 기억값 적용.
+ */
+function InsightDetail({ text }: { text: string }) {
+  const t = useTranslations("detail");
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(INSIGHT_DETAIL_KEY) === "open") setOpen(true);
+    } catch {
+      /* 저장소를 못 쓰면 접힘 그대로 */
+    }
+  }, []);
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    try {
+      window.localStorage.setItem(INSIGHT_DETAIL_KEY, next ? "open" : "closed");
+    } catch {
+      /* 기억만 못 할 뿐 */
+    }
+  };
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        aria-controls={id}
+        className="inline-flex min-h-9 items-center gap-1 rounded-sm text-[13px] font-semibold text-jade hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {open ? t("insightDetailHide") : t("insightDetailShow")}
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} aria-hidden="true" />
+      </button>
+      <div id={id} hidden={!open}>
+        <p className="mt-2 border-t border-jade/20 pt-3 text-[15px] leading-[1.8] text-ink-2">{text}</p>
+      </div>
     </div>
   );
 }

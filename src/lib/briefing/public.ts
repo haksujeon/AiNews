@@ -12,6 +12,7 @@ import { briefingFixtureRows, type FixtureBriefingRow } from "./fixture";
 import type { DayEditionRow } from "./day-select";
 import { attachEasyTerms } from "./easy-terms";
 import { loadEasyTerms } from "./easy-terms-store";
+import { attachStoryContext, loadStoryContext } from "./story-context";
 
 export interface BriefingArticleRef {
   id: string;
@@ -134,8 +135,11 @@ async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
   const { articles, available_locales } = await loadBriefingRefs(row);
   const content = pruneToVisible(row.content as StoredBriefingContent, new Set(Object.keys(articles)));
   // "쉬운 AI 설명": 주요 기사의 근거 기사 키로 붙인다 (없으면 상자 없음)
-  const easy = await loadEasyTerms([...new Set(content.top_stories.flatMap((s) => s.refs))], row.locale);
+  // "지금까지의 이야기"(시범)도 같은 근거 기사 키로 붙인다 (story-context.ts)
+  const topRefs = [...new Set(content.top_stories.flatMap((s) => s.refs))];
+  const [easy, story] = await Promise.all([loadEasyTerms(topRefs, row.locale), loadStoryContext(topRefs, row.locale)]);
   if (easy.size) content.top_stories = attachEasyTerms(content.top_stories, easy);
+  if (story.size) content.top_stories = attachStoryContext(content.top_stories, story);
   return {
     id: row.id,
     edition_date: row.edition_date,

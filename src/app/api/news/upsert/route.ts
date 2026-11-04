@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import { requireIngestToken } from '@/lib/ingest-auth';
 import { scheduleRelatedCompute } from '@/lib/related';
 import { sanitizeRegionFields } from '@/lib/region';
+import { cleanInsightItem, insightFlags, INSIGHT_VERSION } from '@/lib/insights';
 
 // POST /api/news/upsert
 // n8n 워크플로우에서 호출: 뉴스 아이템 upsert
@@ -20,20 +21,30 @@ import { sanitizeRegionFields } from '@/lib/region';
 //  - normalizeRegion 으로 다듬는다(TW·HK → CN + 태그, 모르는 코드 버림). 대표 지역이 틀리면 세 열 모두 버린다
 //    — CHECK 제약 위반으로 요청 전체가 500 이 되지 않도록.
 //  - region_tags 는 text[] 라 JSON 문자열이 아니라 JS 배열로 넘긴다. 빈 배열은 기존 태그를 덮어쓰지 않는다.
+//
+// AI 인사이트 두 단계 (2026-11-04, src/lib/insights.ts): n8n 이 ai_insights_detail_* 를 함께 보낸다.
+//  - 저장 전 괄호 속 한자 병기를 지우고(cleanInsightItem), 남은 문제는 insight_flags 에 표시한다(insightFlags).
+//  - 인사이트가 실린 요청에서만 insight_flags·insight_version 을 정한다. 문제가 없으면 insight_flags = NULL 로 지운다
+//    (그래서 이 두 열은 "빈 값 유지" 규칙을 따르지 않고 그대로 덮어쓴다).
 
 const TEXT_COLS = new Set([
   'source_name','source_url','title_cn','title_kr','title_en',
   'summary_cn','summary_kr','summary_en','content_cn','content_kr','content_en',
   'ai_insights_cn','ai_insights_kr','ai_insights_en',
+  'ai_insights_detail_cn','ai_insights_detail_kr','ai_insights_detail_en',
   'sentiment','category','thumbnail_url','og_image_url','country',
   'subject_region','region_version',
 ]);
+
+/** 인사이트가 실린 요청에서 서버가 정하는 열 — 기존 값 유지 없이 그대로 덮어쓴다 */
+const OVERWRITE_COLS = new Set(['insight_flags', 'insight_version']);
 
 /** text[] 열 — JSON 문자열이 아니라 배열 그대로 pg 에 넘긴다 */
 const TEXT_ARRAY_COLS = new Set(['region_tags']);
 
 
 function updateExpr(k: string): string {
+  if (OVERWRITE_COLS.has(k)) return `"${k}" = EXCLUDED."${k}"`;
   if (TEXT_COLS.has(k)) return `"${k}" = COALESCE(NULLIF(EXCLUDED."${k}", ''), ai_news_ex."${k}")`;
   if (k === 'region_tags') {
     return `"region_tags" = CASE WHEN EXCLUDED."region_tags" IS NULL OR EXCLUDED."region_tags" = '{}'::text[]
@@ -59,6 +70,7 @@ export async function POST(request: NextRequest) {
       'id','source_name','source_url','news_date','title_cn','title_kr','title_en',
       'summary_cn','summary_kr','summary_en','content_cn','content_kr','content_en',
       'ai_insights_cn','ai_insights_kr','ai_insights_en','key_terms',
+      'ai_insights_detail_cn','ai_insights_detail_kr','ai_insights_detail_en','insight_flags','insight_version',
       'sentiment','category','thumbnail_url','og_image_url','country','is_duplicate',
       'subject_region','region_tags','region_version',
     ]);
@@ -69,12 +81,26 @@ export async function POST(request: NextRequest) {
     const touched: string[] = [];
     for (const raw of items) {
       if (!raw || typeof raw !== 'object') continue;
-      const item: Record<string, unknown> = { ...raw };
+      let item: Record<string, unknown> = { ...raw };
+      // 클라이언트가 보낸 검사 열은 믿지 않는다 — 서버가 아래에서 정한다
+      delete item.insight_flags;
+      delete item.insight_version;
       // 빈 source_url 은 NULL 로 — '' 끼리 UNIQUE 충돌하지 않도록
       if (typeof item.source_url === 'string') {
         item.source_url = item.source_url.trim() || null;
       }
       sanitizeRegionFields(item);
+
+      if (typeof item.ai_insights_kr === 'string' && item.ai_insights_kr.trim()) {
+        item = cleanInsightItem(item);
+        const twoLevel = 'ai_insights_detail_kr' in item;
+        const flags = insightFlags(item, {
+          title_cn: item.title_cn as string, title_kr: item.title_kr as string,
+          summary_cn: item.summary_cn as string, summary_kr: item.summary_kr as string, content_cn: item.content_cn as string,
+        }, { expectDetail: twoLevel });
+        item.insight_flags = flags.length ? flags : null;
+        item.insight_version = twoLevel ? INSIGHT_VERSION : 'ins-v1';
+      }
 
       const keys = Object.keys(item).filter(k => ALLOWED_COLS.has(k));
       if (!keys.length) continue;

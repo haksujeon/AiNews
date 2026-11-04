@@ -214,6 +214,17 @@ export function getAiInsights(
   return item.ai_insights_kr || item.ai_insights_en || item.ai_insights_cn || "";
 }
 
+/** "자세히" 단계 인사이트. 언어 폴백 순서는 getAiInsights 와 같다. 없으면 "" (화면은 버튼을 숨김) */
+export function getAiInsightsDetail(
+  item: Pick<NewsItem, "ai_insights_detail_cn" | "ai_insights_detail_kr" | "ai_insights_detail_en">,
+  locale: string
+): string {
+  return getAiInsights(
+    { ai_insights_cn: item.ai_insights_detail_cn ?? null, ai_insights_kr: item.ai_insights_detail_kr ?? null, ai_insights_en: item.ai_insights_detail_en ?? null },
+    locale
+  );
+}
+
 export function getTermExplanation(
   term: { term: string; explanation_kr: string; explanation_en?: string; explanation_zh?: string },
   locale: string

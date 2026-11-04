@@ -27,7 +27,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 /** 고칠 수 있는 필드 (UPDATE 문에 그대로 들어가므로 이 목록만 허용) */
-export const HAN_FIELDS = ["title_kr", "summary_kr", "ai_insights_kr", "content_kr"] as const;
+export const HAN_FIELDS = ["title_kr", "summary_kr", "ai_insights_kr", "ai_insights_detail_kr", "content_kr"] as const;
 type Field = (typeof HAN_FIELDS)[number];
 const DEFAULT_FIELDS: Field[] = ["title_kr", "summary_kr", "ai_insights_kr"];
 

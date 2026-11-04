@@ -76,7 +76,9 @@
     "gistNote": "A 3–5 sentence gist from the start of the AI translation. Read the full story at the source.",
     "categoryLabel": "Section",
     "toneLabel": "Tone",
-    "sourceLabel": "Source"
+    "sourceLabel": "Source",
+    "insightDetailShow": "More detail",
+    "insightDetailHide": "Less detail"
   },
   "related": {
     "title": "Related coverage",
@@ -286,7 +288,13 @@
     "easyTitle": "AI terms, made easy",
     "easyCount": "{count, plural, one {# term} other {# terms}}",
     "easyDetail": "More",
-    "easyNote": "Written by AI in plain words, based on the term notes in the source articles."
+    "easyNote": "Written by AI in plain words, based on the term notes in the source articles.",
+    "storyTitle": "The story so far",
+    "storyBeta": "Beta",
+    "storyLensCompany": "Company thread",
+    "storyLensTopic": "Topic thread",
+    "storyNow": "This story",
+    "storyNote": "A beta feature: AI summarized earlier articles only. Dates are report dates; tap a source to check it."
   },
   "briefingAdmin": {
     "nav": "Briefing review",
