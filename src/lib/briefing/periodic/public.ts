@@ -10,6 +10,7 @@ import pool from "@/lib/db";
 import { PUBLIC_NEWS_WHERE } from "@/lib/news-query";
 import { isoWeekOf, isoWeekRange, monthRange, type PeriodMetrics } from "@/lib/metrics/period";
 import { loadBriefingRefs, type BriefingArticleRef } from "../public";
+import { attachStoryContext, loadStoryContext } from "../story-context";
 import type { BriefingLocale } from "../types";
 import type { PeriodicKind, StoredPeriodicContent } from "./types";
 
@@ -137,6 +138,10 @@ async function hydrate(row: RawRow, viewerLocale: BriefingLocale): Promise<Publi
   // 기사를 숨기면 그 링크와 그것만 근거로 둔 항목은 빠지지만, 지표·차트는 스냅숏 그대로 둔다
   const visible = new Set(Object.keys(articles));
   const key = periodKeyOf(kind, row.content, row.edition_date);
+  const content = pruneWeeklyToVisible({ ...row.content, month_arc: row.content.month_arc ?? [] }, visible);
+  // 큰 흐름의 히스토리 분석(시범)은 데일리 주요 기사와 같은 표·같은 붙이기 함수 (story-context.ts)
+  const story = await loadStoryContext([...new Set(content.big_picture.flatMap((b) => b.refs))], row.locale);
+  if (story.size) content.big_picture = attachStoryContext(content.big_picture, story);
   return {
     id: row.id,
     edition_type: kind,
@@ -150,7 +155,7 @@ async function hydrate(row: RawRow, viewerLocale: BriefingLocale): Promise<Publi
     published_at: row.published_at ?? "",
     needs_review: row.needs_review,
     available_locales,
-    content: pruneWeeklyToVisible({ ...row.content, month_arc: row.content.month_arc ?? [] }, visible),
+    content,
     articles,
     metrics: row.metrics,
     metrics_computed_at: row.metrics_computed_at ?? "",

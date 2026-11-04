@@ -11,6 +11,7 @@ import { Sources } from "./briefing-view";
 import { BriefingDateLink } from "./briefing-date-link";
 import { periodicPath } from "./briefing-tabs";
 import { ChartFigure, DataTable } from "./charts/chart-figure";
+import { StoryContextBox } from "./story-context";
 import { BarsTick, DailyColumns, Dumbbell, SmallMultiples, type DayBar } from "./charts/charts";
 
 /*
@@ -280,6 +281,7 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                     <p className="mt-2 max-w-[40rem] text-base leading-[1.8] text-ink-2 @min-[640px]:text-[17px]">{b.text}</p>
                     <Chips keys={b.metrics} facts={facts} label={t("metricChips")} />
                     <Sources refs={b.refs} briefing={report} className="mt-2" />
+                    <StoryContextBox contexts={b.story_context} className="mt-3" />
                   </div>
                 </li>
               ))}

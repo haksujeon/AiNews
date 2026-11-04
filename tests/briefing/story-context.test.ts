@@ -26,3 +26,10 @@ test("근거 기사 키로 붙인다 (primary_ref 먼저, 없으면 refs)", () =
   assert.equal(out[0].story_context?.[0].lens, "company");
   assert.equal(out[1].story_context, undefined);
 });
+
+test("주간·월간 큰 흐름(primary_ref 없음)도 같은 함수로 refs 순서대로 붙인다", () => {
+  const m = toStoryContexts([row("topic", [["x"], ["y"]])], new Set(["x", "y"]));
+  const out = attachStoryContext([{ title: "t", refs: ["q", "a1"] }, { title: "u", refs: [] }], m);
+  assert.equal(out[0].story_context?.[0].lens, "topic");
+  assert.equal(out[1].story_context, undefined);
+});

@@ -3,13 +3,15 @@
  * 숫자는 SQL 이 계산한 지표(FACTS)의 표시 문자열만 인용한다 — metrics 는 FACTS 키 목록.
  */
 import type { PeriodMetrics } from "../../metrics/period";
-import type { ValidationIssue } from "../types";
+import type { StoryContext, ValidationIssue } from "../types";
 
 export interface TrendItem<Ref = string> {
   title: string;
   text: string;
   refs: Ref[];
   metrics: string[];
+  /** "회사·관련 주제 히스토리 분석" (story-context.ts, 시범). 저장 content 에는 없고 화면에 보낼 때(public.ts hydrate)만 붙인다 */
+  story_context?: StoryContext[];
 }
 
 export interface MoverItem<Ref = string> {

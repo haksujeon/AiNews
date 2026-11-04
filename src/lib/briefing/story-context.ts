@@ -48,12 +48,13 @@ export async function loadStoryContext(articleIds: string[], locale: BriefingLoc
   }
 }
 
-export function attachStoryContext<T extends { refs: string[]; primary_ref: string }>(
+/** 데일리 주요 기사(primary_ref 먼저)와 주간·월간 큰 흐름(primary_ref 없음, refs 순)이 이 함수 하나로 붙인다 */
+export function attachStoryContext<T extends { refs: string[]; primary_ref?: string }>(
   stories: T[],
   rows: Map<string, StoryContext[]>
 ): (T & { story_context?: StoryContext[] })[] {
   return stories.map((s) => {
-    const key = [s.primary_ref, ...s.refs].find((r) => rows.has(r));
+    const key = [s.primary_ref, ...s.refs].find((r): r is string => !!r && rows.has(r));
     return key ? { ...s, story_context: rows.get(key) } : s;
   });
 }
