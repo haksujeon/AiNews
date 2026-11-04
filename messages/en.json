@@ -289,10 +289,10 @@
     "easyCount": "{count, plural, one {# term} other {# terms}}",
     "easyDetail": "More",
     "easyNote": "Written by AI in plain words, based on the term notes in the source articles.",
-    "storyTitle": "The story so far",
+    "storyTitle": "Company & topic history",
     "storyBeta": "Beta",
-    "storyLensCompany": "Company thread",
-    "storyLensTopic": "Topic thread",
+    "storyLensCompany": "Company history",
+    "storyLensTopic": "Related topic history",
     "storyNow": "This story",
     "storyNote": "A beta feature: AI summarized earlier articles only. Dates are report dates; tap a source to check it."
   },

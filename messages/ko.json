@@ -289,10 +289,10 @@
     "easyCount": "용어 {count}개",
     "easyDetail": "자세히",
     "easyNote": "AI가 기사 속 용어 설명을 바탕으로 쉽게 풀어 쓴 글입니다.",
-    "storyTitle": "지금까지의 이야기",
+    "storyTitle": "회사·관련 주제 히스토리 분석",
     "storyBeta": "시범",
-    "storyLensCompany": "회사 흐름",
-    "storyLensTopic": "주제 흐름",
+    "storyLensCompany": "회사 히스토리",
+    "storyLensTopic": "관련 주제 히스토리",
     "storyNow": "이번 기사",
     "storyNote": "AI가 지난 기사만으로 정리한 시범 기능입니다. 날짜는 보도 날짜이고, 각 줄의 근거 기사를 눌러 확인할 수 있습니다."
   },

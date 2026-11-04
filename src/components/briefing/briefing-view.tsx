@@ -175,7 +175,7 @@ export function TopStoryItem({
         )}
         <Sources refs={s.refs} briefing={briefing} className={compact ? "mt-2" : "mt-3"} />
         <EasyTerms terms={s.easy_terms} locale={briefing.locale} className={compact ? "mt-3" : "mt-3.5 max-w-[40rem]"} />
-        {!compact && <StoryContextBox contexts={s.story_context} className="mt-2.5 max-w-[40rem]" />}
+        {!compact && <StoryContextBox contexts={s.story_context} className="mt-2.5" />}
       </div>
     </li>
   );

@@ -289,10 +289,10 @@
     "easyCount": "{count} 个术语",
     "easyDetail": "详细",
     "easyNote": "由 AI 根据原文中的术语说明改写为通俗语言。",
-    "storyTitle": "来龙去脉",
+    "storyTitle": "公司与相关主题历史分析",
     "storyBeta": "试用",
-    "storyLensCompany": "公司脉络",
-    "storyLensTopic": "主题脉络",
+    "storyLensCompany": "公司历史",
+    "storyLensTopic": "相关主题历史",
     "storyNow": "本次报道",
     "storyNote": "试用功能：由 AI 仅根据过往报道整理。日期为报道日期，可点击来源核对。"
   },
