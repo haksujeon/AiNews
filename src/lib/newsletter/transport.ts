@@ -28,7 +28,17 @@ function gmailTransport(): MailTransport {
   const user = process.env.NEWSLETTER_SMTP_USER;
   const pass = process.env.NEWSLETTER_SMTP_PASS;
   if (!user || !pass) throw new Error("NEWSLETTER_SMTP_USER / NEWSLETTER_SMTP_PASS 가 없습니다 (.env.local)");
-  smtp ??= nodemailer.createTransport({ host: "smtp.gmail.com", port: 465, secure: true, auth: { user, pass } });
+  // 이 서버는 465 가 막혀 있다(2026-11-04 확인) → 587 STARTTLS. requireTLS 로 평문 전송은 거부. 연결이 막히면 오래 걸지 않고 실패로 기록
+  smtp ??= nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: { user, pass },
+    connectionTimeout: 20_000,
+    greetingTimeout: 20_000,
+    socketTimeout: 60_000,
+  });
   const from = { name: process.env.NEWSLETTER_FROM_NAME || "AI 뉴스", address: user };
   return {
     name: "gmail-smtp",
