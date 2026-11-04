@@ -1,5 +1,5 @@
 /**
- * 구독자 아침 메일 보내기 CLI (src/lib/newsletter/send.ts). 예약: crontab 0 22 * * * / 10 0 * * * (UTC = 07:00·09:10 KST)
+ * 구독자 아침 메일 보내기 CLI (src/lib/newsletter/send.ts). 예약: crontab 0 22 * * * / 0 1 * * * (UTC = 07:00·10:00 KST 재시도)
  *
  *   npx tsx scripts/newsletter-send.ts --dry                    # 누구에게 어떤 판이 갈지만 (발송·기록 없음)
  *   npx tsx scripts/newsletter-send.ts [--only a@b.c] [--date 2026-11-03]
