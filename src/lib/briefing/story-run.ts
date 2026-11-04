@@ -136,12 +136,29 @@ export async function ensureStoryContext(
           res.problems.push(`${tag} ${plan.lens}: 엮을 것 없음`);
           continue;
         }
-        const probs = checkStory(out, sel.picked);
+        let final = out;
+        let probs = checkStory(out, sel.picked);
+        if (probs.length) {
+          // 검사에 걸리면 문제 목록을 주고 한 번만 고쳐 쓰게 한다 (데일리 번역의 1회 수리와 같은 방식)
+          const fixed = (await call({
+            effort: "medium",
+            system: SYNTH_SYSTEM,
+            user: `${synthUserPrompt(ed.date, todayTxt, sel.picked)}\n\n이전 답:\n${JSON.stringify(out)}\n\n이전 답의 문제(고쳐서 JSON 전체를 다시):\n${probs.map((p) => `- ${p}`).join("\n")}`,
+            maxTokens: 4000,
+          })) as SynthOut;
+          if (fixed && !fixed.skip) {
+            const again = checkStory(fixed, sel.picked);
+            if (!again.length) {
+              final = fixed;
+              probs = [];
+            } else probs = again;
+          }
+        }
         if (probs.length) {
           res.problems.push(`${tag} ${plan.lens}: ${probs.join(" / ")}`);
           continue;
         }
-        newRows.push(toKoRow(id, plan.lens, sel.threadTitle || plan.topicName || s.subject || s.title, out, sel.picked));
+        newRows.push(toKoRow(id, plan.lens, sel.threadTitle || plan.topicName || s.subject || s.title, final, sel.picked));
         log(`${tag} ${plan.lens} 후보 ${pool.length} → 고름 ${sel.picked.length} → 통과`);
       }
     } catch (e) {
@@ -198,14 +215,24 @@ export async function ensureStoryContext(
   return { ...res, rows: out };
 }
 
-async function dbDeps(): Promise<StoryRunDeps> {
+/** DB·LLM 연결 (시험 스크립트가 일부만 바꿔 쓸 수 있게 export) */
+export async function dbDeps(): Promise<StoryRunDeps> {
   const pool = (await import("@/lib/db")).default;
   const { chat, parseJsonContent, TRANSLATE_MODEL, TRANSLATE_EFFORT, TRANSLATE_FALLBACK_MODEL, TRANSLATE_FALLBACK_EFFORT } = await import("./llm");
   const { PUBLIC_NEWS_WHERE } = await import("@/lib/news-query");
   const run = async (model: string, effort: LlmCall["effort"] | undefined, c: LlmCall) => {
     let cost = 0;
-    const r = await chat({ model, effort, system: c.system, messages: [{ role: "user", content: c.user }], maxTokens: c.maxTokens, timeoutMs: 240_000 }, (u) => (cost += u.costUsd));
-    return { raw: parseJsonContent(r.content), costUsd: cost };
+    // LiteLLM 은 OAuth 토큰이 바뀔 때(약 8시간마다) watchdog 이 프록시를 재시작해 15초쯤 연결이 끊긴다 (2026-11-04 합본 시험에서 3건 실패).
+    // chat() 의 짧은 재시도(2·4초)로는 못 넘기므로 연결 실패만 30초 쉬고 두 번 더 시도한다.
+    for (let i = 0; ; i++) {
+      try {
+        const r = await chat({ model, effort, system: c.system, messages: [{ role: "user", content: c.user }], maxTokens: c.maxTokens, timeoutMs: 240_000 }, (u) => (cost += u.costUsd));
+        return { raw: parseJsonContent(r.content), costUsd: cost };
+      } catch (e) {
+        if (i >= 2 || !/연결 실패/.test((e as Error).message)) throw e;
+        await new Promise((ok) => setTimeout(ok, 30_000));
+      }
+    }
   };
   return {
     loadPublished: async (date) => {

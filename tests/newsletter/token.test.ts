@@ -37,3 +37,9 @@ test("아침 7시에 보낼 판 = currentEdition (화 → 월판, 일 → 금판
   assert.equal(currentEdition(at7("2026-11-09")), "2026-11-07");
   assert.equal(currentEdition(at7("2026-11-07")), "2026-11-06");
 });
+
+test("주말 판 고르기: 토·일 07:00/10:00 = 금요일 판(일요일은 이미 보냄), 월 07:00/10:00 = 토·일 합본", async () => {
+  const kst = (s: string) => new Date(new Date(s + ":00Z").getTime() - 9 * 3600e3);
+  for (const t of ["2026-11-07T07:00", "2026-11-07T10:00", "2026-11-08T07:00", "2026-11-08T10:00"]) assert.equal(currentEdition(kst(t)), "2026-11-06", t);
+  for (const t of ["2026-11-09T07:00", "2026-11-09T10:00"]) assert.equal(currentEdition(kst(t)), "2026-11-07", t);
+});

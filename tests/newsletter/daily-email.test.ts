@@ -62,3 +62,16 @@ test(`HTML 이 ${MAIL_SIZE_LIMIT} 바이트를 넘으면 뒤 기사부터 히스
   assert.match(m.html, /사이트에서 지난 흐름 보기/);
   assert.ok(parts.length >= 6);
 });
+
+test("토·일 합본(월요일 메일)은 '어제' 대신 주말 문구, 날짜는 범위", () => {
+  const b = briefing([undefined]);
+  (b as { edition_date: string; period_end: string }).edition_date = "2026-11-07";
+  (b as { period_end: string }).period_end = "2026-11-08";
+  const m = renderDailyEmail(b, opts);
+  assert.match(m.subject, /11월 7일\(토\)~8일\(일\)/);
+  assert.match(m.html, /지난 주말\(토·일\)/);
+  assert.match(m.html, /주말\(토·일\) 공개 기사 10건 중 5건/);
+  assert.doesNotMatch(m.html, /어제 중국 AI/);
+  const day = renderDailyEmail(briefing([undefined]), opts);
+  assert.match(day.html, /어제 중국 AI 업계/);
+});

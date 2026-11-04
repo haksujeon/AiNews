@@ -52,8 +52,15 @@ const T = {
     sections: "분야별 소식",
     companies: "주목할 기업",
     term: "어제의 용어",
+    // 월요일 아침 토·일 합본 (period_end > edition_date) — "어제"가 아니라 주말
+    weekend: {
+      coverage: (total: number, cited: number) => `주말(토·일) 공개 기사 ${total}건 중 ${cited}건 정리 · AI 작성`,
+      intro: "지난 주말(토·일) 중국 AI 업계에서 있었던 주요 소식을 정리해 드립니다.",
+      numbers: "숫자로 보는 주말",
+      term: "주말의 용어",
+    },
     cta: "사이트에서 브리핑 전체 보기",
-    footReason: (e: string) => `${e} 주소로 '중국 AI 데일리'를 구독하셔서 보내 드리는 메일입니다. 매일 아침 7시(한국 시각)에 전날 소식을 보냅니다.`,
+    footReason: (e: string) => `${e} 주소로 '중국 AI 데일리'를 구독하셔서 보내 드리는 메일입니다. 매일 아침 7시(한국 시각)에 전날 소식을 보냅니다(월요일은 토·일 합본).`,
     footAi: "브리핑은 공개된 중국 매체 보도를 바탕으로 AI가 작성하고, 숫자·인용은 근거 기사와 대조해 검사합니다.",
     unsub: "수신 거부",
     unsubNote: "열리는 화면에서 버튼 한 번으로 발송을 멈출 수 있습니다.",
@@ -88,8 +95,14 @@ const T = {
     sections: "分领域动态",
     companies: "值得关注的公司",
     term: "昨日术语",
+    weekend: {
+      coverage: (total: number, cited: number) => `从周末（周六、周日）${total} 篇公开报道中整理 ${cited} 篇 · AI撰写`,
+      intro: "为您整理上周末（周六、周日）中国AI行业的主要动态。",
+      numbers: "数字看周末",
+      term: "周末术语",
+    },
     cta: "在网站上阅读完整简报",
-    footReason: (e: string) => `您以 ${e} 订阅了“中国AI日报”，因此收到本邮件。每天早上7点（韩国时间）发送前一天的动态。`,
+    footReason: (e: string) => `您以 ${e} 订阅了“中国AI日报”，因此收到本邮件。每天早上7点（韩国时间）发送前一天的动态（周一为周六、周日合刊）。`,
     footAi: "简报由 AI 根据公开的中国媒体报道撰写，数字和引用均与来源文章核对。",
     unsub: "退订",
     unsubNote: "在打开的页面上点击一次按钮即可停止发送。",
@@ -124,8 +137,14 @@ const T = {
     sections: "By sector",
     companies: "Companies to watch",
     term: "Term of the day",
+    weekend: {
+      coverage: (total: number, cited: number) => `${cited} of ${total} public articles from the weekend (Sat–Sun) · AI-written`,
+      intro: "Here is what happened in China's AI industry over the weekend.",
+      numbers: "The weekend in numbers",
+      term: "Term of the weekend",
+    },
     cta: "Read the full briefing on the site",
-    footReason: (e: string) => `You receive this because ${e} subscribed to China AI Daily. It arrives every morning at 7:00 KST with the previous day's news.`,
+    footReason: (e: string) => `You receive this because ${e} subscribed to China AI Daily. It arrives every morning at 7:00 KST with the previous day's news (Mondays: Sat–Sun combined).`,
     footAi: "Written by AI from public Chinese media reports; numbers and quotes are checked against the source articles.",
     unsub: "Unsubscribe",
     unsubNote: "One button on the page that opens stops all emails.",
@@ -235,7 +254,10 @@ export function renderDailyEmail(b: PublicBriefing, opts: DailyEmailOptions): Da
 
 /** fullUpTo: 앞에서 몇 번째 기사까지 히스토리를 요약형으로 (나머지는 한 줄) */
 function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number): DailyEmail {
-  const t = T[b.locale];
+  const base = T[b.locale];
+  // 토·일 합본(월요일 아침 메일)은 "어제" 대신 주말 문구 (판 범위 = period_start~period_end, sla.ts)
+  const weekend = !!b.period_end && b.period_end !== b.edition_date;
+  const t = weekend ? { ...base, ...base.weekend } : base;
   const c = b.content;
   const dateLabel = editionDateLabel(b.locale, b.edition_date, b.period_end);
   const briefingUrl = absoluteUrl(b.locale, `/briefing/${b.edition_date}`);
