@@ -294,6 +294,7 @@
     "storyLensCompany": "회사 히스토리",
     "storyLensTopic": "관련 주제 히스토리",
     "storyNow": "이번 기사",
+    "storyCollapse": "접기",
     "storyNote": "AI가 지난 기사만으로 정리한 시범 기능입니다. 날짜는 보도 날짜이고, 각 줄의 근거 기사를 눌러 확인할 수 있습니다."
   },
   "briefingAdmin": {

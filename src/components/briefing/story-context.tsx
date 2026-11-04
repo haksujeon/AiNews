@@ -2,6 +2,8 @@ import { useTranslations } from "next-intl";
 import { ChevronDown } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { getSourceName } from "@/lib/news-utils";
+import { DetailsCollapse } from "./details-collapse";
 import type { StoryContext } from "@/lib/briefing/types";
 
 /**
@@ -26,10 +28,11 @@ export function StoryContextBox({ contexts, className }: { contexts?: StoryConte
       <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 py-2 text-[14px] font-[650] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
         <span className="shrink-0">{t("storyTitle")}</span>
         <span className="shrink-0 whitespace-nowrap rounded-[3px] border border-rule-strong/40 px-1.5 py-px text-[11px] font-semibold text-ink-3">{t("storyBeta")}</span>
-        <span className="ml-auto min-w-0 truncate text-[12.5px] font-normal text-ink-3" aria-hidden="true">
+        {/* 미리보기는 휴대폰에서 "De…" 처럼 잘려 의미가 없어 숨긴다 (쉬운 AI 설명 상자와 같게) */}
+        <span className="ml-auto min-w-0 truncate text-[12.5px] font-normal text-ink-3 max-sm:hidden" aria-hidden="true">
           <span className="group-open:hidden">{contexts.map((c) => c.title).join(" · ")}</span>
         </span>
-        <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+        <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 max-sm:ml-auto transition-transform group-open:rotate-180 motion-reduce:transition-none" />
       </summary>
       <div className={cn("grid border-t border-rule", contexts.length > 1 && "md:grid-cols-2")}>
         {contexts.map((c, i) => (
@@ -58,9 +61,10 @@ export function StoryContextBox({ contexts, className }: { contexts?: StoryConte
                         <Link
                           key={r.id}
                           href={`/news/${r.id}`}
-                          className="min-w-0 max-w-full truncate rounded-sm underline decoration-rule-strong/40 underline-offset-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="min-w-0 max-w-full truncate rounded-sm py-0.5 underline max-sm:py-1.5 decoration-rule-strong/40 underline-offset-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          {r.source} · {r.title}
+                          {/* 매체 이름은 다른 곳과 같은 원어 표기 (36Kr → 36氪) */}
+                          {getSourceName(r.source)} · {r.title}
                         </Link>
                       ))}
                     </p>
@@ -76,7 +80,10 @@ export function StoryContextBox({ contexts, className }: { contexts?: StoryConte
           </section>
         ))}
       </div>
-      <p className="border-t border-rule px-4 pb-3 pt-2 text-[12px] leading-[1.55] text-ink-3">{t("storyNote")}</p>
+      <div className="flex items-start justify-between gap-3 border-t border-rule pb-1 pl-4 pr-2 pt-2">
+        <p className="pb-2 text-[12px] leading-[1.55] text-ink-3">{t("storyNote")}</p>
+        <DetailsCollapse label={t("storyCollapse")} />
+      </div>
     </details>
   );
 }

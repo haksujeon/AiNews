@@ -190,7 +190,7 @@ function KeyNumbers({ briefing, variant }: { briefing: PublicBriefing; variant: 
     return (
       <section aria-label={t("keyNumbers")} className="mt-6 lg:hidden">
         <h2 className="mb-2 text-xs font-semibold text-ink-3">{t("keyNumbers")}</h2>
-        <ul className="-mx-4 flex snap-x gap-0 overflow-x-auto px-4 pb-2 [scrollbar-width:none]" data-testid="key-number-strip">
+        <ul className="-mx-4 flex snap-x scroll-px-4 gap-0 overflow-x-auto px-4 pb-2 [scrollbar-width:none]" data-testid="key-number-strip">
           {nums.map((k, i) => (
             <li key={i} className="w-[46%] min-w-[150px] shrink-0 snap-start border-l border-rule pl-3 pr-3 first:border-l-0 first:pl-0">
               <p className="text-[22px] font-[740] leading-tight tracking-[-0.02em] text-ink">{k.value}</p>
@@ -214,6 +214,38 @@ function KeyNumbers({ briefing, variant }: { briefing: PublicBriefing; variant: 
         ))}
       </ul>
     </section>
+  );
+}
+
+/**
+ * 주요 기사 목차 ("주요 N건"). 데스크톱은 머리 오른쪽 칸, 휴대폰은 리드 아래 — 같은 부품 (Gate 2).
+ * inline(휴대폰): 제목 한 줄씩 말줄임, 줄마다 44px 누름 영역.
+ */
+function StoryToc({ briefing, variant = "rail", className }: { briefing: PublicBriefing; variant?: "rail" | "inline"; className?: string }) {
+  const t = useTranslations("briefing");
+  const stories = briefing.content.top_stories;
+  if (!stories.length) return null;
+  const inline = variant === "inline";
+  return (
+    <nav aria-label={t("tocTitle", { count: stories.length })} className={cn("text-sm", className)} data-testid={inline ? "briefing-toc-inline" : "briefing-toc"}>
+      <h2 className="mb-2 text-xs font-[650] tracking-[0.04em] text-ink-3">{t("tocTitle", { count: stories.length })}</h2>
+      <ol>
+        {stories.map((s) => (
+          <li key={s.rank} className={cn("flex gap-2.5 border-t border-rule leading-[1.45]", inline ? "items-center" : "py-1.5")}>
+            <span className="min-w-[1em] font-bold text-ink-3">{s.rank}</span>
+            <a
+              href={`#story-${s.rank}`}
+              className={cn(
+                "rounded-sm text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                inline && "flex min-h-11 min-w-0 flex-1 items-center"
+              )}
+            >
+              {inline ? <span className="truncate">{s.title}</span> : s.title}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
@@ -241,24 +273,12 @@ export function BriefingView({ briefing, pager }: Props) {
           </h1>
           <p className="mt-4 max-w-[40rem] text-[17px] font-medium leading-[1.75] text-ink-2 sm:text-[19px]">{c.lede}</p>
           <Sources refs={c.lede_refs} briefing={briefing} className="mt-2.5" />
+          {/* 휴대폰·태블릿: 첫 화면에 기사 제목이 하나도 없던 것 (UI 검토 2026-11-04) → 오른쪽 목차와 같은 부품을 리드 아래에 */}
+          <StoryToc briefing={briefing} variant="inline" className="mt-5 lg:hidden" />
           <AiLabel className="mt-4" />
           <KeyNumbers briefing={briefing} variant="strip" />
         </div>
-        {c.top_stories.length > 0 && (
-          <nav aria-label={t("tocTitle", { count: c.top_stories.length })} className="hidden border-l border-rule pl-5 text-sm lg:block">
-            <h2 className="mb-2 text-xs font-[650] tracking-[0.04em] text-ink-3">{t("tocTitle", { count: c.top_stories.length })}</h2>
-            <ol>
-              {c.top_stories.map((s) => (
-                <li key={s.rank} className="flex gap-2.5 border-t border-rule py-1.5 leading-[1.45]">
-                  <span className="min-w-[1em] font-bold text-ink-3">{s.rank}</span>
-                  <a href={`#story-${s.rank}`} className="rounded-sm text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    {s.title}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </nav>
-        )}
+        <StoryToc briefing={briefing} className="hidden border-l border-rule pl-5 lg:block" />
       </header>
 
       <DataNotice briefing={briefing} className="mt-[18px]" />

@@ -99,7 +99,8 @@ export function RouteModalShell({ open, onOpenChange, children, stickyHeader, cl
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         {...rest}
-        showCloseButton={!stickyHeader}
+        // 기본 닫기(shadcn, 16px)는 쓰지 않는다 — 머리 줄이 없는 팝업(기사)도 아래의 44px 버튼 (UI 검토 2026-11-04, Gate 2)
+        showCloseButton={false}
         closeLabel={t("close")}
         onOpenAutoFocus={captureOrigin}
         onCloseAutoFocus={(e) => {
@@ -122,6 +123,18 @@ export function RouteModalShell({ open, onOpenChange, children, stickyHeader, cl
             <div className="min-w-0">{stickyHeader}</div>
             <DialogClose
               className="grid size-11 shrink-0 place-items-center rounded-sm text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-testid="modal-close"
+            >
+              <XIcon className="size-5" aria-hidden="true" />
+              <span className="sr-only">{t("close")}</span>
+            </DialogClose>
+          </div>
+        )}
+        {!stickyHeader && (
+          // 높이 0 의 sticky 줄: 스크롤해도 오른쪽 위에 남고, 썸네일 위에서도 보이게 반투명 바탕
+          <div className="pointer-events-none sticky top-0 z-10 flex h-0 shrink-0 justify-end">
+            <DialogClose
+              className="pointer-events-auto mr-2 mt-2 grid size-11 place-items-center rounded-full bg-background/85 text-ink-2 shadow-sm backdrop-blur-sm hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="modal-close"
             >
               <XIcon className="size-5" aria-hidden="true" />

@@ -27,12 +27,13 @@ export function EasyTerms({ terms, locale, tone = "light", className }: { terms?
           dark ? "text-jade-bright focus-visible:ring-jade-bright" : "text-jade focus-visible:ring-ring"
         )}
       >
-        <span>{t("easyTitle")}</span>
-        <span className={cn("text-[12.5px] font-normal", dark ? "text-white/60" : "text-ink-3")}>{t("easyCount", { count: terms.length })}</span>
-        <span className={cn("ml-auto min-w-0 truncate text-[12.5px] font-normal", dark ? "text-white/60" : "text-ink-3")} aria-hidden="true">
+        {/* 360px 폭에서 제목이 두 줄로 꺾이던 것 (UI 검토 2026-11-04) → 제목·개수는 줄바꿈하지 않고, 휴대폰은 미리보기를 숨긴다 */}
+        <span className="shrink-0 whitespace-nowrap">{t("easyTitle")}</span>
+        <span className={cn("shrink-0 whitespace-nowrap text-[12.5px] font-normal", dark ? "text-white/60" : "text-ink-3")}>{t("easyCount", { count: terms.length })}</span>
+        <span className={cn("ml-auto min-w-0 truncate text-[12.5px] font-normal max-sm:hidden", dark ? "text-white/60" : "text-ink-3")} aria-hidden="true">
           <span className="group-open:hidden">{terms.map((x) => x.name).join(" · ")}</span>
         </span>
-        <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+        <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 max-sm:ml-auto transition-transform group-open:rotate-180 motion-reduce:transition-none" />
       </summary>
       <ul className={cn("border-t px-3.5 pb-3", dark ? "border-white/10" : "border-jade/20")}>
         {terms.map((x) => (

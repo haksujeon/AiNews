@@ -223,6 +223,11 @@
   [lang|="zh"] {
     word-break: normal;
   }
+  /* 다만 중국어 제목은 normal 이면 "创造模 / 式" 처럼 낱말 중간에서 끊긴다 (UI 검토 2026-11-04).
+     제목만 keep-all → "，" "：" 공백에서 끊긴다. 아주 긴 한자열은 body 의 overflow-wrap:anywhere 가 받친다 */
+  :is(h1, h2, h3, h4):lang(zh) {
+    word-break: keep-all;
+  }
   h1,
   h2,
   h3,

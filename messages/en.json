@@ -294,6 +294,7 @@
     "storyLensCompany": "Company history",
     "storyLensTopic": "Related topic history",
     "storyNow": "This story",
+    "storyCollapse": "Collapse",
     "storyNote": "A beta feature: AI summarized earlier articles only. Dates are report dates; tap a source to check it."
   },
   "briefingAdmin": {
