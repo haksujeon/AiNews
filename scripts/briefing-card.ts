@@ -1,7 +1,8 @@
 /**
  * "한 장 요약" 카드 만들기 — 그림 명세(LLM + 코드 검사) → 카드 화면 캡처(Playwright) → briefing_media 에 검토 중으로 등록.
  *
- *   npx tsx scripts/briefing-card.ts --date 2026-11-04 [--locale ko] [--base http://localhost:3012] [--render-only] [--no-register]
+ *   npx tsx scripts/briefing-card.ts [--date 2026-11-04] [--locale ko] [--base http://localhost:3012] [--render-only] [--no-register] [--approve]
+ * --date 가 없으면 그 언어의 최신 발행 판.
  *
  * --render-only: 이미 있는 card-spec.json 으로 다시 찍기만 (LLM 호출 없음).
  * 카드 화면: /ainews/{locale}/briefing/{date}/card (card-spec.json 이 있어야 열린다). 운영 서버(3012)가 새 코드를 돌고 있어야 한다.
@@ -21,10 +22,10 @@ const flag = (name: string) => process.argv.includes(`--${name}`);
 async function main() {
   loadEnvConfig(process.cwd());
   process.env.NEXT_PUBLIC_BASE_PATH ??= "/ainews";
-  const date = arg("date");
+  const dateArg = arg("date");
   const locale = (arg("locale") ?? "ko") as "ko" | "en" | "zh";
   const base = (arg("base") ?? "http://localhost:3012").replace(/\/$/, "");
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("--date YYYY-MM-DD 가 필요합니다");
+  if (dateArg !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(dateArg)) throw new Error("--date YYYY-MM-DD");
 
   const { default: pool } = await import("../src/lib/db");
   const { getPublishedBriefing } = await import("../src/lib/briefing/public");
@@ -33,8 +34,14 @@ async function main() {
   const { chat, parseJsonContent, BRIEFING_MODEL } = await import("../src/lib/briefing/llm");
   const { registerMedia } = await import("../src/lib/briefing/media-register");
   try {
-    const b = await getPublishedBriefing(locale, date);
-    if (!b) throw new Error(`${date} ${locale} 발행본이 없습니다`);
+    const b = await getPublishedBriefing(locale, dateArg);
+    if (!b) throw new Error(`${dateArg ?? "최신"} ${locale} 발행본이 없습니다`);
+    const date = b.edition_date;
+    const { getMediaRow } = await import("../src/lib/briefing/media-store");
+    if ((await getMediaRow(date, locale, "card"))?.status === "approved" && !flag("force")) {
+      console.log(`${date} ${locale} 승인된 카드가 이미 있음 — 건너뜀 (--force 로 다시)`);
+      return;
+    }
     const specFile = cardSpecPath(date, locale);
     if (!specFile) throw new Error("명세 경로");
 
@@ -85,6 +92,12 @@ async function main() {
         note: spec.dropped.length ? `검사에서 버림: ${spec.dropped.join(" | ")}`.slice(0, 900) : undefined,
       });
       console.log(`등록(검토 중): ${r.abs} ${r.width}×${r.height}`);
+      // 카드의 숫자는 모두 검사를 통과한 것뿐이라(검사 실패 그림은 이미 버림) 자동 승인해도 된다
+      if (flag("approve")) {
+        const { setMediaStatus } = await import("../src/lib/briefing/media-register");
+        await setMediaStatus(date, locale, "card", "approved");
+        console.log("승인");
+      }
     }
   } finally {
     await pool.end();

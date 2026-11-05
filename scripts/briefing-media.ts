@@ -45,12 +45,9 @@ async function main() {
 
     if (cmd === "approve" || cmd === "reject" || cmd === "review") {
       const status = cmd === "approve" ? "approved" : cmd === "reject" ? "rejected" : "review";
-      const { rowCount } = await pool.query(
-        `UPDATE briefing_media SET status = $4, note = COALESCE($5, note), approved_at = CASE WHEN $4 = 'approved' THEN now() ELSE NULL END
-          WHERE edition_date = $1::date AND locale = $2 AND kind = $3`,
-        [date, locale, kind, status, arg("note") ?? null]
-      );
-      console.log(rowCount ? `${date} ${locale} ${kind} → ${status}` : "해당 줄 없음");
+      const { setMediaStatus } = await import("../src/lib/briefing/media-register");
+      const ok = await setMediaStatus(date, locale as "ko" | "en" | "zh", kind, status, arg("note"));
+      console.log(ok ? `${date} ${locale} ${kind} → ${status}` : "해당 줄 없음");
       return;
     }
 

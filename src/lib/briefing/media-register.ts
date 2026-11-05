@@ -99,3 +99,19 @@ export async function registerMedia(input: RegisterInput): Promise<RegisterResul
   );
   return { abs, bytes, chapters, width, height, duration };
 }
+
+/** 상태 바꾸기 (승인·반려·검토 중). 관리 스크립트와 자동 생성(통과 시 승인)이 같은 함수 */
+export async function setMediaStatus(
+  date: string,
+  locale: BriefingLocale,
+  kind: MediaKind,
+  status: "review" | "approved" | "rejected",
+  note?: string
+): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE briefing_media SET status = $4, note = COALESCE($5, note), approved_at = CASE WHEN $4 = 'approved' THEN now() ELSE NULL END
+      WHERE edition_date = $1::date AND locale = $2 AND kind = $3`,
+    [date, locale, kind, status, note ?? null]
+  );
+  return (rowCount ?? 0) > 0;
+}

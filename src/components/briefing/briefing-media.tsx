@@ -294,7 +294,8 @@ export function ListenBar({ className }: { className?: string }) {
         )}
         <span>{t("aiVoiceNote")}</span>
       </div>
-      {a.audio.transcript && (
+      {/* 받아쓰기는 기계 받아쓰기라 오자(고유명사 등)가 있다 — 사람이 고치기 전까지는 검토 화면에서만 보인다 */}
+      {a.audio.transcript && a.audio.status === "review" && (
         <details className="mt-1.5 text-[13px] text-ink-2">
           <summary className="inline-flex min-h-8 cursor-pointer items-center text-ink-2 underline decoration-rule underline-offset-4 hover:decoration-ink-2">
             {t("transcript")}
