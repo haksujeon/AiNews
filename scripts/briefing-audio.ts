@@ -1,7 +1,8 @@
 /**
  * 브리핑 음성 만들기 (NotebookLM brief, 사용자 결정 2026-11-05) — 자료 올리기 → 음성 생성 → 받아쓰기 → 숫자 대조 → 등록.
  *
- *   npx tsx scripts/briefing-audio.ts [--date 2026-11-04] [--locale ko] [--attempts 3] [--approve-on-pass] [--dry]
+ *   npx tsx scripts/briefing-audio.ts [--date 2026-11-04] [--locale ko] [--attempts 3] [--approve-on-pass] [--dry] [--force] [--recheck]
+ * --recheck: 새로 만들지 않고 등록된 음성을 다시 받아써 대조 (받아쓰기 한도·오인식으로 실패했을 때).
  *
  * --date 가 없으면 그 언어의 최신 발행 판. 숫자 대조(audio-check.ts checkTranscript)를 통과할 때까지 최대 --attempts 번 다시 만든다.
  * 통과하지 못하면 숫자가 가장 덜 틀린 것을 검토 중(review)으로 남긴다 (공개 화면에 안 보임). 통과 + --approve-on-pass 면 바로 승인.
@@ -11,7 +12,7 @@
  */
 import { loadEnvConfig } from "@next/env";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -43,7 +44,7 @@ function notebookId(): string {
   return id;
 }
 
-async function transcribe(file: string): Promise<unknown> {
+async function transcribe(file: string, preferLite = false): Promise<unknown> {
   const { parseJsonContent } = await import("../src/lib/briefing/llm");
   const { TRANSCRIBE_PROMPT } = await import("../src/lib/briefing/audio-check");
   const base = (process.env.LITELLM_BASE_URL ?? "").replace(/\/+$/, "");
@@ -53,7 +54,8 @@ async function transcribe(file: string): Promise<unknown> {
   execFileSync("ffmpeg", ["-y", "-v", "error", "-i", file, "-ac", "1", "-ar", "16000", "-b:a", "32k", small]);
   const data = readFileSync(small).toString("base64");
   // 한도(429)·서버 오류면 다음 모델로 (gemini-2.5-flash 무료 한도가 하루에 막힐 수 있다 — 2026-11-05 실측)
-  const models = [...new Set([process.env.BRIEFING_TRANSCRIBE_MODEL || "gemini-2.5-flash", "gemini-2.5-flash-lite"])];
+  const base2 = [process.env.BRIEFING_TRANSCRIBE_MODEL || "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+  const models = [...new Set(preferLite ? [...base2].reverse() : base2)];
   let last = "";
   for (const model of models) {
     const res = await fetch(`${base}/v1/chat/completions`, {
@@ -74,6 +76,36 @@ async function transcribe(file: string): Promise<unknown> {
     log(`  받아쓰기 실패 ${last}`);
   }
   throw new Error(`받아쓰기 실패 — ${last}`);
+}
+
+type AC = typeof import("../src/lib/briefing/audio-check");
+
+/** 받아쓰기 → 대조. 모르는 숫자가 있으면 한 번 더 받아써 양쪽에 다 나온 것만 오류로 본다 (confirmedUnknown) */
+async function verify(mp3: string, source: string, storyCount: number, ac: AC): Promise<Omit<Attempt, "n" | "mp3">> {
+  const dur = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp3]).toString().trim());
+  const once = async (preferLite: boolean) => {
+    const transcript = ac.transcriptText(ac.retimeByLength(ac.linesFromJson(await transcribe(mp3, preferLite)), dur));
+    return { transcript, chk: ac.checkTranscript(transcript, source, storyCount) };
+  };
+  let first;
+  try {
+    first = await once(false);
+  } catch (e) {
+    log(`  ${(e as Error).message}`);
+    return { transcript: "", unknown: ["(받아쓰기 실패)"], chaptersFound: 0, ok: false };
+  }
+  let unknown = first.chk.unknownNumbers;
+  if (unknown.length) {
+    try {
+      const second = await once(true);
+      log(`  두 번째 받아쓰기: 모르는 숫자 [${second.chk.unknownNumbers.join(", ")}]`);
+      unknown = ac.confirmedUnknown(unknown, second.chk.unknownNumbers);
+    } catch (e) {
+      log(`  두 번째 받아쓰기 실패: ${(e as Error).message}`);
+    }
+  }
+  const ok = unknown.length === 0 && first.chk.chaptersFound === storyCount;
+  return { transcript: first.transcript, unknown, chaptersFound: first.chk.chaptersFound, ok };
 }
 
 interface Attempt {
@@ -116,15 +148,29 @@ async function main() {
       return;
     }
 
-    nb = notebookId();
-    const added = nlmJson<{ id?: string; source_id?: string; source?: { id: string } }>(["source", "add", "-n", nb, srcFile]);
-    sid = added.id ?? added.source_id ?? added.source?.id ?? "";
-    if (!sid) throw new Error("자료를 올리지 못했습니다");
-    log(`노트북 ${nb.slice(0, 8)} 자료 ${sid.slice(0, 8)} — 처리 대기`);
-    await new Promise((r) => setTimeout(r, 25_000));
-
     const tries: Attempt[] = [];
-    for (let n = 1; n <= attempts; n++) {
+    // --recheck: 새로 만들지 않고 이미 등록된 음성을 다시 대조 (받아쓰기 쪽 문제로 실패했을 때)
+    if (flag("recheck")) {
+      const { mediaFilePath } = await import("../src/lib/briefing/media-store");
+      const f = existing ? mediaFilePath(existing.path) : null;
+      if (!f) throw new Error(`${date} ${locale} 등록된 음성이 없습니다`);
+      const mp3 = join(work, "recheck.mp3");
+      copyFileSync(f, mp3);
+      const v = await verify(mp3, source, b.content.top_stories.length, ac);
+      tries.push({ n: 1, mp3, ...v });
+      log(`  다시 대조: 모르는 숫자 [${v.unknown.join(", ")}] · 장 ${v.chaptersFound}/${b.content.top_stories.length}${v.ok ? " · 통과" : ""}`);
+    }
+
+    if (!tries.length) nb = notebookId();
+    if (nb) {
+      const added = nlmJson<{ id?: string; source_id?: string; source?: { id: string } }>(["source", "add", "-n", nb, srcFile]);
+      sid = added.id ?? added.source_id ?? added.source?.id ?? "";
+      if (!sid) throw new Error("자료를 올리지 못했습니다");
+      log(`노트북 ${nb.slice(0, 8)} 자료 ${sid.slice(0, 8)} — 처리 대기`);
+      await new Promise((r) => setTimeout(r, 25_000));
+    }
+
+    for (let n = 1; nb && n <= attempts; n++) {
       log(`시도 ${n}/${attempts}: 음성 생성`);
       // 생성 요청과 완료 대기를 나눈다: generate --wait 는 기본 300초에서 끊기는데 음성은 그보다 오래 걸린다 (2026-11-05 실측)
       let taskId = "";
@@ -163,21 +209,11 @@ async function main() {
       } catch {
         /* 지우기 실패는 무시 (노트북에 남을 뿐) */
       }
-      let rawTx: unknown;
-      try {
-        rawTx = await transcribe(mp3);
-      } catch (e) {
-        // 받아쓰기를 못 하면 대조할 수 없다 — 다시 만들어도 같으므로 멈추고 이 음성을 검토 중으로 남긴다
-        tries.push({ n, mp3, transcript: "", unknown: ["(받아쓰기 실패)"], chaptersFound: 0, ok: false });
-        log(`  ${(e as Error).message}`);
-        break;
-      }
-      const lines = ac.linesFromJson(rawTx);
-      const transcript = ac.transcriptText(lines);
-      const chk = ac.checkTranscript(transcript, source, b.content.top_stories.length);
-      tries.push({ n, mp3, transcript, unknown: chk.unknownNumbers, chaptersFound: chk.chaptersFound, ok: chk.ok });
-      log(`  대조: 모르는 숫자 [${chk.unknownNumbers.join(", ")}] · 장 ${chk.chaptersFound}/${chk.storyCount}${chk.ok ? " · 통과" : ""}`);
-      if (chk.ok) break;
+      const v = await verify(mp3, source, b.content.top_stories.length, ac);
+      tries.push({ n, mp3, ...v });
+      if (v.transcript === "") break; // 받아쓰기를 못 하면 다시 만들어도 같다 — 이 음성을 검토 중으로 남긴다
+      log(`  대조: 모르는 숫자 [${v.unknown.join(", ")}] · 장 ${v.chaptersFound}/${b.content.top_stories.length}${v.ok ? " · 통과" : ""}`);
+      if (v.ok) break;
     }
     if (!tries.length) throw new Error("음성을 하나도 만들지 못했습니다");
 

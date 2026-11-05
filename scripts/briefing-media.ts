@@ -6,6 +6,7 @@
  *        --source notebooklm-brief [--transcript brief.txt]
  *   npx tsx scripts/briefing-media.ts add --date 2026-11-04 --locale ko --kind card --file card.png --source card-v1
  *   npx tsx scripts/briefing-media.ts approve|reject|review --date 2026-11-04 --locale ko --kind audio [--note "…"]
+ *   npx tsx scripts/briefing-media.ts retime --date 2026-11-04 --locale ko --kind audio   # 장 시각을 글자 수 비율로 다시
  *
  * add 는 언제나 검토 중(review)으로 넣는다 — 공개 화면에는 승인(approve)한 뒤에만 보인다. 관리자 검토 화면에서는 바로 보인다.
  * 등록은 src/lib/briefing/media-register.ts registerMedia (자동 카드 scripts/briefing-card.ts 와 같은 함수).
@@ -42,6 +43,13 @@ async function main() {
     const locale = need("locale");
     const kind = need("kind") as "audio" | "card";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !["ko", "en", "zh"].includes(locale) || !["audio", "card"].includes(kind)) throw new Error("date·locale·kind 형식");
+
+    if (cmd === "retime") {
+      const { retimeAudio } = await import("../src/lib/briefing/media-register");
+      const ch = await retimeAudio(date, locale as "ko" | "en" | "zh");
+      console.log(ch ? `장 다시 매김: ${JSON.stringify(ch)}` : "받아쓰기·길이가 없음");
+      return;
+    }
 
     if (cmd === "approve" || cmd === "reject" || cmd === "review") {
       const status = cmd === "approve" ? "approved" : cmd === "reject" ? "rejected" : "review";

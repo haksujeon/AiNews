@@ -115,3 +115,27 @@ export async function setMediaStatus(
   );
   return (rowCount ?? 0) > 0;
 }
+
+/** 저장된 음성의 받아쓰기 시각을 글자 수 비율로 다시 매기고 장(챕터)을 다시 찾는다 (audio-check.ts retimeByLength) */
+export async function retimeAudio(date: string, locale: BriefingLocale): Promise<MediaChapter[] | null> {
+  const { linesFromTranscript, retimeByLength, transcriptText } = await import("./audio-check");
+  const { rows } = await pool.query(
+    `SELECT transcript, duration_sec FROM briefing_media WHERE edition_date = $1::date AND locale = $2 AND kind = 'audio'`,
+    [date, locale]
+  );
+  const r = rows[0] as { transcript: string | null; duration_sec: string | null } | undefined;
+  if (!r?.transcript || !r.duration_sec) return null;
+  const { rows: br } = await pool.query(
+    `SELECT jsonb_array_length(content->'top_stories') AS n FROM daily_briefings WHERE edition_type = 'daily' AND edition_date = $1::date AND locale = $2 AND status = 'published'`,
+    [date, locale]
+  );
+  const tx = transcriptText(retimeByLength(linesFromTranscript(r.transcript), Number(r.duration_sec)));
+  const chapters = chaptersFromTranscript(tx, Number(br[0]?.n ?? 0));
+  await pool.query(`UPDATE briefing_media SET transcript = $3, chapters = $4::jsonb WHERE edition_date = $1::date AND locale = $2 AND kind = 'audio'`, [
+    date,
+    locale,
+    tx,
+    JSON.stringify(chapters),
+  ]);
+  return chapters;
+}

@@ -1,7 +1,7 @@
 /** NotebookLM 음성 숫자 대조 (audio-check.ts) — 시험에서 나온 실제 오류("1,070억"·"iOS 18.2")를 잡는다 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { audioSourceMarkdown, checkTranscript, linesFromJson, transcriptText } from "../../src/lib/briefing/audio-check";
+import { audioSourceMarkdown, checkTranscript, confirmedUnknown, linesFromJson, linesFromTranscript, retimeByLength, transcriptText } from "../../src/lib/briefing/audio-check";
 
 const SOURCE = `### 5. Anthropic, 3분기 영업손실 5억 6700만 달러로 적자 전환
 무슨 일: 3분기 매출은 약 170억 달러로 전분기 대비 47% 늘었고 컴퓨팅 약정은 약 8954억 달러다.
@@ -51,4 +51,15 @@ test("자료는 그 판 내용만 (주요 기사 what·why, 숫자, 그 밖의 �
   assert.match(md, /- 8시간: 작업/);
   assert.match(md, /- C: Z/);
   assert.doesNotMatch(md, /story_context|timeline/);
+});
+
+test("시각은 글자 수 비율로 다시 매긴다 (뭉개진 받아쓰기 시각 대신)", () => {
+  const lines = [{ t: 0, text: "가".repeat(10) }, { t: 59, text: "나".repeat(30) }, { t: 59, text: "다".repeat(60) }];
+  assert.deepEqual(retimeByLength(lines, 100).map((l) => l.t), [0, 10, 40]);
+  assert.deepEqual(linesFromTranscript("A: 0:00 인사\nA: 1:05 둘째\n잡음"), [{ t: 0, text: "인사" }, { t: 65, text: "둘째" }]);
+});
+
+test("두 번 받아써 양쪽에 다 나온 숫자만 오류로 본다", () => {
+  assert.deepEqual(confirmedUnknown(["89500000000", "1070"], ["1070", "5"]), ["1070"]);
+  assert.deepEqual(confirmedUnknown(["89500000000"], []), []);
 });

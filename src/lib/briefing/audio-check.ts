@@ -47,6 +47,31 @@ export function linesFromJson(raw: unknown): TranscriptLine[] {
   return out;
 }
 
+/**
+ * 줄 시각을 글자 수 비율로 다시 매긴다 (한 사람이 고른 속도로 읽는 brief 음성).
+ * 받아쓰기 모델의 시각은 1분 넘어가면 뭉개지는 일이 있다(2026-11-05: 1분 이후 전부 0:59). 비율 추정은 실측과 1초 안팎.
+ */
+export function retimeByLength(lines: TranscriptLine[], durationSec: number): TranscriptLine[] {
+  const total = lines.reduce((n, l) => n + l.text.length, 0);
+  if (!total || !(durationSec > 0)) return lines;
+  let acc = 0;
+  return lines.map((l) => {
+    const t = Math.floor((durationSec * acc) / total);
+    acc += l.text.length;
+    return { t, text: l.text };
+  });
+}
+
+/** "A: 0:24 문장" 글 → 줄 (저장된 받아쓰기를 다시 매길 때) */
+export function linesFromTranscript(transcript: string): TranscriptLine[] {
+  const out: TranscriptLine[] = [];
+  for (const line of transcript.split(/\r?\n/)) {
+    const m = /^\s*[A-Z]\s*:\s*(\d+):(\d{2})\s+(.*)$/.exec(line);
+    if (m && m[3].trim()) out.push({ t: Number(m[1]) * 60 + Number(m[2]), text: m[3].trim() });
+  }
+  return out;
+}
+
 /** 저장·장 찾기용 글 ("A: 0:24 문장" 한 줄씩 — chaptersFromTranscript 가 읽는 꼴) */
 export function transcriptText(lines: TranscriptLine[]): string {
   return lines.map((l) => `A: ${formatClock(l.t)} ${l.text}`).join("\n");
@@ -79,3 +104,13 @@ export function checkTranscript(transcript: string, source: string, storyCount: 
 export const TRANSCRIBE_PROMPT =
   "이 한국어 뉴스 음성을 빠짐없이 받아써라. 들리는 그대로 적고 고치지 말 것(숫자도 들리는 그대로 아라비아 숫자로). " +
   'JSON 하나만 출력: {"lines":[{"t":문장이 시작하는 초(정수),"text":"문장"}]}. 한 문장이 한 항목.';
+
+/**
+ * 두 번 받아쓴 결과에서 "양쪽 모두에 나온" 모르는 숫자만 진짜 오류로 본다.
+ * 큰 복합 숫자("8954억")는 받아쓰기 모델이 흔들려 한 번은 틀리게 적는다(2026-11-05 실측). 음성이 정말 틀린 경우
+ * ("iOS 18.2", "1,070억")는 두 번 받아써도 같은 숫자로 나왔다.
+ */
+export function confirmedUnknown(first: string[], second: string[]): string[] {
+  const b = new Set(second);
+  return first.filter((v) => b.has(v));
+}
