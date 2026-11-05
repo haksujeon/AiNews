@@ -10,6 +10,7 @@ import { BriefingView } from "@/components/briefing/briefing-view";
 import { PeriodicView } from "@/components/briefing/periodic-view";
 import { getBriefingRow, translationsOf } from "@/lib/briefing/admin";
 import { getBriefingForReview } from "@/lib/briefing/public";
+import { loadCardSpec } from "@/lib/briefing/media-store";
 import { getPeriodicForReview, periodKeyOf } from "@/lib/briefing/periodic/public";
 import type { StoredWeeklyContent } from "@/lib/briefing/periodic/types";
 import type { StoredBriefingContent, ValidationIssue } from "@/lib/briefing/types";
@@ -198,7 +199,7 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
                 <p className="py-8 text-sm text-ink-3">{t("notRenderable")}</p>
               )
             ) : preview ? (
-              <BriefingView briefing={preview} />
+              <BriefingView briefing={preview} cardSpec={await loadCardSpec(preview.edition_date, preview.locale)} />
             ) : (
               <p className="py-8 text-sm text-ink-3">{t("notRenderable")}</p>
             )}

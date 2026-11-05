@@ -144,13 +144,25 @@ export function validateStorySpec(raw: Partial<CardStorySpec>, ground: string): 
     if (v.ok) figure = v.figure;
     else dropped.push(`#${rank} ${v.reason}`);
   }
-  // 큰 숫자와 같은 값을 그림에 또 쓰지 않는다: 숫자 줄에서는 그 칸을 빼고(2개 이상 남을 때), 아니면 큰 숫자를 뺀다
-  if (big && figure.kind === "chain" && figure.items.some((it) => it.raw === big!.raw)) {
-    const rest = figure.items.filter((it) => it.raw !== big!.raw);
+  // 큰 숫자와 그림의 관계는 표기("약 1500억 위안" / "1500억 위안")가 아니라 값으로 본다
+  const bigQ = big ? oneQuantity(big.raw) : null;
+  const sameAsBig = (rawText: string) => {
+    if (!big) return false;
+    if (rawText === big.raw) return true;
+    const q = oneQuantity(rawText);
+    return !!(q && bigQ && q.value === bigQ.value && q.currency === bigQ.currency && q.percent === bigQ.percent);
+  };
+  // 막대: 큰 숫자와 같은 막대에 강조색 (큰 숫자·막대가 같은 것을 가리키게)
+  if (big && figure.kind === "bars") {
+    const idx = figure.items.findIndex((it) => sameAsBig(it.raw));
+    if (idx >= 0) figure = { ...figure, emphasis: idx };
+  }
+  // 숫자 줄: 큰 숫자와 같은 칸은 빼고(2개 이상 남을 때), 아니면 큰 숫자를 뺀다
+  if (big && figure.kind === "chain" && figure.items.some((it) => sameAsBig(it.raw))) {
+    const rest = figure.items.filter((it) => !sameAsBig(it.raw));
     if (rest.length >= 2) figure = { kind: "chain", items: rest };
     else big = null;
   }
-  if (big && figure.kind === "bars" && figure.items.some((it) => it.raw === big!.raw)) big = null;
   let note = String(raw.note ?? "").trim();
   const groundNums = numericValues(ground);
   if (note.length > MAX_NOTE || [...numericValues(note)].some((n) => !groundNums.has(n))) {

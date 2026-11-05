@@ -98,3 +98,13 @@ export function cardSpecPath(date: string, locale: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^(ko|en|zh)$/.test(locale)) return null;
   return mediaFilePath(join(date, locale, "card-spec.json"));
 }
+
+/** 카드 그림 명세 (없으면 null). 한눈에 보기 블록과 카드 화면이 같은 명세를 읽는다 */
+export async function loadCardSpec(date: string, locale: string): Promise<import("./card-spec").CardSpec | null> {
+  const file = cardSpecPath(date, locale);
+  if (!file) return null;
+  const { readFile } = await import("node:fs/promises");
+  return readFile(file, "utf8")
+    .then((t) => JSON.parse(t))
+    .catch(() => null);
+}

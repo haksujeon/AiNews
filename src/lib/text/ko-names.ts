@@ -11,7 +11,7 @@
  */
 const KO_NAME_RULES: [RegExp, string][] = [
   // Moonshot AI (月之暗面) — 2026-11-05 사용자 결정: "문샷AI"
-  [/월지암면|월지암/g, "문샷AI"],
+  [/월지암면|월지암|월의\s?어두운\s?면/g, "문샷AI"], // "월의 어두운 면" = 月之暗面을 글자대로 옮긴 말 (2026-11-05 발견)
   [/문샷\s+AI/g, "문샷AI"],
   [/문샷(?!AI)/g, "문샷AI"],
 ];
@@ -24,5 +24,9 @@ export function normalizeKoNames(text: string): string {
   for (const [re, to] of KO_NAME_RULES) out = out.replace(re, to);
   out = out.replace(/문샷AI\(\s*문샷AI\s*\)/g, "문샷AI");
   // 조사 뒤가 낱말 경계(공백·문장부호·끝)일 때만 — "문샷AI이번" 같은 우연한 붙음은 건드리지 않는다
-  return out.replace(/문샷AI(으로|이|은|을|과)(?=[\s,.·…!?)'"’”\]]|$)/g, (_, j: string) => `문샷AI${PARTICLE[j]}`);
+  // "문샷AI(Moonshot AI)은" 처럼 괄호 설명이 끼어도 조사는 문샷AI 에 맞춘다
+  return out.replace(
+    /문샷AI(\([^()]{0,40}\))?(으로|이|은|을|과)(?=[\s,.·…!?)'"’”\]]|$)/g,
+    (_, par: string | undefined, j: string) => `문샷AI${par ?? ""}${PARTICLE[j]}`
+  );
 }

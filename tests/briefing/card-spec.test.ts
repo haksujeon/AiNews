@@ -70,3 +70,14 @@ test("기사별 명세: 버린 그림·숫자는 큰 숫자 없이/그림 없이
   assert.deepEqual(spec.stories[1], { rank: 2, big: null, figure: { kind: "none" }, note: "" });
   assert.equal(spec.dropped.length, 1);
 });
+
+test("큰 숫자와 같은 값의 막대에 강조 (표기가 '약'으로 달라도 값으로)", () => {
+  const content = { top_stories: [{ rank: 1, title: "딥시크", what: GROUND, why: "", refs: ["a"] }], key_numbers: [] } as never;
+  const spec = validateCardSpec(
+    content,
+    { stories: [{ rank: 1, big: { raw: "약 1500억 위안", label: "합계" }, figure: { kind: "bars", unit: "억 위안", emphasis: 0, items: [{ label: "2차", raw: "1055억 위안" }, { label: "합계", raw: "1500억 위안" }] } }] },
+    { edition_date: "2026-11-04", locale: "ko" }
+  );
+  assert.equal(spec.stories[0].big?.raw, "약 1500억 위안");
+  assert.equal(spec.stories[0].figure.kind === "bars" && spec.stories[0].figure.emphasis, 1);
+});

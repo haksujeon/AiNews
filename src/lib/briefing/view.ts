@@ -7,6 +7,7 @@ import { ogImagePath, organizationLd, safeJsonLd } from "@/lib/seo/jsonld";
 import { LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
 import type { BriefingArticleRef, PublicBriefing } from "./public";
 import type { BriefingLocale, StoredBriefingContent } from "./types";
+import { findEntities } from "./entities";
 
 export const BRIEFING_PATH = "/briefing";
 export const briefingDatePath = (date: string) => `${BRIEFING_PATH}/${date}`;
@@ -111,4 +112,21 @@ export function briefingJsonLd(b: PublicBriefing, opts: { brand: string; title: 
       })),
     },
   ];
+}
+
+/**
+ * "주목할 기업" 중 주요 기사에 없는 정보만 (사용자 결정 2026-11-05, 안 A).
+ * 같은 회사가 주요 기사에 나오고(별칭 포함 — entities.ts) 근거 기사도 모두 주요 기사의 것이면 겹치는 정보라 뺀다.
+ * 최근 12판 실측: 21건 중 18건이 겹침. 남는 것은 주요 기사에 없는 회사이거나 다른 근거로 새 소식을 더하는 경우.
+ */
+export function extraCompanies(c: Pick<StoredBriefingContent, "companies_to_watch" | "top_stories">) {
+  const topText = c.top_stories.map((s) => [s.title, s.what, s.why ?? "", s.subject ?? ""].join(" ")).join("\n");
+  const topRefs = new Set(c.top_stories.flatMap((s) => s.refs));
+  const inTop = new Set(findEntities(topText).map((e) => e.key));
+  return c.companies_to_watch.filter((co) => {
+    const ents = findEntities(co.name);
+    const named = ents.length ? ents.some((e) => inTop.has(e.key)) : topText.includes(co.name);
+    const sameSource = co.refs.length > 0 && co.refs.every((r) => topRefs.has(r));
+    return !(named && sameSource);
+  });
 }

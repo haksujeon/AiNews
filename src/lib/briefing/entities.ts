@@ -21,7 +21,7 @@ export const ENTITIES: Entity[] = [
   { key: "tencent", chinese: true, tier: 1, aliases: ["텐센트", "Tencent", "腾讯", "훈위안", "Hunyuan", "混元", "위챗", "WeChat", "微信", "QClaw"] },
   { key: "huawei", chinese: true, tier: 1, aliases: ["화웨이", "Huawei", "华为", "어센드", "Ascend", "昇腾", "성텅"] },
   { key: "deepseek", chinese: true, tier: 1, aliases: ["딥시크", "DeepSeek", "深度求索", "량원펑", "梁文锋"] },
-  { key: "moonshot", chinese: true, tier: 1, aliases: ["문샷AI", "Moonshot", "문샷", "월지암면", "月之暗面", "Kimi", "키미"] },
+  { key: "moonshot", chinese: true, tier: 1, aliases: ["문샷AI", "Moonshot", "문샷", "월지암면", "월의 어두운 면", "月之暗面", "Kimi", "키미"] },
   { key: "zhipu", chinese: true, tier: 1, aliases: ["지푸", "Zhipu", "智谱", /\bGLM\b/, "Z.ai"] },
   { key: "minimax", chinese: true, tier: 1, aliases: ["미니맥스", "MiniMax", "稀宇"] },
   { key: "baidu", chinese: true, tier: 1, aliases: ["바이두", "Baidu", "百度", "어니", "ERNIE", "文心"] },

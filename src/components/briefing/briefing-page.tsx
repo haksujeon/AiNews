@@ -13,6 +13,7 @@ import { absoluteUrl } from "@/lib/site";
 import { formatDate } from "@/lib/news-utils";
 import { isValidEditionDate } from "@/lib/briefing/generate";
 import { getAdjacentEditions, getPublishedBriefing, getPublishedLocales, type PublicBriefing } from "@/lib/briefing/public";
+import { loadCardSpec } from "@/lib/briefing/media-store";
 import { briefingAlternates, briefingDatePath, briefingJsonLd, formatShortDate, safeJsonLd } from "@/lib/briefing/view";
 import type { BriefingLocale } from "@/lib/briefing/types";
 
@@ -77,12 +78,12 @@ export async function BriefingPageContent({ locale, date }: { locale: string; da
   let body: React.ReactNode;
   if (r.kind === "ok") {
     const b = r.briefing;
-    const pager = await getAdjacentEditions(b.locale, b.edition_date);
+    const [pager, cardSpec] = await Promise.all([getAdjacentEditions(b.locale, b.edition_date), loadCardSpec(b.edition_date, b.locale)]);
     const jsonLd = briefingJsonLd(b, { brand: tm("brand"), title: headlineTitle(b, (v) => tm("briefingTitle", v)) });
     body = (
       <>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
-        <BriefingView briefing={b} pager={pager} />
+        <BriefingView briefing={b} pager={pager} cardSpec={cardSpec} />
       </>
     );
   } else if (r.kind === "locale_missing") {

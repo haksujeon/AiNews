@@ -54,7 +54,7 @@ async function main() {
   const dir = join(homedir(), "backups", "ainews");
   mkdirSync(dir, { recursive: true });
   const log = join(dir, `ko-names-backfill-${new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "")}.jsonl`);
-  const hit = "(월지암|문샷)";
+  const hit = "(월지암|문샷|월의 ?어두운 ?면)";
 
   for (const t of TARGETS) {
     for (const f of t.fields) {
@@ -69,7 +69,7 @@ async function main() {
         if (afterS === before) continue;
         changed++;
         if (samples.length < 3) {
-          const i = before.search(/월지암|문샷/);
+          const i = before.search(/월지암|문샷|월의 ?어두운 ?면/);
           samples.push(`${before.slice(Math.max(0, i - 15), i + 30)}  →  ${afterS.slice(Math.max(0, i - 15), i + 30)}`);
         }
         if (!apply) continue;

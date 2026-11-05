@@ -27,3 +27,13 @@ test("문샷AI: 한자 사전과 함께 — 문샷(月之暗面) 겹침 없음, 
   assert.equal(glossHanText("月之暗面 투자"), "문샷AI 투자");
   assert.equal(glossHanText("월지암면 투자"), "문샷AI 투자");
 });
+
+test("'월의 어두운 면'(글자대로 옮긴 말)도 문샷AI 로, 받침 조사도 맞춘다", () => {
+  assert.equal(normalizeKoNames("월의 어두운 면(Kimi)도 기본 제공"), "문샷AI(Kimi)도 기본 제공");
+  assert.equal(normalizeKoNames("월의 어두운 면이 발표했다"), "문샷AI가 발표했다");
+});
+
+test("괄호 설명 뒤 조사도 맞춘다", () => {
+  assert.equal(normalizeKoNames("월의 어두운 면(Moonshot AI)은 조직을"), "문샷AI(Moonshot AI)는 조직을");
+  assert.equal(normalizeKoNames(normalizeKoNames("월의 어두운 면(月之暗面)은 장문")), "문샷AI(月之暗面)는 장문");
+});

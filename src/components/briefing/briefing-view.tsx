@@ -6,6 +6,7 @@ import type { PublicBriefing } from "@/lib/briefing/public";
 import {
   BRIEFING_PATH,
   editorNoteData,
+  extraCompanies,
   formatShortDate,
   outletsOf,
   readMinutes,
@@ -16,7 +17,11 @@ import type { TopStory } from "@/lib/briefing/types";
 import { BriefingDateLink } from "./briefing-date-link";
 import { EasyTerms } from "./easy-terms";
 import { StoryContextBox } from "./story-context";
-import { BriefingAudioProvider, CardSummary, ChapterTime, ListenBar, ListenHere, ListenShort } from "./briefing-media";
+import { BriefingAudioProvider, CardSummary, ListenBar, ListenHere, ListenShort } from "./briefing-media";
+import { BriefingGlance } from "./briefing-glance";
+import { StoryProgress } from "./story-progress";
+import { buildGlance } from "@/lib/briefing/glance";
+import type { CardSpec } from "@/lib/briefing/card-spec";
 
 /*
  * 데일리 브리핑 본문 ("Briefing Desk" 시안 §5.1–5.2).
@@ -31,6 +36,8 @@ interface Props {
   briefing: PublicBriefing;
   /** 이전·다음 판 날짜 (공개 페이지만) */
   pager?: { prev: string | null; next: string | null };
+  /** 한 장 요약 카드의 그림 명세 (한눈에 보기 블록이 같이 쓴다). 없으면 숫자로 보는 하루 값으로 채운다 */
+  cardSpec?: CardSpec | null;
 }
 
 type Translator = ReturnType<typeof useTranslations<"briefing">>;
@@ -86,16 +93,22 @@ export function BriefingCoverage({ briefing }: { briefing: PublicBriefing }) {
   );
 }
 
-/** AI 작성 라벨 + 고지 */
+/**
+ * AI 작성 라벨 — 한 줄(라벨 + "작성 방식")이고 고지 전문은 펼쳐서 (안 A, 2026-11-05: 리드와 기사 사이 고지 두 줄 → 한 줄).
+ * 브리핑 페이지·날짜 팝업이 같이 쓴다 (Gate 2).
+ */
 export function AiLabel({ className }: { className?: string }) {
   const t = useTranslations("briefing");
   return (
-    <p className={cn("flex flex-wrap items-baseline gap-2 text-[12.5px] leading-relaxed text-ink-3", className)}>
-      <span className="rounded-[3px] border border-rule px-1.5 py-px font-semibold text-ink-2" data-testid="ai-label">
-        {t("aiLabel")}
-      </span>
-      <span>{t("aiDisclosure")}</span>
-    </p>
+    <details className={cn("group text-[12.5px] leading-relaxed text-ink-3", className)}>
+      <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <span className="rounded-[3px] border border-rule px-1.5 py-px font-semibold text-ink-2" data-testid="ai-label">
+          {t("aiLabel")}
+        </span>
+        <span className="underline decoration-rule underline-offset-4 group-open:no-underline">{t("aiDisclosureMore")}</span>
+      </summary>
+      <p className="mt-1 max-w-[40rem]">{t("aiDisclosure")}</p>
+    </details>
   );
 }
 
@@ -174,87 +187,43 @@ export function TopStoryItem({
             <p className="text-base leading-[1.7] text-ink">{s.why}</p>
           </div>
         )}
-        <Sources refs={s.refs} briefing={briefing} className={compact ? "mt-2" : "mt-3"} />
-        {/* 음성이 있는 판의 브리핑 페이지에서만 그려진다 (재생기가 없으면 아무것도 없음) */}
-        {!compact && <ListenHere rank={s.rank} className="mt-2.5" />}
-        <EasyTerms terms={s.easy_terms} locale={briefing.locale} className={compact ? "mt-3" : "mt-3.5 max-w-[40rem]"} />
-        {/* 날짜 팝업(compact)에도 넣는다 (사용자 결정 2026-11-05) */}
-        <StoryContextBox contexts={s.story_context} className="mt-2.5" />
+        {/* 도구 줄 (안 A): 근거 기사 + 이 부분 듣기(음성이 있는 판의 페이지만) 한 줄 */}
+        <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-1.5", compact ? "mt-2" : "mt-3")}>
+          <Sources refs={s.refs} briefing={briefing} />
+          {!compact && <ListenHere rank={s.rank} />}
+        </div>
+        <StoryMore story={s} locale={briefing.locale} className={compact ? "mt-3" : "mt-3 max-w-[40rem]"} />
       </div>
     </li>
   );
 }
 
-function KeyNumbers({ briefing, variant }: { briefing: PublicBriefing; variant: "rail" | "strip" }) {
-  const t = useTranslations("briefing");
-  const nums = briefing.content.key_numbers;
-  if (!nums.length) return null;
-  if (variant === "strip") {
-    // 모바일: 리드 바로 아래 가로 스크롤 띠. 넘침은 띠 안에서만 스크롤된다 (페이지 가로 스크롤 없음)
-    return (
-      <section aria-label={t("keyNumbers")} className="mt-6 lg:hidden">
-        <h2 className="mb-2 text-xs font-semibold text-ink-3">{t("keyNumbers")}</h2>
-        <ul className="-mx-4 flex snap-x scroll-px-4 gap-0 overflow-x-auto px-4 pb-2 [scrollbar-width:none]" data-testid="key-number-strip">
-          {nums.map((k, i) => (
-            <li key={i} className="w-[46%] min-w-[150px] shrink-0 snap-start border-l border-rule pl-3 pr-3 first:border-l-0 first:pl-0">
-              <p className="text-[22px] font-[740] leading-tight tracking-[-0.02em] text-ink">{k.value}</p>
-              <p className="mt-1 text-[13px] leading-snug text-ink-2">{k.label}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
-    );
-  }
-  return (
-    <section className="hidden border-b border-rule pb-4 pt-6 lg:block">
-      <h2 className="mb-1.5 border-b border-rule-strong pb-2 text-sm font-bold text-ink">{t("keyNumbers")}</h2>
-      <ul>
-        {nums.map((k, i) => (
-          <li key={i} className="grid gap-0.5 border-t border-rule py-2.5 first:border-t-0">
-            <span className="text-[26px] font-[740] leading-tight tracking-[-0.02em] text-ink">{k.value}</span>
-            <span className="text-sm leading-snug text-ink-2">{k.label}</span>
-            <Sources refs={[k.ref]} briefing={briefing} className="text-xs" />
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 /**
- * 주요 기사 목차 ("주요 N건"). 데스크톱은 머리 오른쪽 칸, 휴대폰은 리드 아래 — 같은 부품 (Gate 2).
- * inline(휴대폰): 제목 한 줄씩 말줄임, 줄마다 44px 누름 영역.
+ * 기사 아래 "더 알아보기": 쉬운 AI 설명 · 히스토리 분석 상자를 나란히 (접힌 상태에서 한 줄).
+ * 펼친 상자는 줄 전체로 넓어진다(open:basis-full). 페이지·날짜 팝업·홈 히어로가 같은 부품 (Gate 2).
  */
-function StoryToc({ briefing, variant = "rail", className }: { briefing: PublicBriefing; variant?: "rail" | "inline"; className?: string }) {
-  const t = useTranslations("briefing");
-  const stories = briefing.content.top_stories;
-  if (!stories.length) return null;
-  const inline = variant === "inline";
+export function StoryMore({
+  story: s,
+  locale,
+  tone = "light",
+  className,
+}: {
+  story: Pick<TopStory, "easy_terms" | "story_context">;
+  locale: string;
+  tone?: "light" | "dark";
+  className?: string;
+}) {
+  if (!s.easy_terms?.length && !s.story_context?.length) return null;
+  const item = "min-w-[min(100%,15rem)] flex-1 open:basis-full";
   return (
-    <nav aria-label={t("tocTitle", { count: stories.length })} className={cn("text-sm", className)} data-testid={inline ? "briefing-toc-inline" : "briefing-toc"}>
-      <h2 className="mb-2 text-xs font-[650] tracking-[0.04em] text-ink-3">{t("tocTitle", { count: stories.length })}</h2>
-      <ol>
-        {stories.map((s) => (
-          <li key={s.rank} className={cn("flex gap-2.5 border-t border-rule leading-[1.45]", inline ? "items-center" : "py-1.5")}>
-            <span className="min-w-[1em] font-bold text-ink-3">{s.rank}</span>
-            <a
-              href={`#story-${s.rank}`}
-              className={cn(
-                "rounded-sm text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                inline && "flex min-h-11 min-w-0 flex-1 items-center"
-              )}
-            >
-              {inline ? <span className="truncate">{s.title}</span> : s.title}
-            </a>
-            <ChapterTime rank={s.rank} className={inline ? undefined : "-my-1 ml-auto self-start"} />
-          </li>
-        ))}
-      </ol>
-    </nav>
+    <div className={cn("flex flex-wrap items-start gap-2", className)}>
+      <EasyTerms terms={s.easy_terms} locale={locale} tone={tone} className={item} />
+      <StoryContextBox contexts={s.story_context} tone={tone} className={item} />
+    </div>
   );
 }
 
-export function BriefingView({ briefing, pager }: Props) {
+export function BriefingView({ briefing, pager, cardSpec }: Props) {
   const t = useTranslations("briefing");
   const c = briefing.content;
   const loc = briefing.locale;
@@ -263,41 +232,43 @@ export function BriefingView({ briefing, pager }: Props) {
   const allOutlets = outletsOf(Object.keys(briefing.articles), briefing.articles);
   const term = c.term_of_the_day;
   const media = briefing.media ?? {};
+  // 주목할 기업은 주요 기사에 없는 정보만 (최근 12판 21건 중 18건이 겹침 — 사용자 확인 2026-11-05)
+  const companies = extraCompanies(c);
+  // 한눈에 보기: 목차·숫자로 보는 하루·한 장 요약을 한 블록으로 (안 A, 사용자 결정 2026-11-05)
+  const glance = buildGlance(c, cardSpec).map((g) => ({ ...g, section: sectionLabel(t, g.section) }));
 
   const body = (
     <article lang={htmlLang} data-testid="briefing">
-      {/* ── 머리: 날짜 줄 · h1 · 리드 · AI 작성 라벨 | 오늘의 N가지 ── */}
-      <header className="grid gap-6 border-b-2 border-rule-strong pb-7 pt-6 sm:pt-9 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-end lg:gap-12">
-        <div className="min-w-0">
-          <p className="mb-3.5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-ink-3">
-            <span className="font-[650] text-jade">{t("kicker")}</span>
-            <time dateTime={briefing.edition_date}>{formatDateGroup(briefing.edition_date, loc)}</time>
-            <BriefingCoverage briefing={briefing} />
-          </p>
-          <h1 className="max-w-[44rem] text-[28px] font-[740] leading-[1.25] tracking-[-0.028em] text-ink sm:text-[34px] lg:text-[40px]">
-            {c.headline}
-          </h1>
-          <p className="mt-4 max-w-[40rem] text-[17px] font-medium leading-[1.75] text-ink-2 sm:text-[19px]">{c.lede}</p>
-          <Sources refs={c.lede_refs} briefing={briefing} className="mt-2.5" />
-          {/* 음성·한 장 요약 (승인본만, 관리자 검토 화면은 검토본도): 데스크톱 = 듣기 막대, 휴대폰 = 짧은 듣기 + 한 장 요약 버튼 */}
-          {media.audio && <ListenBar className="mt-5 hidden max-w-[40rem] lg:block" />}
-          {(media.audio || media.card) && (
-            <div className={cn("mt-5 grid gap-2 lg:hidden", media.audio && media.card ? "grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-1")}>
-              {media.audio && <ListenShort />}
-              {media.card && <CardSummary card={media.card} date={formatShortDate(briefing.edition_date, loc)} variant="button" />}
-            </div>
-          )}
-          {/* 휴대폰·태블릿: 첫 화면에 기사 제목이 하나도 없던 것 (UI 검토 2026-11-04) → 오른쪽 목차와 같은 부품을 리드 아래에 */}
-          <StoryToc briefing={briefing} variant="inline" className="mt-5 lg:hidden" />
-          <AiLabel className="mt-4" />
-          <KeyNumbers briefing={briefing} variant="strip" />
+      {/* ── 머리: 날짜 줄 · h1 · 리드 · 근거 · AI 작성 · 듣기 ── */}
+      <header className="pb-5 pt-6 sm:pb-6 sm:pt-9">
+        <p className="mb-3.5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-ink-3">
+          <span className="font-[650] text-jade">{t("kicker")}</span>
+          <time dateTime={briefing.edition_date}>{formatDateGroup(briefing.edition_date, loc)}</time>
+          <BriefingCoverage briefing={briefing} />
+        </p>
+        <h1 className="max-w-[48rem] text-[28px] font-[740] leading-[1.25] tracking-[-0.028em] text-ink sm:text-[34px] lg:text-[40px]">{c.headline}</h1>
+        <p className="mt-4 max-w-[46rem] text-[17px] font-medium leading-[1.75] text-ink-2 sm:text-[19px]">{c.lede}</p>
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1">
+          <Sources refs={c.lede_refs} briefing={briefing} />
+          <AiLabel />
         </div>
-        <StoryToc briefing={briefing} className="hidden border-l border-rule pl-5 lg:block" />
+        {/* 음성 (승인본만, 관리자 검토 화면은 검토본도): 데스크톱 = 듣기 막대, 휴대폰 = 짧은 듣기 */}
+        {media.audio && (
+          <>
+            <ListenBar className="mt-4 hidden max-w-[46rem] lg:block" />
+            <ListenShort className="mt-4 w-full lg:hidden" />
+          </>
+        )}
       </header>
 
-      <DataNotice briefing={briefing} className="mt-[18px]" />
+      <DataNotice briefing={briefing} className="mb-5" />
 
-      <div className="grid gap-6 pb-10 pt-2 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-12">
+      <BriefingGlance
+        items={glance}
+        actions={media.card ? <CardSummary card={media.card} date={formatShortDate(briefing.edition_date, loc)} /> : null}
+      />
+
+      <div className="grid gap-6 pb-10 pt-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-12">
         {/* ── 본문 칼럼 ── */}
         <div className="min-w-0">
           <h2 className="flex items-baseline justify-between border-b border-rule-strong pb-2.5 pt-6 text-lg font-bold text-ink">
@@ -335,25 +306,11 @@ export function BriefingView({ briefing, pager }: Props) {
           )}
         </div>
 
-        {/* ── 오른쪽 레일 (모바일에서는 본문 아래) ── */}
-        <aside className="min-w-0">
-          {media.card && <CardSummary card={media.card} date={formatShortDate(briefing.edition_date, loc)} variant="rail" className="hidden lg:block" />}
-          <KeyNumbers briefing={briefing} variant="rail" />
-
-          {c.companies_to_watch.length > 0 && (
-            <section className="border-b border-rule pb-4 pt-6">
-              <h2 className="mb-1.5 border-b border-rule-strong pb-2 text-sm font-bold text-ink">{t("companies")}</h2>
-              <ul>
-                {c.companies_to_watch.map((co, i) => (
-                  <li key={i} className="border-t border-rule py-2.5 first:border-t-0">
-                    <p className="text-[15.5px] font-bold text-ink">{co.name}</p>
-                    <p className="text-sm leading-[1.55] text-ink-2">{co.why}</p>
-                    <Sources refs={co.refs} briefing={briefing} className="text-xs" />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+        {/* ── 오른쪽 칸: 읽는 위치(데스크톱, 따라 내려옴) · 용어 · 편집 노트 · 주요 기사에 없는 기업. 휴대폰은 본문 아래 ── */}
+        <aside className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:self-start lg:overflow-y-auto lg:[scrollbar-width:thin]">
+          <div className="hidden lg:block">
+            <StoryProgress stories={c.top_stories.map((s) => ({ rank: s.rank, title: s.title }))} />
+          </div>
 
           {term && (
             <section className="border-b border-rule pb-4 pt-6">
@@ -382,6 +339,21 @@ export function BriefingView({ briefing, pager }: Props) {
               <p className="text-sm leading-[1.6] text-ink-2">
                 {c.editor_note ?? t("editorNoteAuto", { story: note!.story, outlets: note!.outlets })}
               </p>
+            </section>
+          )}
+
+          {companies.length > 0 && (
+            <section className="border-b border-rule pb-4 pt-6" data-testid="extra-companies">
+              <h2 className="mb-1.5 border-b border-rule-strong pb-2 text-sm font-bold text-ink">{t("companies")}</h2>
+              <ul>
+                {companies.map((co, i) => (
+                  <li key={i} className="border-t border-rule py-2.5 first:border-t-0">
+                    <p className="text-[15.5px] font-bold text-ink">{co.name}</p>
+                    <p className="text-sm leading-[1.55] text-ink-2">{co.why}</p>
+                    <Sources refs={co.refs} briefing={briefing} className="text-xs" />
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
         </aside>

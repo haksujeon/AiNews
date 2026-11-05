@@ -6,9 +6,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PublicBriefing } from "@/lib/briefing/public";
 import { outletsOf } from "@/lib/briefing/view";
-import { Sources, sectionLabel } from "@/components/briefing/briefing-view";
-import { EasyTerms } from "@/components/briefing/easy-terms";
-import { StoryContextBox } from "@/components/briefing/story-context";
+import { Sources, StoryMore, sectionLabel } from "@/components/briefing/briefing-view";
 
 /**
  * "오늘" 홈 브리핑 히어로의 주요 기사 — 줄을 누르면 그 자리에서 what·"왜 중요한가"·근거 기사가 펼쳐진다 (페이지 이동 없음).
@@ -63,8 +61,8 @@ export function TodayStories({ briefing }: { briefing: PublicBriefing }) {
                   className="text-white/60 [&_a]:text-white/80 [&_a]:decoration-white/30 hover:[&_a]:decoration-white/70"
                 />
               </div>
-              <EasyTerms terms={s.easy_terms} locale={briefing.locale} tone="dark" className="mt-3" />
-              <StoryContextBox contexts={s.story_context} tone="dark" className="mt-2.5" />
+              {/* 쉬운 AI 설명 · 히스토리를 나란히 — 브리핑 페이지·팝업과 같은 부품 (Gate 2) */}
+              <StoryMore story={s} locale={briefing.locale} tone="dark" className="mt-3" />
             </div>
           </li>
         );

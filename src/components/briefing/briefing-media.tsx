@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Pause, Play, X } from "lucide-react";
+import { Download, ImageIcon, Pause, Play, Share2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BriefingDateLink } from "./briefing-date-link";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -292,7 +292,7 @@ export function ListenBar({ className }: { className?: string }) {
             {t("mediaReview")}
           </span>
         )}
-        <span>{t("aiVoiceNote")}</span>
+        <span>{t("aiVoiceShort")}</span>
       </div>
       {/* 받아쓰기는 기계 받아쓰기라 오자(고유명사 등)가 있다 — 사람이 고치기 전까지는 검토 화면에서만 보인다 */}
       {a.audio.transcript && a.audio.status === "review" && (
@@ -435,49 +435,79 @@ function cardNoteKey(card: BriefingCard): "cardNoteOwn" | "cardNoteAi" {
 }
 
 /**
- * 한 장 요약. rail = 데스크톱 오른쪽 칸 맨 위의 작은 그림, button = 휴대폰 듣기 옆 버튼.
- * 둘 다 같은 크게 보기 대화상자를 연다 (Gate 2).
+ * 한 장 요약 그림 버튼 줄 — 보기(크게 보기 대화상자) · 이미지 저장 · 공유 (사용자 결정 2026-11-05: 저장·공유 버튼 유지).
+ * 화면의 요약은 "한눈에 보기"(briefing-glance.tsx, 같은 명세)가 글자로 보여 주고, 그림은 가져가는 용도.
+ * 공유: 그림 파일을 공유할 수 있는 기기(휴대폰)는 그림을, 아니면 페이지 주소를, 그것도 안 되면 주소 복사.
  */
-export function CardSummary({ card, date, variant, className }: { card: BriefingCard; date: string; variant: "rail" | "button"; className?: string }) {
+export function CardSummary({ card, date, className }: { card: BriefingCard; date: string; className?: string }) {
   const t = useTranslations("briefing");
   const [open, setOpen] = useState(false);
+  const [msg, setMsg] = useState("");
   const note = t(cardNoteKey(card));
+  const fileName = `ai-news-briefing-${date.replace(/[^0-9a-z-]/gi, "")}.png`;
+  const pageUrl = () => (typeof location === "undefined" ? "" : location.href.split("#")[0]);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(pageUrl());
+      setMsg(t("shareCopied"));
+    } catch {
+      setMsg(pageUrl());
+    }
+  };
+  const share = async () => {
+    setMsg("");
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        const blob = await fetch(card.url).then((r) => (r.ok ? r.blob() : null)).catch(() => null);
+        const file = blob ? new File([blob], fileName, { type: blob.type || "image/png" }) : null;
+        if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: t("cardTitle"), url: pageUrl() });
+        else await navigator.share({ title: t("cardTitle"), url: pageUrl() });
+        return;
+      }
+      await copy();
+    } catch (e) {
+      if ((e as { name?: string }).name !== "AbortError") await copy();
+    }
+  };
+  const btn =
+    "inline-flex min-h-9 min-w-9 justify-center items-center gap-1.5 rounded-[4px] border border-rule px-2.5 text-[13px] text-ink-2 hover:border-ink-3 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const actions = (dark = false) => (
+    <>
+      <a
+        href={card.url}
+        download={fileName}
+        className={dark ? cn(btn, "border-white/30 text-white/85 hover:border-white/60 hover:text-white focus-visible:ring-white") : btn}
+        data-testid="card-save"
+      >
+        <Download aria-hidden="true" className="h-3.5 w-3.5" />
+        {/* 휴대폰은 아이콘만 ("한눈에 보기" 제목 줄에 한 줄로) — 낭독기는 글자를 그대로 읽는다 */}
+        <span className={dark ? undefined : "max-sm:sr-only"}>{t("cardSave")}</span>
+      </a>
+      <button
+        type="button"
+        onClick={share}
+        className={dark ? cn(btn, "border-white/30 text-white/85 hover:border-white/60 hover:text-white focus-visible:ring-white") : btn}
+        data-testid="card-share"
+      >
+        <Share2 aria-hidden="true" className="h-3.5 w-3.5" />
+        <span className={dark ? undefined : "max-sm:sr-only"}>{t("cardShare")}</span>
+      </button>
+    </>
+  );
   return (
     <>
-      {variant === "rail" ? (
-        <section className={cn("border-b border-rule pb-4 pt-6", className)} data-testid="card-rail">
-          <h2 className="mb-2 flex items-baseline justify-between border-b border-rule-strong pb-2 text-sm font-bold text-ink">
-            {t("cardTitle")}
-            {card.status === "review" && <span className="text-[11.5px] font-semibold text-ink-3">{t("mediaReview")}</span>}
-          </h2>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            aria-label={t("cardOpen")}
-            className="relative block w-full cursor-zoom-in overflow-hidden border border-rule bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            // 카드 높이는 내용대로라 비율은 그 그림의 실제 비율. 아주 긴 그림만 4:5 로 위쪽을 보여 준다
-            style={{ aspectRatio: card.height / card.width > 1.25 ? "4 / 5" : `${card.width} / ${card.height}` }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element -- 우리 API 가 주는 그림, 크기 고정 */}
-            <img src={card.url} alt={card.alt_text} width={card.width} height={card.height} loading="lazy" className="block h-full w-full object-cover object-top" />
-            <span className="absolute bottom-2 right-2 border border-rule bg-paper px-2 py-px text-[11.5px] text-ink">{t("cardView")}</span>
-          </button>
-          <p className="mt-1.5 text-[11.5px] leading-[1.55] text-ink-3">{note}</p>
-        </section>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className={cn(
-            "flex min-h-12 flex-col items-center justify-center border border-rule bg-paper px-3 text-center text-[13px] font-semibold leading-tight text-ink hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            className
-          )}
-          data-testid="card-button"
-        >
+      <div className={cn("flex flex-wrap items-center gap-1.5", className)} data-testid="card-actions">
+        <button type="button" onClick={() => setOpen(true)} className={btn} data-testid="card-open">
+          <ImageIcon aria-hidden="true" className="h-3.5 w-3.5" />
           {t("cardTitle")}
-          <span className="text-[11px] font-normal text-ink-3">{t("cardView")}</span>
+          {card.status === "review" && <span className="text-[11px] text-ink-3">({t("mediaReview")})</span>}
         </button>
-      )}
+        {actions()}
+        {/* 알림 글은 있을 때만 줄을 차지한다 */}
+        <span className="text-[12px] text-ink-3 empty:hidden max-sm:basis-full max-sm:text-right" aria-live="polite">
+          {msg}
+        </span>
+      </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           showCloseButton={false}
@@ -493,10 +523,13 @@ export function CardSummary({ card, date, variant, className }: { card: Briefing
             </DialogClose>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- 우리 API 가 주는 그림 */}
             <img src={card.url} alt={card.alt_text} width={card.width} height={card.height} className="mx-auto block h-auto w-full max-w-[620px]" />
           </div>
-          <DialogDescription className="px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2.5 text-[12px] leading-[1.6] text-white/70">{note}</DialogDescription>
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2.5">
+            {actions(true)}
+            <DialogDescription className="min-w-0 flex-1 basis-60 text-[12px] leading-[1.6] text-white/70">{note}</DialogDescription>
+          </div>
         </DialogContent>
       </Dialog>
     </>
