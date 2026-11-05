@@ -69,8 +69,10 @@ async function main() {
     const browser = await chromium.launch();
     const out = join(tmpdir(), `briefing-card-${date}-${locale}-${Date.now()}.png`);
     try {
-      const page = await browser.newPage({ viewport: { width: 1080, height: 1350 }, deviceScaleFactor: 2 });
-      const url = `${base}${process.env.NEXT_PUBLIC_BASE_PATH}/${locale}/briefing/${date}/card`;
+      // 가로형(기본, 페이지 "한눈에 보기"와 같은 칸) / --layout portrait = 예전 세로형 1080px
+      const portrait = arg("layout") === "portrait";
+      const page = await browser.newPage({ viewport: { width: portrait ? 1080 : 1600, height: portrait ? 1350 : 900 }, deviceScaleFactor: 2 });
+      const url = `${base}${process.env.NEXT_PUBLIC_BASE_PATH}/${locale}/briefing/${date}/card${portrait ? "" : "?layout=landscape"}`;
       const resp = await page.goto(url, { waitUntil: "networkidle", timeout: 90_000 });
       if (!resp || resp.status() !== 200) throw new Error(`카드 화면 ${resp?.status()} ${url}`);
       await page.evaluate(() => document.fonts.ready);
@@ -88,7 +90,7 @@ async function main() {
         locale,
         kind: "card",
         file: out,
-        source: cs.CARD_SPEC_VERSION,
+        source: arg("layout") === "portrait" ? cs.CARD_SPEC_VERSION : `${cs.CARD_SPEC_VERSION}-landscape`,
         note: spec.dropped.length ? `검사에서 버림: ${spec.dropped.join(" | ")}`.slice(0, 900) : undefined,
       });
       console.log(`등록(검토 중): ${r.abs} ${r.width}×${r.height}`);

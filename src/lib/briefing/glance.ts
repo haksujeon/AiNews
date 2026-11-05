@@ -3,15 +3,18 @@
  * 칸마다 분야·제목·핵심 숫자(+작은 그림). 숫자와 그림은 한 장 요약 카드와 같은 명세(card-spec.ts)를 쓴다 (Gate 2).
  * 명세가 없는 판(zh·en, 카드 생성 전·실패)은 그 기사의 "숫자로 보는 하루" 값으로 채운다 — 빈칸 없음.
  */
-import type { CardFigure, CardSpec } from "./card-spec";
+import type { BigNumber, CardFigure, CardSpec } from "./card-spec";
 import type { BriefingContent } from "./types";
 
 export interface GlanceItem {
   rank: number;
   section: string;
   title: string;
-  big: { raw: string; label: string } | null;
+  /** 증감(dir)·비율 미터(meter)는 카드 명세가 있을 때만 (명세 없는 판의 숫자로 보는 하루 값은 숫자만) */
+  big: BigNumber | null;
   figure: CardFigure | null;
+  /** 한 줄 설명 (카드 명세의 note). 없으면 "" */
+  note: string;
 }
 
 export function buildGlance(c: Pick<BriefingContent, "top_stories" | "key_numbers">, spec: CardSpec | null | undefined): GlanceItem[] {
@@ -22,6 +25,6 @@ export function buildGlance(c: Pick<BriefingContent, "top_stories" | "key_number
     const kn = c.key_numbers.find((k) => s.refs.includes(k.ref));
     const big = sp?.big ?? (kn ? { raw: kn.value, label: kn.label } : null);
     const figure = sp && sp.figure.kind !== "none" ? sp.figure : null;
-    return { rank: s.rank, section: s.section, title: s.title, big, figure };
+    return { rank: s.rank, section: s.section, title: s.title, big, figure, note: sp?.note ?? "" };
   });
 }

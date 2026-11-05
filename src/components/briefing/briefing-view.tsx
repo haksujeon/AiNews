@@ -17,7 +17,7 @@ import type { TopStory } from "@/lib/briefing/types";
 import { BriefingDateLink } from "./briefing-date-link";
 import { EasyTerms } from "./easy-terms";
 import { StoryContextBox } from "./story-context";
-import { BriefingAudioProvider, CardSummary, ListenBar, ListenHere, ListenShort } from "./briefing-media";
+import { BriefingAudioProvider, ListenBar, ListenHere, ListenShort, ShareButton } from "./briefing-media";
 import { BriefingGlance } from "./briefing-glance";
 import { StoryProgress } from "./story-progress";
 import { buildGlance } from "@/lib/briefing/glance";
@@ -235,7 +235,10 @@ export function BriefingView({ briefing, pager, cardSpec }: Props) {
   // 주목할 기업은 주요 기사에 없는 정보만 (최근 12판 21건 중 18건이 겹침 — 사용자 확인 2026-11-05)
   const companies = extraCompanies(c);
   // 한눈에 보기: 목차·숫자로 보는 하루·한 장 요약을 한 블록으로 (안 A, 사용자 결정 2026-11-05)
-  const glance = buildGlance(c, cardSpec).map((g) => ({ ...g, section: sectionLabel(t, g.section) }));
+  const glance = buildGlance(c, cardSpec).map((g) => {
+    const st = c.top_stories.find((x) => x.rank === g.rank);
+    return { ...g, sectionLabel: sectionLabel(t, g.section), outlets: st ? outletsOf(st.refs, briefing.articles).join(" · ") : "" };
+  });
 
   const body = (
     <article lang={htmlLang} data-testid="briefing">
@@ -265,7 +268,7 @@ export function BriefingView({ briefing, pager, cardSpec }: Props) {
 
       <BriefingGlance
         items={glance}
-        actions={media.card ? <CardSummary card={media.card} date={formatShortDate(briefing.edition_date, loc)} /> : null}
+        actions={<ShareButton title={c.headline} />}
       />
 
       <div className="grid gap-6 pb-10 pt-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-12">

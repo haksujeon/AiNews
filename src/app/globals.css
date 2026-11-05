@@ -102,6 +102,9 @@
   --jade-weak: #e3efec;
   --console: #121417;
   --jade-bright: #6fc6b3;
+  /* 분야 아이콘 색 (한눈에 보기, 2026-11-05) — 아이콘에만 쓴다. 강조 숫자는 언제나 청자 */
+  --sec-funding: #2f7d5b; --sec-products: #4a6a8c; --sec-models: #7a5a8c; --sec-robotics: #8a6d3b;
+  --sec-industry: #5f6b73; --sec-research: #8a4f5f; --sec-chips: #3f7480; --sec-policy: #7a6a3f; --sec-safety: #9a5a2f;
 
   --background: var(--paper);
   --foreground: var(--ink);
@@ -158,6 +161,9 @@
   --jade-weak: #1c2b28;
   --console: #1c1f22;
   --jade-bright: #7fd4c1;
+  /* 분야 아이콘 색 (한눈에 보기, 2026-11-05) — 아이콘에만 쓴다. 강조 숫자는 언제나 청자 */
+  --sec-funding: #6cc49c; --sec-products: #8fb0d6; --sec-models: #c3a2d4; --sec-robotics: #d6b47a;
+  --sec-industry: #a8b3ba; --sec-research: #d99aaa; --sec-chips: #9fc0c9; --sec-policy: #c9b48f; --sec-safety: #d6a07a;
 
   --background: var(--paper);
   --foreground: var(--ink);
@@ -330,3 +336,10 @@
 @media (prefers-reduced-motion: reduce) {
   .cx-fill { animation: none; }
 }
+
+
+/* 한눈에 보기 막대·미터 차오름 (처음 보일 때 한 번). 움직임 줄이기면 끔. 저장 그림(PNG)은 .no-anim */
+@keyframes glance-grow { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+.glance-grow { transform-origin: left; animation: glance-grow 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both }
+.no-anim .glance-grow { animation: none }
+@media (prefers-reduced-motion: reduce) { .glance-grow { animation: none } }

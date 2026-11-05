@@ -1,7 +1,7 @@
 /** "한 장 요약" 카드 그림 명세 검사 (card-spec.ts) — 기사에 없는 숫자·단위 섞임·장식 그림을 막는다 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { unitShape, validateCardSpec, validateFigure } from "../../src/lib/briefing/card-spec";
+import { bigTrend, unitShape, validateCardSpec, validateFigure } from "../../src/lib/briefing/card-spec";
 
 const GROUND = `딥시크, 두 번째 투자 유치 규모 1055억 위안
 두 번째 투자 유치 라운드 규모가 1055억 위안으로 늘었고 약 30개 투자자가 참여했다. 반년 사이 두 차례 합계는 약 1500억 위안이다.
@@ -80,4 +80,13 @@ test("큰 숫자와 같은 값의 막대에 강조 (표기가 '약'으로 달라
   );
   assert.equal(spec.stories[0].big?.raw, "약 1500억 위안");
   assert.equal(spec.stories[0].figure.kind === "bars" && spec.stories[0].figure.emphasis, 1);
+});
+
+test("퍼센트 큰 숫자: 바로 뒤 표현으로 증가·감소, 아니면 비율 미터 (코드가 정함)", () => {
+  assert.deepEqual(bigTrend({ raw: "47%", label: "3분기 매출" }, "3분기 매출은 전분기 대비 47% 늘었다"), { dir: "up" });
+  assert.deepEqual(bigTrend({ raw: "40.1%", label: "투자" }, "전월 대비 40.1% 감소했다"), { dir: "down" });
+  assert.deepEqual(bigTrend({ raw: "50% 이상", label: "토큰 사용량 감소" }, "토큰 사용량을 50% 이상 줄였다"), { dir: "down" });
+  assert.deepEqual(bigTrend({ raw: "25%", label: "구독자에게 복구한 월간 한도" }, "월간 한도의 25%를 복구했다"), { meter: 25 });
+  assert.deepEqual(bigTrend({ raw: "104.2%", label: "매출" }, "매출이 104.2%였다"), {});
+  assert.deepEqual(bigTrend({ raw: "160억 달러", label: "기업가치" }, "160억 달러"), {});
 });

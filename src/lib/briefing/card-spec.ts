@@ -33,10 +33,19 @@ export type CardFigure =
   | { kind: "timeline"; items: TimelineItem[] }
   | { kind: "none" };
 
+export interface BigNumber {
+  raw: string;
+  label: string;
+  /** 퍼센트가 늘었다/줄었다 (기사 글의 바로 뒤 표현으로 코드가 정한다 — bigTrend) */
+  dir?: "up" | "down";
+  /** 증감이 아닌 퍼센트(0~100) — 비율 미터로 그린다 */
+  meter?: number;
+}
+
 export interface CardStorySpec {
   rank: number;
   /** 크게 쓸 숫자 (그 기사 문장에 있는 표기 그대로). 없으면 null */
-  big: { raw: string; label: string } | null;
+  big: BigNumber | null;
   figure: CardFigure;
   /** 한 줄 설명 (60자 이내, 숫자는 기사 문장에 있는 것만) */
   note: string;
@@ -128,11 +137,31 @@ export function validateFigure(fig: CardFigure, ground: string): { ok: true; fig
   return { ok: false, reason: `모르는 틀 ${(fig as { kind: string }).kind}` };
 }
 
+const UP_WORDS = /^(?:\s*(?:이상|가량|정도|넘게|남짓))?\s*(?:늘|증가|상승|올랐|올라|높아|확대|급증|성장)/;
+const DOWN_WORDS = /^(?:\s*(?:이상|가량|정도|넘게|남짓))?\s*(?:줄|감소|하락|낮아|떨어|축소|급감)/;
+
+/**
+ * 큰 숫자가 퍼센트일 때 그래픽 종류를 코드가 정한다 (LLM 에 맡기지 않음).
+ * - 기사 글에서 그 표기 바로 뒤가 "늘었다·증가…" → 증가(up), "줄었다·감소…" → 감소(down)
+ * - 증감이 아니고 0~100% → 비율 미터 (전체 중 얼마)
+ * - 퍼센트가 아니거나 100% 초과면 아무것도 붙이지 않는다
+ */
+export function bigTrend(big: { raw: string; label: string }, ground: string): Pick<BigNumber, "dir" | "meter"> {
+  const q = oneQuantity(big.raw);
+  if (!q || !q.percent) return {};
+  const at = ground.indexOf(big.raw);
+  const after = at >= 0 ? ground.slice(at + big.raw.length, at + big.raw.length + 16) : "";
+  const label = big.label;
+  if (UP_WORDS.test(after) || /(증가|상승|늘어난|성장)/.test(label)) return { dir: "up" };
+  if (DOWN_WORDS.test(after) || /(감소|하락|줄어든|축소)/.test(label)) return { dir: "down" };
+  return q.value > 0 && q.value <= 100 ? { meter: q.value } : {};
+}
+
 /** LLM 출력 한 기사 → 검사한 명세. 크게 쓸 숫자·한 줄 설명도 같은 규칙 */
 export function validateStorySpec(raw: Partial<CardStorySpec>, ground: string): { spec: CardStorySpec; dropped: string[] } {
   const dropped: string[] = [];
   const rank = Number(raw.rank);
-  let big = raw.big && typeof raw.big.raw === "string" ? { raw: raw.big.raw.trim(), label: String(raw.big.label ?? "").trim() } : null;
+  let big: BigNumber | null = raw.big && typeof raw.big.raw === "string" ? { raw: raw.big.raw.trim(), label: String(raw.big.label ?? "").trim() } : null;
   // 크게 쓸 숫자는 크기를 말하는 값이어야 한다 — 버전·모델 이름("iOS 27.3", "GPT-5")은 안 된다
   if (big && (!ground.includes(big.raw) || !/\d/.test(big.raw) || /^[A-Za-z]/.test(big.raw) || big.label.length > 24)) {
     dropped.push(`#${rank} big "${big.raw}"`);
@@ -163,6 +192,7 @@ export function validateStorySpec(raw: Partial<CardStorySpec>, ground: string): 
     if (rest.length >= 2) figure = { kind: "chain", items: rest };
     else big = null;
   }
+  if (big) big = { ...big, ...bigTrend(big, ground) };
   let note = String(raw.note ?? "").trim();
   const groundNums = numericValues(ground);
   if (note.length > MAX_NOTE || [...numericValues(note)].some((n) => !groundNums.has(n))) {

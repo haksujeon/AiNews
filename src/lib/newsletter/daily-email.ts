@@ -282,7 +282,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
     : "";
   const cardRow = card
     ? heading(t.cardTitle) +
-      `<tr><td class="px" align="center" style="padding:0 ${PX}px"><a href="${esc(briefingUrl)}" style="text-decoration:none"><img src="${esc(SITE_ORIGIN + card.url)}" width="${Math.min(MAIL_WIDTH - 2 * PX, 520)}" alt="${esc(card.alt_text)}" style="display:block;margin:0 auto;width:100%;max-width:520px;height:auto;border:1px solid ${C.line}"></a><div style="padding-top:8px;font:13px/1.5 ${FONT}">${link(briefingUrl, t.cardOpen + " →")}</div></td></tr>`
+      `<tr><td class="px" align="center" style="padding:0 ${PX}px"><a href="${esc(briefingUrl)}" style="text-decoration:none"><img src="${esc(SITE_ORIGIN + card.url)}" width="${card.width > card.height ? MAIL_WIDTH - 2 * PX : Math.min(MAIL_WIDTH - 2 * PX, 520)}" alt="${esc(card.alt_text)}" style="display:block;margin:0 auto;width:100%;max-width:${card.width > card.height ? MAIL_WIDTH - 2 * PX : 520}px;height:auto;border:1px solid ${C.line}"></a><div style="padding-top:8px;font:13px/1.5 ${FONT}">${link(briefingUrl, t.cardOpen + " →")}</div></td></tr>`
     : "";
 
   const toc = `<tr><td class="px" style="padding:16px ${PX}px 0"><div style="font:700 12px/1.4 ${FONT};color:${C.faint};padding-bottom:4px">${esc(t.toc)}</div>${c.top_stories

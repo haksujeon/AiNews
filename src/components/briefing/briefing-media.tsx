@@ -172,6 +172,62 @@ export function BriefingAudioProvider({ audio, stories, children }: { audio: Bri
 
 const useAudio = () => useContext(Ctx);
 
+/**
+ * 지금 음성에서 나오는 주요 기사 (재생을 시작한 뒤에만). 한눈에 보기 칸·줄이 밝아지고 진행 막대가 움직인다 (확정 시안 2026-11-05).
+ * 재생기가 없는 곳에서는 null.
+ */
+export function usePlayingStory(): { rank: number; progress: number } | null {
+  const a = useAudio();
+  if (!a || !a.started || !a.chapter || a.chapter.rank === null) return null;
+  const chs = a.audio.chapters;
+  const i = chs.findIndex((c) => c === a.chapter);
+  const end = chs[i + 1]?.t ?? a.duration;
+  const span = Math.max(1, end - a.chapter.t);
+  return { rank: a.chapter.rank, progress: Math.min(1, Math.max(0, (a.time - a.chapter.t) / span)) };
+}
+
+/** 페이지 주소 공유 — 공유 창이 있는 기기는 공유 창, 없으면 주소 복사 (한 장 요약·이미지 저장 버튼은 확정 시안에서 뺌) */
+export function ShareButton({ title, className }: { title: string; className?: string }) {
+  const t = useTranslations("briefing");
+  const [msg, setMsg] = useState("");
+  const pageUrl = () => (typeof location === "undefined" ? "" : location.href.split("#")[0]);
+  const share = async () => {
+    setMsg("");
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title, url: pageUrl() });
+        return;
+      }
+      await navigator.clipboard.writeText(pageUrl());
+      setMsg(t("shareCopied"));
+    } catch (e) {
+      if ((e as { name?: string }).name === "AbortError") return;
+      try {
+        await navigator.clipboard.writeText(pageUrl());
+        setMsg(t("shareCopied"));
+      } catch {
+        setMsg(pageUrl());
+      }
+    }
+  };
+  return (
+    <span className={cn("inline-flex items-center gap-2", className)}>
+      <span className="text-[12px] text-ink-3 empty:hidden" aria-live="polite">
+        {msg}
+      </span>
+      <button
+        type="button"
+        onClick={share}
+        className="inline-flex min-h-9 min-w-9 items-center justify-center gap-1.5 rounded-[4px] border border-rule px-2.5 text-[13px] text-ink-2 hover:border-ink-3 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        data-testid="share-button"
+      >
+        <Share2 aria-hidden="true" className="h-3.5 w-3.5" />
+        <span className="max-sm:sr-only">{t("cardShare")}</span>
+      </button>
+    </span>
+  );
+}
+
 /** 이 요소가 보이는 동안은 아래 재생 막대를 띄우지 않는다 */
 function useBarRef<T extends HTMLElement>() {
   const a = useAudio();
