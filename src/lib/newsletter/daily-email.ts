@@ -8,7 +8,7 @@
  */
 import type { PublicBriefing } from "@/lib/briefing/public";
 import type { BriefingLocale, StoryContext } from "@/lib/briefing/types";
-import { absoluteUrl } from "@/lib/site";
+import { SITE_ORIGIN, absoluteUrl } from "@/lib/site";
 
 export interface DailyEmailOptions {
   /** 받는 사람 이름 (없으면 인사 생략) */
@@ -45,6 +45,9 @@ const T = {
     storyMore: (n: number) => `지난 흐름 ${n}건 전체와 근거 기사 보기`,
     storyLink: "사이트에서 지난 흐름 보기",
     toc: "이번 호 주요 기사",
+    listen: (m: number) => `▶ ${m}분 듣기 · AI 음성`,
+    cardTitle: "한 장 요약",
+    cardOpen: "크게 보기",
     storyNote: "히스토리 분석은 지난 보도를 AI가 날짜순으로 엮은 시범 기능이며, 항목마다 근거 기사가 있습니다.",
     onSite: "자세히 보기",
     original: "원문",
@@ -88,6 +91,9 @@ const T = {
     storyMore: (n: number) => `查看全部 ${n} 条过往脉络和来源文章`,
     storyLink: "在网站上查看过往脉络",
     toc: "本期要闻",
+    listen: (m: number) => `▶ 收听 ${m}分钟 · AI 语音`,
+    cardTitle: "一图看懂",
+    cardOpen: "查看大图",
     storyNote: "历史分析由 AI 按时间顺序整理过往报道，为试用功能，每一条都有来源文章。",
     onSite: "查看详情",
     original: "原文",
@@ -130,6 +136,9 @@ const T = {
     storyMore: (n: number) => `See all ${n} past events and sources`,
     storyLink: "See the background on the site",
     toc: "In this issue",
+    listen: (m: number) => `▶ Listen · ${m} min · AI audio`,
+    cardTitle: "At a glance",
+    cardOpen: "View full size",
     storyNote: "The history analysis is a beta feature: AI arranges past reports by date, and every entry cites a source article.",
     onSite: "Read more",
     original: "Source",
@@ -265,6 +274,16 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   const art = (id: string) => b.articles[id];
   const sectionName = (s: string) => t.section[s] ?? s;
   const hasHistory = c.top_stories.some((s) => s.story_context?.length);
+  // 음성·카드는 승인본만 PublicBriefing 에 붙는다 (media-store.ts). 메일 안에서는 재생되지 않으므로 페이지 #listen 으로 보낸다
+  const audio = b.media?.audio;
+  const card = b.media?.card;
+  const listenRow = audio
+    ? `<tr><td class="px" style="padding:14px ${PX}px 0"><a href="${esc(`${briefingUrl}#listen`)}" style="display:inline-block;border:1px solid ${C.line};border-left:3px solid ${C.jade};color:${C.ink};text-decoration:none;font:700 15px/1 ${FONT};padding:13px 18px;border-radius:0 8px 8px 0">${esc(t.listen(Math.max(1, Math.round(audio.duration_sec / 60))))}</a></td></tr>`
+    : "";
+  const cardRow = card
+    ? heading(t.cardTitle) +
+      `<tr><td class="px" align="center" style="padding:0 ${PX}px"><a href="${esc(briefingUrl)}" style="text-decoration:none"><img src="${esc(SITE_ORIGIN + card.url)}" width="${Math.min(MAIL_WIDTH - 2 * PX, 520)}" alt="${esc(card.alt_text)}" style="display:block;margin:0 auto;width:100%;max-width:520px;height:auto;border:1px solid ${C.line}"></a><div style="padding-top:8px;font:13px/1.5 ${FONT}">${link(briefingUrl, t.cardOpen + " →")}</div></td></tr>`
+    : "";
 
   const toc = `<tr><td class="px" style="padding:16px ${PX}px 0"><div style="font:700 12px/1.4 ${FONT};color:${C.faint};padding-bottom:4px">${esc(t.toc)}</div>${c.top_stories
     .map(
@@ -372,6 +391,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
     <div style="font:800 20px/1.45 ${FONT};color:${C.ink}">${esc(c.headline)}</div>
     <div style="padding-top:8px;font:15.5px/1.75 ${FONT};color:${C.ink}">${esc(c.lede)}</div>
   </td></tr></table></td></tr>
+  ${listenRow}
   ${toc}
   ${heading(t.top)}
   ${stories}
@@ -379,6 +399,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   ${sections}
   ${companies}
   ${term}
+  ${cardRow}
   <tr><td align="center" class="px" style="padding:34px ${PX}px 30px"><a href="${esc(briefingUrl)}" style="display:inline-block;background:${C.jade};color:#fff;text-decoration:none;font:700 15px/1 ${FONT};padding:15px 28px;border-radius:8px">${esc(t.cta)} →</a></td></tr>
 </table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:${MAIL_WIDTH}px"><tr><td class="px" style="padding:18px 24px;font:12px/1.7 ${FONT};color:${C.faint}">
@@ -394,6 +415,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
     "",
     c.headline,
     c.lede,
+    ...(audio ? [`${t.listen(Math.max(1, Math.round(audio.duration_sec / 60)))}: ${briefingUrl}#listen`] : []),
     "",
     ...c.top_stories.flatMap((s) => [
       `${s.rank}. ${s.title}`,

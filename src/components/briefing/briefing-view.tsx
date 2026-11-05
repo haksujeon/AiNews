@@ -16,6 +16,7 @@ import type { TopStory } from "@/lib/briefing/types";
 import { BriefingDateLink } from "./briefing-date-link";
 import { EasyTerms } from "./easy-terms";
 import { StoryContextBox } from "./story-context";
+import { BriefingAudioProvider, CardSummary, ChapterTime, ListenBar, ListenHere, ListenShort } from "./briefing-media";
 
 /*
  * 데일리 브리핑 본문 ("Briefing Desk" 시안 §5.1–5.2).
@@ -174,6 +175,8 @@ export function TopStoryItem({
           </div>
         )}
         <Sources refs={s.refs} briefing={briefing} className={compact ? "mt-2" : "mt-3"} />
+        {/* 음성이 있는 판의 브리핑 페이지에서만 그려진다 (재생기가 없으면 아무것도 없음) */}
+        {!compact && <ListenHere rank={s.rank} className="mt-2.5" />}
         <EasyTerms terms={s.easy_terms} locale={briefing.locale} className={compact ? "mt-3" : "mt-3.5 max-w-[40rem]"} />
         {/* 날짜 팝업(compact)에도 넣는다 (사용자 결정 2026-11-05) */}
         <StoryContextBox contexts={s.story_context} className="mt-2.5" />
@@ -243,6 +246,7 @@ function StoryToc({ briefing, variant = "rail", className }: { briefing: PublicB
             >
               {inline ? <span className="truncate">{s.title}</span> : s.title}
             </a>
+            <ChapterTime rank={s.rank} className={inline ? undefined : "-my-1 ml-auto self-start"} />
           </li>
         ))}
       </ol>
@@ -258,8 +262,9 @@ export function BriefingView({ briefing, pager }: Props) {
   const note = c.editor_note ? null : editorNoteData(briefing);
   const allOutlets = outletsOf(Object.keys(briefing.articles), briefing.articles);
   const term = c.term_of_the_day;
+  const media = briefing.media ?? {};
 
-  return (
+  const body = (
     <article lang={htmlLang} data-testid="briefing">
       {/* ── 머리: 날짜 줄 · h1 · 리드 · AI 작성 라벨 | 오늘의 N가지 ── */}
       <header className="grid gap-6 border-b-2 border-rule-strong pb-7 pt-6 sm:pt-9 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-end lg:gap-12">
@@ -274,6 +279,14 @@ export function BriefingView({ briefing, pager }: Props) {
           </h1>
           <p className="mt-4 max-w-[40rem] text-[17px] font-medium leading-[1.75] text-ink-2 sm:text-[19px]">{c.lede}</p>
           <Sources refs={c.lede_refs} briefing={briefing} className="mt-2.5" />
+          {/* 음성·한 장 요약 (승인본만, 관리자 검토 화면은 검토본도): 데스크톱 = 듣기 막대, 휴대폰 = 짧은 듣기 + 한 장 요약 버튼 */}
+          {media.audio && <ListenBar className="mt-5 hidden max-w-[40rem] lg:block" />}
+          {(media.audio || media.card) && (
+            <div className={cn("mt-5 grid gap-2 lg:hidden", media.audio && media.card ? "grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-1")}>
+              {media.audio && <ListenShort />}
+              {media.card && <CardSummary card={media.card} date={formatShortDate(briefing.edition_date, loc)} variant="button" />}
+            </div>
+          )}
           {/* 휴대폰·태블릿: 첫 화면에 기사 제목이 하나도 없던 것 (UI 검토 2026-11-04) → 오른쪽 목차와 같은 부품을 리드 아래에 */}
           <StoryToc briefing={briefing} variant="inline" className="mt-5 lg:hidden" />
           <AiLabel className="mt-4" />
@@ -324,6 +337,7 @@ export function BriefingView({ briefing, pager }: Props) {
 
         {/* ── 오른쪽 레일 (모바일에서는 본문 아래) ── */}
         <aside className="min-w-0">
+          {media.card && <CardSummary card={media.card} date={formatShortDate(briefing.edition_date, loc)} variant="rail" className="hidden lg:block" />}
           <KeyNumbers briefing={briefing} variant="rail" />
 
           {c.companies_to_watch.length > 0 && (
@@ -404,5 +418,12 @@ export function BriefingView({ briefing, pager }: Props) {
         {t("footerNote", { outlets: allOutlets.join("·") })}
       </p>
     </article>
+  );
+  if (!media.audio) return body;
+  // 재생기는 판에 하나 — 듣기 막대·목차 시각·"이 부분 듣기"·아래 재생 막대가 같은 재생기를 움직인다 (Gate 2)
+  return (
+    <BriefingAudioProvider audio={media.audio} stories={c.top_stories.map((s) => ({ rank: s.rank, title: s.title }))}>
+      {body}
+    </BriefingAudioProvider>
   );
 }

@@ -5,6 +5,7 @@ import { bannerState } from "@/lib/briefing/sla";
 import { BRIEFING_PATH, briefingDatePath, formatShortDate, readMinutes } from "@/lib/briefing/view";
 import { Sources } from "@/components/briefing/briefing-view";
 import { TodayStories } from "./today-stories";
+import { ListenLink } from "@/components/briefing/briefing-media";
 
 /**
  * "오늘" 홈의 브리핑 콘솔(어두운 카드) + 옆 칸(숫자로 보는 오늘·주목할 기업·오늘의 용어).
@@ -69,6 +70,7 @@ export async function TodayBriefing({ briefing, locale }: { briefing: PublicBrie
           >
             {tb("compactReadFull")}
           </Link>
+          <ListenLink date={briefing.edition_date} audio={briefing.media?.audio} tone="dark" />
           <Link
             href={`${BRIEFING_PATH}/archive`}
             className="inline-flex min-h-11 items-center rounded-[4px] border border-white/25 px-4 text-[15px] text-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"

@@ -11,6 +11,8 @@ type Props = Omit<ComponentProps<"a">, "href"> & {
   path?: string;
   /** 다른 언어판으로 갈 때 */
   locale?: string;
+  /** 페이지 안 위치 (예: "listen" → #listen) */
+  hash?: string;
 };
 
 /**
@@ -21,9 +23,9 @@ type Props = Omit<ComponentProps<"a">, "href"> & {
  * (기사 전체 페이지에서 관련 기사를 눌러도 팝업이 뜬다). 브리핑 판 사이 이동은 팝업이 아니라 언제나 전체 페이지여야 하므로
  * 클라이언트 라우터를 거치지 않는다. 홈 날짜 팝업은 가로채기 대신 ?briefing= 대화상자로 구현했다(day-briefing-dialog.tsx).
  */
-export function BriefingDateLink({ date, path, locale, ...rest }: Props) {
+export function BriefingDateLink({ date, path, locale, hash, ...rest }: Props) {
   const current = useLocale();
   const target = path ?? briefingDatePath(date ?? "");
-  const href = `${BASE_PATH}${getPathname({ href: target, locale: locale ?? current })}`;
+  const href = `${BASE_PATH}${getPathname({ href: target, locale: locale ?? current })}${hash ? `#${hash}` : ""}`;
   return <a {...rest} href={href} />;
 }

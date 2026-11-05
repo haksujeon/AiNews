@@ -13,6 +13,8 @@ import type { DayEditionRow } from "./day-select";
 import { attachEasyTerms } from "./easy-terms";
 import { loadEasyTerms } from "./easy-terms-store";
 import { attachStoryContext, loadStoryContext } from "./story-context";
+import type { BriefingMediaSet } from "./media";
+import { loadBriefingMedia } from "./media-store";
 
 export interface BriefingArticleRef {
   id: string;
@@ -36,6 +38,8 @@ export interface PublicBriefing {
   available_locales: BriefingLocale[]; // 같은 날짜에 발행된 언어판 (hreflang 용)
   content: StoredBriefingContent;
   articles: Record<string, BriefingArticleRef>;
+  /** 음성·카드 (briefing_media). 공개는 승인본만, 관리자 검토 화면은 검토 중인 것도. 없으면 {} */
+  media?: BriefingMediaSet;
 }
 
 /** 보이는 기사만 남기고, 근거가 모두 사라진 항목은 뺀다 (순수 함수) */
@@ -131,13 +135,17 @@ export async function loadBriefingRefs(row: {
  * 행 → 화면용 판. 공개 페이지와 관리자 검토 화면이 같은 함수로 인용 기사를 붙이고 숨긴 기사를 걸러낸다 (Gate 2).
  * available_locales 는 같은 날짜에 발행된 언어판.
  */
-async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
+async function hydrate(row: RawBriefingRow, includeReviewMedia = false): Promise<PublicBriefing> {
   const { articles, available_locales } = await loadBriefingRefs(row);
   const content = pruneToVisible(row.content as StoredBriefingContent, new Set(Object.keys(articles)));
   // "쉬운 AI 설명": 주요 기사의 근거 기사 키로 붙인다 (없으면 상자 없음)
   // "지금까지의 이야기"(시범)도 같은 근거 기사 키로 붙인다 (story-context.ts)
   const topRefs = [...new Set(content.top_stories.flatMap((s) => s.refs))];
-  const [easy, story] = await Promise.all([loadEasyTerms(topRefs, row.locale), loadStoryContext(topRefs, row.locale)]);
+  const [easy, story, media] = await Promise.all([
+    loadEasyTerms(topRefs, row.locale),
+    loadStoryContext(topRefs, row.locale),
+    loadBriefingMedia(row.edition_date, row.locale, includeReviewMedia),
+  ]);
   if (easy.size) content.top_stories = attachEasyTerms(content.top_stories, easy);
   if (story.size) content.top_stories = attachStoryContext(content.top_stories, story);
   return {
@@ -152,6 +160,7 @@ async function hydrate(row: RawBriefingRow): Promise<PublicBriefing> {
     available_locales,
     content,
     articles,
+    media,
   };
 }
 
@@ -184,7 +193,7 @@ export async function getBriefingForReview(id: string): Promise<PublicBriefing |
   ]);
   const row = rows[0] as RawBriefingRow | undefined;
   if (!row || !row.content || !(row.content as Partial<StoredBriefingContent>).top_stories) return null;
-  return hydrate(row);
+  return hydrate(row, true);
 }
 
 /**

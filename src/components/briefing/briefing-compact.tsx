@@ -6,6 +6,7 @@ import { formatShortDate } from "@/lib/briefing/view";
 import { LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
 import { AiLabel, BriefingCoverage, DataNotice, Sources, TopStoryItem } from "./briefing-view";
 import { BriefingDateLink } from "./briefing-date-link";
+import { ListenLink } from "./briefing-media";
 
 /*
  * 홈 날짜 팝업의 간추린 브리핑 (설계 §2 "팝업에 들어갈 내용").
@@ -48,6 +49,7 @@ export function BriefingCompact({ briefing }: { briefing: PublicBriefing }) {
       </DialogDescription>
       <Sources refs={c.lede_refs} briefing={briefing} className="mt-2" />
       <AiLabel className="mt-3" />
+      <ListenLink date={briefing.edition_date} audio={briefing.media?.audio} className="mt-3" />
       <DataNotice briefing={briefing} className="mt-[18px]" />
 
       {c.top_stories.length > 0 && (
