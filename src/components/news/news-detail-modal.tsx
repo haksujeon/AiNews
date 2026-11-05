@@ -12,6 +12,7 @@ import { NewsThumbnail } from "./news-thumbnail";
 import { ArticleKicker } from "./article-kicker";
 import { ArticleBody, ArticleByline, KeyTerms } from "./article-body";
 import { RelatedSectionsView } from "./related-sections";
+import { SubscribeBox } from "@/components/newsletter/subscribe-link";
 
 interface NewsDetailModalProps {
   /** 가로채기 라우트가 서버에서 toPublicNewsItem() 으로 만든 기사(요지 포함, 번역 전문 없음) */
@@ -80,6 +81,8 @@ export function NewsDetailModal({ news, open, onOpenChange }: NewsDetailModalPro
 
           <ArticleBody news={fullItem} locale={locale} headingTag="h3" />
           <KeyTerms terms={fullItem.key_terms} locale={locale} headingTag="h3" />
+          {/* 구독 신청 — 기사 페이지와 같은 상자 */}
+          <SubscribeBox source="article-modal" />
 
           {/* 관련 기사 세 묶음 — 상세 페이지와 같은 컴포넌트·같은 findRelated. 본문 아래 마지막 블록이라 늦게 도착해도
               위 내용이 밀리지 않는다(Gate 3) */}

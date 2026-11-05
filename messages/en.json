@@ -923,6 +923,7 @@
     "ctaTitle": "Get it by email every morning at 7",
     "ctaBody": "Yesterday's top 5 China AI stories and a 3-minute audio, free.",
     "ctaButton": "Subscribe",
-    "recommend": "Recommend to a colleague"
+    "recommend": "Recommend to a colleague",
+    "ctaButtonShort": "Get by email"
   }
 }

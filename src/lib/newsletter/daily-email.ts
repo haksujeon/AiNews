@@ -68,6 +68,8 @@ const T = {
     unsub: "수신 거부",
     unsubNote: "열리는 화면에서 버튼 한 번으로 발송을 멈출 수 있습니다.",
     recommend: "동료에게 추천하기 (구독 신청 화면)",
+    forwarded: "이 메일을 전달받으셨나요?",
+    forwardedCta: "직접 받아 보기",
     sender: "보낸 곳: AI 뉴스 (news.aibaseclub.com) · 문의는 이 메일에 회신해 주세요.",
     section: { models: "모델", products: "제품", funding: "투자", chips: "칩·반도체", policy: "정책", safety: "안전", robotics: "로봇", research: "연구", industry: "산업" } as Record<string, string>,
     dow: ["일", "월", "화", "수", "목", "금", "토"],
@@ -114,6 +116,8 @@ const T = {
     unsub: "退订",
     unsubNote: "在打开的页面上点击一次按钮即可停止发送。",
     recommend: "推荐给同事（订阅页面）",
+    forwarded: "这封邮件是转发给您的吗？",
+    forwardedCta: "直接订阅",
     sender: "发件方：AI 新闻（news.aibaseclub.com）· 如有疑问请直接回复本邮件。",
     section: { models: "模型", products: "产品", funding: "投融资", chips: "芯片", policy: "政策", safety: "安全", robotics: "机器人", research: "研究", industry: "产业" } as Record<string, string>,
     dow: ["日", "一", "二", "三", "四", "五", "六"],
@@ -160,6 +164,8 @@ const T = {
     unsub: "Unsubscribe",
     unsubNote: "One button on the page that opens stops all emails.",
     recommend: "Recommend to a colleague (signup page)",
+    forwarded: "Was this email forwarded to you?",
+    forwardedCta: "Get it yourself",
     sender: "From: AI News (news.aibaseclub.com) · Reply to this email with any questions.",
     section: { models: "Models", products: "Products", funding: "Funding", chips: "Chips", policy: "Policy", safety: "Safety", robotics: "Robotics", research: "Research", industry: "Industry" } as Record<string, string>,
     dow: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -390,6 +396,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   <tr><td class="px" style="padding:30px ${PX}px 0;font:700 12px/1.4 ${FONT};letter-spacing:.06em;color:${C.jade}">${esc(t.brand)}</td></tr>
   <tr><td class="px" style="padding:6px ${PX}px 0;font:800 27px/1.32 ${FONT};color:${C.ink}">${esc(t.title(dateLabel))}</td></tr>
   <tr><td class="px" style="padding:6px ${PX}px 0;font:13px/1.5 ${FONT};color:${C.faint}">${esc(t.coverage(total, cited))}</td></tr>
+  <tr><td class="px" style="padding:4px ${PX}px 0;font:12.5px/1.5 ${FONT};color:${C.faint}">${esc(t.forwarded)} <a href="${esc(`${absoluteUrl(b.locale, "/subscribe")}?src=forward`)}" style="color:${C.jade};font-weight:700;text-decoration:none">${esc(t.forwardedCta)} →</a></td></tr>
   <tr><td class="px" style="padding:20px ${PX}px 0;font:15.5px/1.7 ${FONT};color:${C.sub}">${opts.name ? esc(t.hello(opts.name)) + " " : ""}${esc(t.intro)}</td></tr>
   <tr><td class="px" style="padding:16px ${PX}px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.jadeSoft};border-radius:10px"><tr><td style="padding:18px 20px">
     <div style="font:800 20px/1.45 ${FONT};color:${C.ink}">${esc(c.headline)}</div>

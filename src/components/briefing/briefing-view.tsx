@@ -20,7 +20,7 @@ import { StoryContextBox } from "./story-context";
 import { BriefingAudioProvider, ListenBar, ListenHere, ListenShort, ShareButton } from "./briefing-media";
 import { BriefingGlance } from "./briefing-glance";
 import { StoryProgress } from "./story-progress";
-import { SubscribeLink } from "@/components/newsletter/subscribe-link";
+import { SubscribeBox } from "@/components/newsletter/subscribe-link";
 import { buildGlance } from "@/lib/briefing/glance";
 import type { CardSpec } from "@/lib/briefing/card-spec";
 
@@ -226,7 +226,6 @@ export function StoryMore({
 
 export function BriefingView({ briefing, pager, cardSpec }: Props) {
   const t = useTranslations("briefing");
-  const ts = useTranslations("subscribe");
   const c = briefing.content;
   const loc = briefing.locale;
   const htmlLang = LOCALE_HTML_LANG[loc as Locale] ?? loc;
@@ -364,14 +363,8 @@ export function BriefingView({ briefing, pager, cardSpec }: Props) {
         </aside>
       </div>
 
-      {/* 구독 신청 (2026-11-05) — 페이지 맨 아래, 이전·다음 판 앞 */}
-      <section className="mb-8 flex flex-wrap items-center justify-between gap-4 border-y border-rule bg-surface px-5 py-5" data-testid="briefing-subscribe">
-        <div className="min-w-0">
-          <p className="text-[17px] font-[750] text-ink">{ts("ctaTitle")}</p>
-          <p className="mt-1 text-[14px] text-ink-2">{ts("ctaBody")}</p>
-        </div>
-        <SubscribeLink source="briefing" variant="button" />
-      </section>
+      {/* 구독 신청 (2026-11-05) — 페이지 맨 아래, 이전·다음 판 앞. 기사 상세 하단과 같은 상자 */}
+      <SubscribeBox source="briefing" className="mb-8" />
 
       {pager && (
         <nav

@@ -923,6 +923,7 @@
     "ctaTitle": "每天早上7点，邮件送达",
     "ctaBody": "免费发送前一天中国AI要闻5条和3分钟收听。",
     "ctaButton": "订阅",
-    "recommend": "推荐给同事"
+    "recommend": "推荐给同事",
+    "ctaButtonShort": "邮件订阅"
   }
 }

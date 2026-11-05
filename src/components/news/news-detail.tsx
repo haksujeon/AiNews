@@ -18,6 +18,7 @@ import { NewsThumbnail } from "./news-thumbnail";
 import { ArticleKicker } from "./article-kicker";
 import { ArticleBody, ArticleByline, KeyTerms } from "./article-body";
 import { RelatedSectionsView } from "./related-sections";
+import { SubscribeBox } from "@/components/newsletter/subscribe-link";
 
 interface NewsDetailProps {
   /** 서버에서 toPublicNewsItem() 을 거친 기사(번역 전문 없음, gist 만) */
@@ -80,6 +81,8 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
           />
 
           <ArticleBody news={news} locale={locale} headingTag="h2" />
+          {/* 구독 신청 (2026-11-05, 권장 1순위) — 기사를 다 읽은 자리. 팝업과 같은 상자 */}
+          <SubscribeBox source="article" className="mt-10" />
         </div>
 
         {/* 사이드 */}

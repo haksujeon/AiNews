@@ -923,6 +923,7 @@
     "ctaTitle": "매일 아침 7시, 메일로 받기",
     "ctaBody": "전날 중국 AI 주요 5건과 3분 듣기를 무료로 보내 드립니다.",
     "ctaButton": "구독 신청",
-    "recommend": "동료에게 추천"
+    "recommend": "동료에게 추천",
+    "ctaButtonShort": "메일로 받기"
   }
 }
