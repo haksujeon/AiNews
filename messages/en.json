@@ -249,6 +249,7 @@
     "cardClose": "Close",
     "cardNoteOwn": "Drawn from this edition's figures, checked against the source articles.",
     "cardNoteAi": "AI-generated image. Logos and text in the image may be inaccurate.",
+    "cardChecked": "All figures checked against the briefing text",
     "topStories": "Top stories",
     "byImportance": "By importance",
     "outlets": "Reported by {count} outlets",

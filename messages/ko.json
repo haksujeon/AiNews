@@ -249,6 +249,7 @@
     "cardClose": "닫기",
     "cardNoteOwn": "이 판의 숫자로 그린 요약 그림입니다. 숫자는 근거 기사와 대조했습니다.",
     "cardNoteAi": "AI가 그린 그림입니다. 그림 속 로고와 글자는 실제와 다를 수 있습니다.",
+    "cardChecked": "카드의 숫자는 모두 브리핑 본문과 대조",
     "topStories": "주요 기사",
     "byImportance": "중요도 순",
     "outlets": "{count}개 매체 보도",

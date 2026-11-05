@@ -249,6 +249,7 @@
     "cardClose": "关闭",
     "cardNoteOwn": "根据本期数字绘制的摘要图，数字已与来源文章核对。",
     "cardNoteAi": "AI 生成的图片，图中标志和文字可能与实际不符。",
+    "cardChecked": "卡片数字均已与简报正文核对",
     "topStories": "要闻",
     "byImportance": "按重要性排序",
     "outlets": "{count}家媒体报道",

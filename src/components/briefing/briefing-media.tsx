@@ -454,7 +454,8 @@ export function CardSummary({ card, date, variant, className }: { card: Briefing
             onClick={() => setOpen(true)}
             aria-label={t("cardOpen")}
             className="relative block w-full cursor-zoom-in overflow-hidden border border-rule bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            style={{ aspectRatio: "4 / 5" }}
+            // 카드 높이는 내용대로라 비율은 그 그림의 실제 비율. 아주 긴 그림만 4:5 로 위쪽을 보여 준다
+            style={{ aspectRatio: card.height / card.width > 1.25 ? "4 / 5" : `${card.width} / ${card.height}` }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- 우리 API 가 주는 그림, 크기 고정 */}
             <img src={card.url} alt={card.alt_text} width={card.width} height={card.height} loading="lazy" className="block h-full w-full object-cover object-top" />

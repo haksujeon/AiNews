@@ -92,3 +92,9 @@ export async function loadBriefingMedia(date: string, locale: BriefingLocale, in
     return {};
   }
 }
+
+/** 카드 그림 명세 파일 (scripts/briefing-card.ts 가 쓰고, 카드 화면이 읽는다) */
+export function cardSpecPath(date: string, locale: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^(ko|en|zh)$/.test(locale)) return null;
+  return mediaFilePath(join(date, locale, "card-spec.json"));
+}
