@@ -6,6 +6,9 @@
  * 부르는 곳: CLI scripts/briefing-story-context.ts (cron 02:40·04:00·05:30 KST — 판 발행 약 01:30 뒤, 메일 07:00 전, 수집 시간 밖).
  *  LLM 을 20번 안팎 부르므로(몇 분) 관리자 발행·AI 검토 라우트(300초) 안에서는 부르지 않는다.
  *
+ * 주제 고르기·겹침 검사 (story-v1.2, 2026-11-05): 회사 흐름을 먼저 만들고, 주제 후보 2~3개를 과거 기사로 점수 매겨(scoreTopic)
+ *  순서대로 시도한다. 주제 흐름이 회사 흐름과 같은 이야기면(checkLensOverlap) 다음 후보로, 후보가 없으면 주제 흐름은 내지 않는다.
+ *
  * 규칙 (easy-terms-run.ts 와 같은 모양):
  *  - 이미 그 관점·언어 행이 있으면 다시 만들지 않는다 (11-03 시범 행·사람이 고친 행을 덮어쓰지 않는다. 저장은 ON CONFLICT DO NOTHING).
  *  - ko 판 하나당 끝까지 간 시도를 briefing_story_runs 에 남긴다. LLM 오류가 하나라도 있으면 남기지 않아 다음 실행이 빠진 것만 다시 한다.
@@ -20,8 +23,12 @@ import {
   STORY_MODEL,
   STORY_PROMPT_VERSION,
   SYNTH_SYSTEM,
-  buildLensPlans,
+  buildStoryPlan,
+  checkLensOverlap,
   checkStory,
+  limitActorPicks,
+  rankTopics,
+  scoreTopic,
   checkTranslated,
   pickedFrom,
   planUserPrompt,
@@ -37,6 +44,7 @@ import {
   type LensPlan,
   type StoryRow,
   type SynthOut,
+  type TopicScore,
   type TranslatableLens,
 } from "./story-gen";
 
@@ -67,6 +75,8 @@ export interface StoryRunDeps {
   existing: (articleIds: string[]) => Promise<Set<string>>;
   todayArticles: (ids: string[]) => Promise<{ id: string; title_kr: string; summary_kr: string | null; title_cn: string }[]>;
   candidates: (plan: LensPlan, edition: string, excludeIds: string[]) => Promise<Candidate[]>;
+  /** 주제 후보 점수용: 검색어에 걸리는 과거 기사 제목 (기간은 candidates 와 같음, 최근 최대 600건 표본) */
+  topicTitles: (pattern: string, edition: string, excludeIds: string[]) => Promise<{ title_kr: string; title_cn: string }[]>;
   koRows: (articleIds: string[]) => Promise<StoryRow[]>;
   titles: (ids: string[]) => Promise<Map<string, { title_kr: string; title_cn: string; title_en: string | null }>>;
   llm: (c: LlmCall) => Promise<{ raw: unknown; costUsd: number }>;
@@ -117,25 +127,24 @@ export async function ensureStoryContext(
     try {
       const today = await d.todayArticles(s.refs);
       const todayTxt = `제목: ${s.title}\n무슨 일: ${s.what ?? ""}\n${today.map((t) => `- ${t.title_kr}: ${t.summary_kr ?? ""}`).join("\n")}`;
-      const planRaw = await call({ effort: "low", system: PLAN_SYSTEM, user: planUserPrompt({ title: s.title, subject: s.subject ?? "", what: s.what ?? "", articles: today }), maxTokens: 2000 });
-      const plans = buildLensPlans(planRaw, { title: s.title, subject: s.subject ?? "" }).filter((p) => missing.includes(p.lens));
-      for (const l of missing) if (!plans.some((p) => p.lens === l)) res.problems.push(`${tag} ${l}: 검색어 부족`);
-      for (const plan of plans) {
-        const pool = await d.candidates(plan, ed.date, s.refs);
-        if (pool.length < 2) {
-          res.problems.push(`${tag} ${plan.lens}: 후보 ${pool.length}건`);
-          continue;
-        }
-        const sel = pickedFrom(await call({ effort: "low", system: SELECT_SYSTEM, user: selectUserPrompt(plan, todayTxt, pool), maxTokens: 3000 }), pool);
-        if (sel.picked.length < 2) {
-          res.problems.push(`${tag} ${plan.lens}: 고른 기사 ${sel.picked.length}건`);
-          continue;
-        }
-        const out = (await call({ effort: "medium", system: SYNTH_SYSTEM, user: synthUserPrompt(ed.date, todayTxt, sel.picked), maxTokens: 4000 })) as SynthOut;
-        if (!out || out.skip) {
-          res.problems.push(`${tag} ${plan.lens}: 엮을 것 없음`);
-          continue;
-        }
+      const planRaw = await call({ effort: "low", system: PLAN_SYSTEM, user: planUserPrompt({ title: s.title, subject: s.subject ?? "", what: s.what ?? "", articles: today }), maxTokens: 3000 });
+      const plan = buildStoryPlan(planRaw, { title: s.title, subject: s.subject ?? "" });
+      log(`${tag} 이 기사 회사·제품: ${plan.actorTerms.join(", ") || "없음"}`);
+
+      /** 관점 하나 만들기: 후보 → 고르기 → 엮기 → 검사(1회 고쳐 쓰기). 실패 이유는 문자열로 */
+      const makeLens = async (
+        lp: LensPlan,
+        ctx: { actors?: string[]; companyThread?: string[]; companyNow?: string; companyDates?: string[] } = {}
+      ): Promise<StoryRow | string> => {
+        const pool = await d.candidates(lp, ed.date, s.refs);
+        if (pool.length < 2) return `후보 ${pool.length}건`;
+        const sel = pickedFrom(await call({ effort: "low", system: SELECT_SYSTEM, user: selectUserPrompt(lp, todayTxt, pool, ctx), maxTokens: 3000 }), pool);
+        // 주제 흐름: 이 기사 회사 사건은 코드로도 최대 2개(회사 흐름과 같은 날 근처는 1개)
+        if (lp.lens === "topic") sel.picked = limitActorPicks(sel.picked, plan.actorPattern, ctx.companyDates);
+        if (sel.picked.length < 2) return `고른 기사 ${sel.picked.length}건`;
+        const user = synthUserPrompt(ed.date, todayTxt, sel.picked, lp, ctx.companyNow);
+        const out = (await call({ effort: "medium", system: SYNTH_SYSTEM, user, maxTokens: 4000 })) as SynthOut;
+        if (!out || out.skip) return "엮을 것 없음";
         let final = out;
         let probs = checkStory(out, sel.picked);
         if (probs.length) {
@@ -143,7 +152,7 @@ export async function ensureStoryContext(
           const fixed = (await call({
             effort: "medium",
             system: SYNTH_SYSTEM,
-            user: `${synthUserPrompt(ed.date, todayTxt, sel.picked)}\n\n이전 답:\n${JSON.stringify(out)}\n\n이전 답의 문제(고쳐서 JSON 전체를 다시):\n${probs.map((p) => `- ${p}`).join("\n")}`,
+            user: `${user}\n\n이전 답:\n${JSON.stringify(out)}\n\n이전 답의 문제(고쳐서 JSON 전체를 다시):\n${probs.map((p) => `- ${p}`).join("\n")}`,
             maxTokens: 4000,
           })) as SynthOut;
           if (fixed && !fixed.skip) {
@@ -154,12 +163,60 @@ export async function ensureStoryContext(
             } else probs = again;
           }
         }
-        if (probs.length) {
-          res.problems.push(`${tag} ${plan.lens}: ${probs.join(" / ")}`);
-          continue;
+        if (probs.length) return probs.join(" / ");
+        log(`${tag} ${lp.lens}${lp.topicName ? `(${lp.topicName})` : ""} 후보 ${pool.length} → 고름 ${sel.picked.length} → 통과`);
+        return toKoRow(id, lp.lens, sel.threadTitle || lp.topicName || s.subject || s.title, final, sel.picked);
+      };
+
+      // ① 회사 흐름 (없을 때만). 이미 있으면 겹침 검사용으로 저장된 행을 읽는다
+      let companyRow: StoryRow | null = null;
+      if (missing.includes("company")) {
+        if (!plan.company) res.problems.push(`${tag} company: 검색어 부족`);
+        else {
+          const r = await makeLens(plan.company);
+          if (typeof r === "string") res.problems.push(`${tag} company: ${r}`);
+          else {
+            companyRow = r;
+            newRows.push(r);
+          }
         }
-        newRows.push(toKoRow(id, plan.lens, sel.threadTitle || plan.topicName || s.subject || s.title, final, sel.picked));
-        log(`${tag} ${plan.lens} 후보 ${pool.length} → 고름 ${sel.picked.length} → 통과`);
+      } else companyRow = (await d.koRows([id])).find((r) => r.lens === "company") ?? null;
+
+      // ② 주제 흐름: 후보마다 과거 기사로 점수 → 통과한 것을 산업 > 시장 > 사건 순으로 최대 2개 시도
+      if (missing.includes("topic")) {
+        const scored: { plan: LensPlan; score: TopicScore }[] = [];
+        for (const tp of plan.topics) scored.push({ plan: tp, score: scoreTopic(await d.topicTitles(tp.pattern, ed.date, s.refs), plan.actorPattern) });
+        log(`${tag} 주제 후보: ${scored.map((c) => `${c.plan.topicName}[${c.plan.level}] ${c.score.ok ? "○" : `× ${c.score.why}`} (기사 ${c.score.articles}, 회사 비율 ${Math.round(c.score.actorShare * 100)}%)`).join(" · ") || "없음"}`);
+        const ranked = rankTopics(scored);
+        const tried: string[] = [];
+        let done = false;
+        for (const c of ranked.slice(0, 2)) {
+          const ctx = {
+            actors: plan.actorTerms.slice(0, 12),
+            companyThread: companyRow?.timeline.map((t) => `${t.date.slice(5)} ${t.text}`),
+            companyNow: companyRow?.now_text,
+            companyDates: companyRow?.timeline.map((t) => t.date),
+          };
+          const r = await makeLens(c.plan, ctx);
+          if (typeof r === "string") {
+            tried.push(`${c.plan.topicName}: ${r}`);
+            log(`${tag} topic(${c.plan.topicName}) 실패: ${r} → 다음 후보`);
+            continue;
+          }
+          const overlap = checkLensOverlap(companyRow, r, plan.actorPattern);
+          if (overlap.length) {
+            tried.push(`${c.plan.topicName}: 회사 흐름과 겹침 (${overlap.join(" / ")})`);
+            log(`${tag} topic(${c.plan.topicName}) 회사 흐름과 겹침: ${overlap.join(" / ")} → 다음 후보`);
+            continue;
+          }
+          newRows.push(r);
+          done = true;
+          break;
+        }
+        if (!done)
+          res.problems.push(
+            `${tag} topic: ${!scored.length ? "검색어 부족" : !ranked.length ? `기준을 넘은 주제 없음 (${scored.map((c) => `${c.plan.topicName} ${c.score.why}`).join(", ")})` : tried.join(" · ")}`
+          );
       }
     } catch (e) {
       res.errors.push(`${tag}: ${(e as Error).message.slice(0, 200)}`);
@@ -261,15 +318,28 @@ export async function dbDeps(): Promise<StoryRunDeps> {
                 title_cn, left(summary_cn, 220) AS summary_cn, title_en
            FROM ai_news_ex
           WHERE ${PUBLIC_NEWS_WHERE}
-            AND news_date < $2::date AND news_date >= $2::date - $5::int
+            AND news_date < $2::date AND news_date >= $2::date - $4::int
             AND NOT (id = ANY($3::uuid[]))
             AND (title_kr || ' ' || coalesce(summary_kr, '') || ' ' || coalesce(title_cn, '') || ' ' || coalesce(summary_cn, '')) ~* $1
-            AND ($4::text IS NULL OR NOT (title_kr ~* $4 OR coalesce(title_cn, '') ~* $4))
           ORDER BY (title_kr ~* $1 OR coalesce(title_cn, '') ~* $1) DESC, news_date DESC
-          LIMIT $6`,
-        [plan.pattern, edition, exclude, plan.exclude, STORY_LOOKBACK_DAYS, STORY_MAX_CANDIDATES]
+          LIMIT $5`,
+        [plan.pattern, edition, exclude, STORY_LOOKBACK_DAYS, STORY_MAX_CANDIDATES]
       );
       return (rows as Candidate[]).sort((a, b) => a.d.localeCompare(b.d));
+    },
+    topicTitles: async (pattern, edition, exclude) => {
+      const { rows } = await pool.query(
+        `SELECT title_kr, coalesce(title_cn, '') AS title_cn
+           FROM ai_news_ex
+          WHERE ${PUBLIC_NEWS_WHERE}
+            AND news_date < $2::date AND news_date >= $2::date - $4::int
+            AND NOT (id = ANY($3::uuid[]))
+            AND (title_kr || ' ' || coalesce(summary_kr, '') || ' ' || coalesce(title_cn, '') || ' ' || coalesce(summary_cn, '')) ~* $1
+          ORDER BY news_date DESC
+          LIMIT 600`,
+        [pattern, edition, exclude, STORY_LOOKBACK_DAYS]
+      );
+      return rows;
     },
     koRows: async (ids) => {
       const { rows } = await pool.query(
