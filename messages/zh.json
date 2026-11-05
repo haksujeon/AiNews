@@ -670,7 +670,8 @@
     "chartRegionDesc": "本月报道主体为中国的文章占{cn}%，美国占{us}%，其他占{other}%（上月中国{pcn}%，美国{pus}%）。"
   },
   "today": {
-    "pageTitle": "今日中国AI",
+    "pageTitle": "中国AI简报",
+    "pageTitleDated": "{date}版中国AI简报",
     "lastBatch": "{time} KST 采集 · {count}条",
     "latestLabel": "最新报道",
     "coverage": "{total}条报道中精选{cited}条",

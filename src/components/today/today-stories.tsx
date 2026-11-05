@@ -8,10 +8,12 @@ import type { PublicBriefing } from "@/lib/briefing/public";
 import { outletsOf } from "@/lib/briefing/view";
 import { Sources, sectionLabel } from "@/components/briefing/briefing-view";
 import { EasyTerms } from "@/components/briefing/easy-terms";
+import { StoryContextBox } from "@/components/briefing/story-context";
 
 /**
  * "오늘" 홈 브리핑 히어로의 주요 기사 — 줄을 누르면 그 자리에서 what·"왜 중요한가"·근거 기사가 펼쳐진다 (페이지 이동 없음).
  * 문구·근거 링크·분야 이름은 브리핑 페이지와 같은 부품(Sources·sectionLabel·outletsOf)을 쓴다 (Gate 2).
+ * 펼친 칸에는 쉬운 AI 설명과 히스토리 분석 상자(둘 다 접힘, 브리핑 페이지와 같은 부품).
  * 처음에는 1위가 펼쳐져 있다. 한 번에 하나만 펼친다. 펼친 칸 아래 "쉬운 AI 설명"(접힘)은 브리핑 페이지와 같은 EasyTerms.
  */
 export function TodayStories({ briefing }: { briefing: PublicBriefing }) {
@@ -62,6 +64,7 @@ export function TodayStories({ briefing }: { briefing: PublicBriefing }) {
                 />
               </div>
               <EasyTerms terms={s.easy_terms} locale={briefing.locale} tone="dark" className="mt-3" />
+              <StoryContextBox contexts={s.story_context} tone="dark" className="mt-2.5" />
             </div>
           </li>
         );

@@ -670,7 +670,8 @@
     "chartRegionDesc": "This month {cn}% of articles were about China, {us}% about the US and {other}% elsewhere (last month China {pcn}%, US {pus}%)."
   },
   "today": {
-    "pageTitle": "Today in China AI",
+    "pageTitle": "China AI Briefing",
+    "pageTitleDated": "China AI Briefing · {date} edition",
     "lastBatch": "Collected {time} KST · {count}",
     "latestLabel": "Latest articles",
     "coverage": "{cited} of {total} articles",

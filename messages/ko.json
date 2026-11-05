@@ -670,7 +670,8 @@
     "chartRegionDesc": "이번 달 기사의 대표 지역은 중국 {cn}%, 미국 {us}%, 그 밖 {other}%였다. 지난달은 중국 {pcn}%, 미국 {pus}%."
   },
   "today": {
-    "pageTitle": "오늘의 중국 AI",
+    "pageTitle": "중국 AI 브리핑",
+    "pageTitleDated": "{date} 판 중국 AI 브리핑",
     "lastBatch": "{time} KST 수집 · {count}건",
     "latestLabel": "최신 기사",
     "coverage": "기사 {total}건 중 {cited}건",
