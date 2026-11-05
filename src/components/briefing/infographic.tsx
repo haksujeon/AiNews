@@ -49,6 +49,8 @@ function Triangle({ dir }: { dir: "up" | "down" }) {
 /** 큰 숫자 (증감이면 ▲▼ 띠, 크기는 다른 칸 큰 숫자와 같게) */
 export function BigValue({ big, className }: { big: BigNumber; className?: string }) {
   const t = useTranslations("briefing");
+  // 영어 표기는 길다("about 150 billion yuan") — 14자 넘으면 한 단계 작게 (칸 높이가 들쭉날쭉하지 않게, Gate 3)
+  const text = big.raw.length > 14 ? <span className="text-[0.8em]">{big.raw}</span> : big.raw;
   if (big.dir) {
     return (
       <b
@@ -60,11 +62,11 @@ export function BigValue({ big, className }: { big: BigNumber; className?: strin
       >
         <Triangle dir={big.dir} />
         <span className="sr-only">{t(big.dir === "up" ? "trendUp" : "trendDown")}</span>
-        {big.raw}
+        {text}
       </b>
     );
   }
-  return <b className={cn("font-[800] leading-[1.15] tracking-[-0.02em] text-jade tabular-nums", className)}>{big.raw}</b>;
+  return <b className={cn("font-[800] leading-[1.15] tracking-[-0.02em] text-jade tabular-nums", className)}>{text}</b>;
 }
 
 function Meter({ value, slim = false }: { value: number; slim?: boolean }) {

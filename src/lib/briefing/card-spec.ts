@@ -66,8 +66,14 @@ export function storyGround(s: Pick<TopStory, "title" | "what" | "why" | "refs">
   return [s.title, s.what, s.why ?? "", ...kn].join("\n");
 }
 
-const MAX_LABEL = 14;
-const MAX_NOTE = 60;
+export type CardLocale = "ko" | "zh" | "en";
+/** 글자 수 제한 — 언어마다 (영어는 같은 뜻에 글자가 두 배쯤 든다). 카드 칸 폭 기준 */
+const LIMITS: Record<CardLocale, { label: number; big: number; note: number }> = {
+  ko: { label: 14, big: 24, note: 60 },
+  zh: { label: 12, big: 20, note: 50 },
+  en: { label: 28, big: 44, note: 130 },
+};
+const lim = (locale: string | undefined) => LIMITS[(locale as CardLocale) in LIMITS ? (locale as CardLocale) : "ko"];
 
 /** 표기에서 숫자를 빼고 남은 단위 꼴 ("1055억 위안" → "억위안", "약 1,500억 위안" → "억위안") */
 export function unitShape(raw: string): string {
@@ -90,15 +96,17 @@ function oneQuantity(raw: string): Quantity | null {
  * - timeline: 2~4개, when 이 ground 에 있음, 날짜 순서는 LLM 출력 순서 그대로
  * - 라벨은 14자 이내, 라벨 안의 숫자도 ground 에 있어야 한다
  */
-export function validateFigure(fig: CardFigure, ground: string): { ok: true; figure: CardFigure } | { ok: false; reason: string } {
+export function validateFigure(fig: CardFigure, ground: string, locale: string = "ko"): { ok: true; figure: CardFigure } | { ok: false; reason: string } {
   if (fig.kind === "none") return { ok: true, figure: fig };
   const has = (t: string) => t.length > 0 && ground.includes(t);
   // 라벨은 짧아서 작은 수("3배")도 지어내기 쉽다 — 모든 수(all)로 비교한다
   const groundAll = valueSets(ground).all;
   // 순서·때를 가리키는 말("2차 라운드", "3분기", "12월")은 크기를 말하지 않으므로 빼고 본다
-  const ORDINAL = /\d+\s*(차|번째|분기|월|일|위|호|기)(?![가-힣])/g;
+  // zh "第2轮"·"第3季度", en "Q3"·"2nd"·"round 2" 도 같은 뜻
+  const ORDINAL = /\d+\s*(차|번째|분기|월|일|위|호|기)(?![가-힣])|第?\d+\s*(轮|季度|月|日|号|名|期|代)|\b[QH]\d\b|\b\d+(st|nd|rd|th)\b|\b(round|phase|gen|No\.)\s*\d+\b/gi;
+  const maxLabel = lim(locale).label;
   const labelOk = (l: string) =>
-    l.trim().length > 0 && l.length <= MAX_LABEL && [...valueSets(l.replace(ORDINAL, "")).all].every((v) => groundAll.has(v));
+    l.trim().length > 0 && l.length <= maxLabel && [...valueSets(l.replace(ORDINAL, "")).all].every((v) => groundAll.has(v));
   const items = (fig as { items?: unknown[] }).items;
   if (!Array.isArray(items) || items.length < 2 || items.length > 4) return { ok: false, reason: `${fig.kind}: 항목 수 ${items?.length ?? 0}` };
 
@@ -132,13 +140,17 @@ export function validateFigure(fig: CardFigure, ground: string): { ok: true; fig
       if (!has(it.when)) return { ok: false, reason: `timeline: 기사에 없는 때 "${it.when}"` };
       if (!labelOk(it.label)) return { ok: false, reason: `timeline: 라벨 "${it.label}"` };
     }
+    // 때가 모두 같으면("December · December") 흐름이 아니다
+    if (new Set(fig.items.map((it) => it.when.trim())).size < 2) return { ok: false, reason: "timeline: 때가 모두 같음" };
     return { ok: true, figure: { kind: "timeline", items: fig.items.map((it) => ({ when: it.when, label: it.label.trim() })) } };
   }
   return { ok: false, reason: `모르는 틀 ${(fig as { kind: string }).kind}` };
 }
 
-const UP_WORDS = /^(?:\s*(?:이상|가량|정도|넘게|남짓))?\s*(?:늘|증가|상승|올랐|올라|높아|확대|급증|성장)/;
-const DOWN_WORDS = /^(?:\s*(?:이상|가량|정도|넘게|남짓))?\s*(?:줄|감소|하락|낮아|떨어|축소|급감)/;
+const UP_WORDS = /^(?:\s*(?:이상|가량|정도|넘게|남짓|以上|左右))?\s*(?:늘|증가|상승|올랐|올라|높아|확대|급증|성장|的?(?:增长|增幅|上涨|提升)|(?:year-on-year\s+)?(?:increase|rise|growth|jump|gain))/i;
+const DOWN_WORDS = /^(?:\s*(?:이상|가량|정도|넘게|남짓|以上|左右))?\s*(?:줄|감소|하락|낮아|떨어|축소|급감|的?(?:下降|降幅|减少|下滑)|(?:year-on-year\s+)?(?:decrease|decline|drop|fall|cut|reduction))/i;
+const UP_BEFORE = /(?:增长|增加|上涨|上升|提升|提高|增幅达?|同比增长)了?(?:约|近|超过|逾)?\s*$|\b(?:rose|rise[sn]?|risen|up|increased?|increasing|grew|grow[sn]?|growth of|jumped|surged|gained)\s+(?:by\s+)?(?:about\s+|nearly\s+|over\s+|more than\s+|roughly\s+)?$|\b(?:raised|increased|boosted|lifted)\b[^.。]{0,30}\bby\s+(?:about\s+|nearly\s+|over\s+|more than\s+|roughly\s+)?$/i;
+const DOWN_BEFORE = /(?:下降|减少|下跌|降低|缩减|下滑|降幅达?|同比下降)了?(?:约|近|超过|逾)?\s*$|\b(?:fell|fall[sn]?|fallen|down|decreased?|declined?|dropped|cut|reduced|lowered)\s+(?:by\s+)?(?:about\s+|nearly\s+|over\s+|more than\s+|roughly\s+)?$|\b(?:cut|reduced|lowered|slashed|trimmed)\b[^.。]{0,30}\bby\s+(?:about\s+|nearly\s+|over\s+|more than\s+|roughly\s+)?$/i;
 
 /**
  * 큰 숫자가 퍼센트일 때 그래픽 종류를 코드가 정한다 (LLM 에 맡기지 않음).
@@ -150,26 +162,32 @@ export function bigTrend(big: { raw: string; label: string }, ground: string): P
   const q = oneQuantity(big.raw);
   if (!q || !q.percent) return {};
   const at = ground.indexOf(big.raw);
-  const after = at >= 0 ? ground.slice(at + big.raw.length, at + big.raw.length + 16) : "";
+  const after = at >= 0 ? ground.slice(at + big.raw.length, at + big.raw.length + 24) : "";
+  // 중국어·영어는 증감 말이 숫자 앞에 온다 ("增长47%", "rose 47%", "up by 47%")
+  const before = at >= 0 ? ground.slice(Math.max(0, at - 48), at) : "";
   const label = big.label;
-  if (UP_WORDS.test(after) || /(증가|상승|늘어난|성장)/.test(label)) return { dir: "up" };
-  if (DOWN_WORDS.test(after) || /(감소|하락|줄어든|축소)/.test(label)) return { dir: "down" };
+  if (UP_WORDS.test(after) || UP_BEFORE.test(before) || /(증가|상승|늘어난|성장|增长|增幅|上涨|提升)/.test(label) || /\b(growth|increase|rise|gain)\b/i.test(label)) return { dir: "up" };
+  if (DOWN_WORDS.test(after) || DOWN_BEFORE.test(before) || /(감소|하락|줄어든|축소|下降|降幅|减少|下滑)/.test(label) || /\b(decline|drop|decrease|cut|reduction|fall)\b/i.test(label)) return { dir: "down" };
   return q.value > 0 && q.value <= 100 ? { meter: q.value } : {};
 }
 
 /** LLM 출력 한 기사 → 검사한 명세. 크게 쓸 숫자·한 줄 설명도 같은 규칙 */
-export function validateStorySpec(raw: Partial<CardStorySpec>, ground: string): { spec: CardStorySpec; dropped: string[] } {
+// 영어 수량 표기는 낱말로 시작할 수 있다 ("about 100,000 units", "US$16 billion") — 버전·모델 이름("iOS 27.3", "GPT-5")과 구별
+const EN_QTY_START = /^(?:about|nearly|over|more than|up to|around|roughly|approximately|almost|USD|CNY|RMB|HKD|US)\s*\$?\s*\d/i;
+
+export function validateStorySpec(raw: Partial<CardStorySpec>, ground: string, locale: string = "ko"): { spec: CardStorySpec; dropped: string[] } {
+  const L = lim(locale);
   const dropped: string[] = [];
   const rank = Number(raw.rank);
   let big: BigNumber | null = raw.big && typeof raw.big.raw === "string" ? { raw: raw.big.raw.trim(), label: String(raw.big.label ?? "").trim() } : null;
   // 크게 쓸 숫자는 크기를 말하는 값이어야 한다 — 버전·모델 이름("iOS 27.3", "GPT-5")은 안 된다
-  if (big && (!ground.includes(big.raw) || !/\d/.test(big.raw) || /^[A-Za-z]/.test(big.raw) || big.label.length > 24)) {
+  if (big && (!ground.includes(big.raw) || !/\d/.test(big.raw) || (/^[A-Za-z]/.test(big.raw) && !EN_QTY_START.test(big.raw)) || big.label.length > L.big)) {
     dropped.push(`#${rank} big "${big.raw}"`);
     big = null;
   }
   let figure: CardFigure = { kind: "none" };
   if (raw.figure && typeof raw.figure === "object") {
-    const v = validateFigure(raw.figure as CardFigure, ground);
+    const v = validateFigure(raw.figure as CardFigure, ground, locale);
     if (v.ok) figure = v.figure;
     else dropped.push(`#${rank} ${v.reason}`);
   }
@@ -195,7 +213,7 @@ export function validateStorySpec(raw: Partial<CardStorySpec>, ground: string): 
   if (big) big = { ...big, ...bigTrend(big, ground) };
   let note = String(raw.note ?? "").trim();
   const groundNums = numericValues(ground);
-  if (note.length > MAX_NOTE || [...numericValues(note)].some((n) => !groundNums.has(n))) {
+  if (note.length > L.note || [...numericValues(note)].some((n) => !groundNums.has(n))) {
     dropped.push(`#${rank} note "${note}"`);
     note = "";
   }
@@ -211,7 +229,7 @@ export function validateCardSpec(
   const dropped: string[] = [];
   const stories = content.top_stories.map((s) => {
     const raw = (llm.stories ?? []).find((x) => Number(x.rank) === s.rank) ?? { rank: s.rank };
-    const v = validateStorySpec(raw, storyGround(s, content.key_numbers));
+    const v = validateStorySpec(raw, storyGround(s, content.key_numbers), meta.locale);
     dropped.push(...v.dropped);
     return v.spec;
   });
@@ -239,4 +257,19 @@ export function buildCardSpecUser(content: Pick<BriefingContent, "top_stories" |
   return content.top_stories
     .map((s) => `### rank ${s.rank}\n${storyGround(s, content.key_numbers)}`)
     .join("\n\n");
+}
+
+/** 언어별 지시 — 규칙은 한국어 지시 하나(CARD_SPEC_SYSTEM)를 쓰고, 글을 쓰는 언어와 글자 수만 덧붙인다 (Gate 2) */
+export function cardSpecSystem(locale: string): string {
+  if (locale === "zh")
+    return `${CARD_SPEC_SYSTEM}
+
+언어: big.label·label·note·unit 은 기사 글과 같은 중국어(간체)로 쓴다. 위 예시의 한국어 낱말을 옮겨 쓰지 말 것.
+글자 수(중국어): label 12자, big.label 20자, note 50자 이내. 숫자 표기는 기사 글 그대로("1055亿元", "约10万份").`;
+  if (locale === "en")
+    return `${CARD_SPEC_SYSTEM}
+
+Language: write big.label, label, note and unit in English, like the article. Do not reuse the Korean words from the examples above.
+Length (English): label ≤ 28 characters, big.label ≤ 44, note ≤ 130. Copy number spellings exactly as in the article ("105.5 billion yuan", "about 100,000 units").`;
+  return CARD_SPEC_SYSTEM;
 }

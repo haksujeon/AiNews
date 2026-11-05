@@ -44,9 +44,9 @@ function notebookId(): string {
   return id;
 }
 
-async function transcribe(file: string, preferLite = false): Promise<unknown> {
+async function transcribe(file: string, locale: "ko" | "zh" | "en", preferLite = false): Promise<unknown> {
   const { parseJsonContent } = await import("../src/lib/briefing/llm");
-  const { TRANSCRIBE_PROMPT } = await import("../src/lib/briefing/audio-check");
+  const { transcribePrompt } = await import("../src/lib/briefing/audio-check");
   const base = (process.env.LITELLM_BASE_URL ?? "").replace(/\/+$/, "");
   const key = process.env.LITELLM_API_KEY;
   if (!base || !key) throw new Error("LITELLM_BASE_URL / LITELLM_API_KEY 미설정");
@@ -64,7 +64,7 @@ async function transcribe(file: string, preferLite = false): Promise<unknown> {
       body: JSON.stringify({
         model,
         max_tokens: 8000,
-        messages: [{ role: "user", content: [{ type: "text", text: TRANSCRIBE_PROMPT }, { type: "input_audio", input_audio: { data, format: "mp3" } }] }],
+        messages: [{ role: "user", content: [{ type: "text", text: transcribePrompt(locale) }, { type: "input_audio", input_audio: { data, format: "mp3" } }] }],
       }),
       signal: AbortSignal.timeout(300_000),
     });
@@ -81,10 +81,10 @@ async function transcribe(file: string, preferLite = false): Promise<unknown> {
 type AC = typeof import("../src/lib/briefing/audio-check");
 
 /** 받아쓰기 → 대조. 모르는 숫자가 있으면 한 번 더 받아써 양쪽에 다 나온 것만 오류로 본다 (confirmedUnknown) */
-async function verify(mp3: string, source: string, storyCount: number, ac: AC): Promise<Omit<Attempt, "n" | "mp3">> {
+async function verify(mp3: string, source: string, storyCount: number, ac: AC, locale: "ko" | "zh" | "en"): Promise<Omit<Attempt, "n" | "mp3">> {
   const dur = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp3]).toString().trim());
   const once = async (preferLite: boolean) => {
-    const transcript = ac.transcriptText(ac.retimeByLength(ac.linesFromJson(await transcribe(mp3, preferLite)), dur));
+    const transcript = ac.transcriptText(ac.retimeByLength(ac.linesFromJson(await transcribe(mp3, locale, preferLite)), dur));
     return { transcript, chk: ac.checkTranscript(transcript, source, storyCount) };
   };
   let first;
@@ -121,6 +121,7 @@ async function main() {
   loadEnvConfig(process.cwd());
   process.env.NEXT_PUBLIC_BASE_PATH ??= "/ainews";
   const locale = (arg("locale") ?? "ko") as "ko" | "en" | "zh";
+  if (!["ko", "zh", "en"].includes(locale)) throw new Error("--locale ko|zh|en");
   const attempts = Math.max(1, Math.min(5, Number(arg("attempts") ?? 3)));
   const { default: pool } = await import("../src/lib/db");
   const { getPublishedBriefing } = await import("../src/lib/briefing/public");
@@ -140,7 +141,7 @@ async function main() {
       log(`${date} ${locale} 승인된 음성이 이미 있음 — 건너뜀`);
       return;
     }
-    const source = ac.audioSourceMarkdown(b.content, formatShortDate(date, locale));
+    const source = ac.audioSourceMarkdown(b.content, formatShortDate(date, locale), locale);
     const srcFile = join(work, `briefing-${date}-${locale}.md`);
     writeFileSync(srcFile, source);
     if (flag("dry")) {
@@ -156,7 +157,7 @@ async function main() {
       if (!f) throw new Error(`${date} ${locale} 등록된 음성이 없습니다`);
       const mp3 = join(work, "recheck.mp3");
       copyFileSync(f, mp3);
-      const v = await verify(mp3, source, b.content.top_stories.length, ac);
+      const v = await verify(mp3, source, b.content.top_stories.length, ac, locale);
       tries.push({ n: 1, mp3, ...v });
       log(`  다시 대조: 모르는 숫자 [${v.unknown.join(", ")}] · 장 ${v.chaptersFound}/${b.content.top_stories.length}${v.ok ? " · 통과" : ""}`);
     }
@@ -176,7 +177,7 @@ async function main() {
       let taskId = "";
       try {
         const gen = nlmJson<{ task_id?: string; id?: string }>(
-          ["generate", "audio", "-n", nb, "-s", sid, "--format", "brief", "--language", locale, "--no-wait", "--retry", "3", ac.AUDIO_INSTRUCTIONS],
+          ["generate", "audio", "-n", nb, "-s", sid, "--format", "brief", "--language", ac.NOTEBOOKLM_LANG[locale], "--no-wait", "--retry", "3", ac.audioInstructions(locale)],
           5 * 60_000
         );
         taskId = gen.task_id ?? gen.id ?? "";
@@ -209,7 +210,7 @@ async function main() {
       } catch {
         /* 지우기 실패는 무시 (노트북에 남을 뿐) */
       }
-      const v = await verify(mp3, source, b.content.top_stories.length, ac);
+      const v = await verify(mp3, source, b.content.top_stories.length, ac, locale);
       tries.push({ n, mp3, ...v });
       if (v.transcript === "") break; // 받아쓰기를 못 하면 다시 만들어도 같다 — 이 음성을 검토 중으로 남긴다
       log(`  대조: 모르는 숫자 [${v.unknown.join(", ")}] · 장 ${v.chaptersFound}/${b.content.top_stories.length}${v.ok ? " · 통과" : ""}`);

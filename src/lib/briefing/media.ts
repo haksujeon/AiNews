@@ -63,6 +63,9 @@ export function formatClock(sec: number): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${r}` : `${m}:${r}`;
 }
 
+// 서수 — 언어별 음성 지시문(audio-check.ts audioInstructions)이 시키는 말. 세 언어 표현이 겹치지 않아 한 목록으로 찾는다.
+// zh 는 "第一轮融资" 같은 본문을 피하려고 뒤에 쉼표·条·个 가 올 때만, en 은 문장 첫머리 대문자 + 쉼표일 때만.
+const ZH_P = "(^|[\\s，。、：！？])";
 const ORDINALS: [RegExp, number][] = [
   [/(^|\s)(첫째|첫 번째|첫번째)/, 1],
   [/(^|\s)(둘째|두 번째|두번째)/, 2],
@@ -71,7 +74,11 @@ const ORDINALS: [RegExp, number][] = [
   [/(^|\s)(다섯째|다섯 번째|다섯번째)/, 5],
   [/(^|\s)(여섯째|여섯 번째)/, 6],
   [/(^|\s)(일곱째|일곱 번째)/, 7],
+  ...(["一", "二", "三", "四", "五", "六", "七"] as const).map((d, i) => [new RegExp(`${ZH_P}第${d}(条新闻|条|个)?[，,、：:]`), i + 1] as [RegExp, number]),
+  ...(["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh"] as const).map((w, i) => [new RegExp(`(^|[.!?]\\s+|\\s)${w}(ly)?\\s*[,:]`), i + 1] as [RegExp, number]),
 ];
+const LAST_WORDS = /(마지막|最后|Finally|Lastly)/;
+const OUTRO_WORDS = /(요약하자면|정리하면|정리하자면|오늘 브리핑은 여기까지|总结一下|总的来说|以上就是|To sum up|In summary|That wraps up|That's all for)/;
 
 /**
  * 받아쓰기("A: 0:24 자, 첫째. …" 한 줄에 한 발화)에서 주요 기사의 시작 시각을 찾는다.
@@ -94,8 +101,8 @@ export function chaptersFromTranscript(transcript: string, storyCount: number): 
         break;
       }
     }
-    if (/마지막/.test(text) && !found.has(storyCount) && found.size === storyCount - 1) found.set(storyCount, t);
-    if (found.size && outro === null && /(요약하자면|정리하면|정리하자면|오늘 브리핑은 여기까지)/.test(text)) outro = t;
+    if (LAST_WORDS.test(text) && !found.has(storyCount) && found.size === storyCount - 1) found.set(storyCount, t);
+    if (found.size && outro === null && OUTRO_WORDS.test(text)) outro = t;
   }
   const ranks = [...found.entries()].sort((a, b) => a[1] - b[1]);
   // 시각이 rank 순서와 어긋나면(잘못 잡힘) 그 뒤를 버린다

@@ -90,3 +90,27 @@ test("퍼센트 큰 숫자: 바로 뒤 표현으로 증가·감소, 아니면 �
   assert.deepEqual(bigTrend({ raw: "104.2%", label: "매출" }, "매출이 104.2%였다"), {});
   assert.deepEqual(bigTrend({ raw: "160억 달러", label: "기업가치" }, "160억 달러"), {});
 });
+
+test("중국어·영어: 증감 말이 숫자 앞에 와도 증가·감소로 본다", () => {
+  assert.deepEqual(bigTrend({ raw: "47%", label: "三季度营收" }, "三季度营收同比增长47%"), { dir: "up" });
+  assert.deepEqual(bigTrend({ raw: "40.1%", label: "投资" }, "投资环比下降40.1%"), { dir: "down" });
+  assert.deepEqual(bigTrend({ raw: "47%", label: "Q3 revenue" }, "Q3 revenue rose 47% from the previous quarter"), { dir: "up" });
+  assert.deepEqual(bigTrend({ raw: "50%", label: "token use" }, "cut token use by more than 50%"), { dir: "down" });
+  assert.deepEqual(bigTrend({ raw: "25%", label: "monthly quota restored" }, "restored 25% of the monthly quota"), { meter: 25 });
+});
+
+test("영어 카드: 낱말로 시작하는 수량은 크게 쓰고, 버전 이름은 버린다 · 라벨 길이는 언어별", () => {
+  const ground = "Qwen Office monthly plan sold about 100,000 units in 30 minutes at 0.01 yuan. Apple tested it in iOS 27.3.";
+  const content = { top_stories: [{ rank: 1, title: "Qwen Office plan", what: ground, why: "", refs: [] }], key_numbers: [] };
+  const ok = validateCardSpec(content as never, { stories: [{ rank: 1, big: { raw: "about 100,000 units", label: "Monthly plans sold in 30 minutes" } }] } as never, { edition_date: "2026-11-04", locale: "en" });
+  assert.equal(ok.stories[0].big?.raw, "about 100,000 units");
+  const ver = validateCardSpec(content as never, { stories: [{ rank: 1, big: { raw: "iOS 27.3", label: "version" } }] } as never, { edition_date: "2026-11-04", locale: "en" });
+  assert.equal(ver.stories[0].big, null);
+  const fig = { kind: "chain" as const, items: [{ label: "Monthly plan price", raw: "0.01 yuan" }, { label: "Time to sell out", raw: "30 minutes" }] };
+  assert.ok(validateFigure(fig, ground, "en").ok);
+  assert.equal(validateFigure(fig, ground, "ko").ok, false); // 한국어 기준(14자)으로는 길다
+});
+
+test("타임라인: 때가 모두 같으면 버린다", () => {
+  assert.equal(validateFigure({ kind: "timeline", items: [{ when: "12월", label: "배포" }, { when: "12월", label: "정식 배포" }] }, GROUND).ok, false);
+});

@@ -54,7 +54,7 @@ async function main() {
     } else {
       let cost = 0;
       const res = await chat(
-        { system: cs.CARD_SPEC_SYSTEM, messages: [{ role: "user", content: cs.buildCardSpecUser(b.content) }], model: BRIEFING_MODEL, maxTokens: 4000 },
+        { system: cs.cardSpecSystem(locale), messages: [{ role: "user", content: cs.buildCardSpecUser(b.content) }], model: BRIEFING_MODEL, maxTokens: 4000 },
         (u) => (cost += u.costUsd ?? 0)
       );
       spec = cs.validateCardSpec(b.content, parseJsonContent(res.content), { edition_date: date, locale });

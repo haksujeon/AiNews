@@ -10,24 +10,60 @@ import { chaptersFromTranscript, formatClock, type MediaChapter } from "./media"
 import { numericValues } from "./translate";
 import type { BriefingContent } from "./types";
 
+export type AudioLocale = "ko" | "zh" | "en";
+
+/** 자료 머리말 — 그 판의 언어로 (NotebookLM 이 자료 언어에 끌려가지 않게) */
+const SRC_LABELS: Record<AudioLocale, { title: (d: string) => string; headline: string; top: string; what: string; why: string; nums: string; other: string; cos: string }> = {
+  ko: { title: (d) => `${d} 판 중국 AI 데일리 브리핑 (이 판의 기사만)`, headline: "헤드라인", top: "주요 기사", what: "무슨 일", why: "왜 중요한가", nums: "숫자로 보는 하루", other: "그 밖의 소식", cos: "주목할 기업" },
+  zh: { title: (d) => `${d} 中国AI每日简报（仅本期新闻）`, headline: "头条", top: "主要新闻", what: "发生了什么", why: "为什么重要", nums: "数字看今天", other: "其他消息", cos: "值得关注的公司" },
+  en: { title: (d) => `China AI Daily briefing, ${d} edition (this edition only)`, headline: "Headline", top: "Top stories", what: "What happened", why: "Why it matters", nums: "The day in numbers", other: "Other news", cos: "Companies to watch" },
+};
+
 /** NotebookLM 에 넣는 자료 — 그 판 브리핑 내용만 (히스토리·과거 기사 없음: 과거 숫자가 섞이지 않게) */
-export function audioSourceMarkdown(c: Pick<BriefingContent, "headline" | "lede" | "top_stories" | "key_numbers" | "sections" | "companies_to_watch">, dateLabel: string): string {
-  const o = [`# ${dateLabel} 판 중국 AI 데일리 브리핑 (이 판의 기사만)`, "", `헤드라인: ${c.headline}`, "", c.lede, "", "## 주요 기사"];
-  for (const s of c.top_stories) o.push(`### ${s.rank}. ${s.title}`, `무슨 일: ${s.what}`, `왜 중요한가: ${s.why ?? ""}`, "");
-  if (c.key_numbers.length) o.push("## 숫자로 보는 하루", ...c.key_numbers.map((k) => `- ${k.value}: ${k.label}`), "");
-  if (c.sections.length) o.push("## 그 밖의 소식", ...c.sections.flatMap((sec) => sec.items.map((it) => `- ${it.text}`)), "");
-  if (c.companies_to_watch.length) o.push("## 주목할 기업", ...c.companies_to_watch.map((x) => `- ${x.name}: ${x.why}`));
+export function audioSourceMarkdown(
+  c: Pick<BriefingContent, "headline" | "lede" | "top_stories" | "key_numbers" | "sections" | "companies_to_watch">,
+  dateLabel: string,
+  locale: AudioLocale = "ko"
+): string {
+  const L = SRC_LABELS[locale];
+  const o = [`# ${L.title(dateLabel)}`, "", `${L.headline}: ${c.headline}`, "", c.lede, "", `## ${L.top}`];
+  for (const s of c.top_stories) o.push(`### ${s.rank}. ${s.title}`, `${L.what}: ${s.what}`, `${L.why}: ${s.why ?? ""}`, "");
+  if (c.key_numbers.length) o.push(`## ${L.nums}`, ...c.key_numbers.map((k) => `- ${k.value}: ${k.label}`), "");
+  if (c.sections.length) o.push(`## ${L.other}`, ...c.sections.flatMap((sec) => sec.items.map((it) => `- ${it.text}`)), "");
+  if (c.companies_to_watch.length) o.push(`## ${L.cos}`, ...c.companies_to_watch.map((x) => `- ${x.name}: ${x.why}`));
   return o.join("\n");
 }
 
-/** NotebookLM 음성 지시문 (brief 형식). 시험에서 틀린 곳(버전 번호·해석 문장·발음)을 직접 짚는다 */
-export const AUDIO_INSTRUCTIONS =
-  '한국어 1인 진행자의 짧은 아침 뉴스 브리핑. 자료의 주요 기사를 1번부터 순서대로 "첫째, 둘째, 셋째, 넷째, 다섯째"로 시작해 소개할 것. ' +
-  "숫자·날짜·버전 번호(예: iOS 27.3)·금액은 자료에 적힌 표기를 한 글자도 바꾸지 말고 그대로 읽을 것. " +
-  '자료에 없는 숫자·배경지식·전망·평가·의견 문장을 절대 덧붙이지 말 것 (예: "구조적 한계", "모든 영역으로 진입" 같은 해석 금지). ' +
-  '각 기사의 "왜 중요한가"는 자료 문장 그대로의 뜻만 전할 것. 과장 금지. "자료", "이 자료가" 같은 말 금지. ' +
-  "고유명사 발음: 千问=치엔원(치에논 아님), Kimi=키미, fal=팔, MiniMax=미니맥스, Pika=피카, UniPat=유니팻, Anthropic=앤트로픽, CyberOne=사이버원, 레이쥔, 리자치, 닝더스다이, 딥시크. " +
-  '마지막 문장은 "자세한 내용과 근거 기사는 브리핑 페이지에서 확인하세요."';
+/** NotebookLM 언어 코드 (notebooklm language list) */
+export const NOTEBOOKLM_LANG: Record<AudioLocale, string> = { ko: "ko", zh: "zh_Hans", en: "en" };
+
+/**
+ * NotebookLM 음성 지시문 (brief 형식). 시험에서 틀린 곳(버전 번호·해석 문장·발음)을 직접 짚는다.
+ * 서수("첫째"·"第一，"·"First,")는 장 찾기(media.ts chaptersFromTranscript)가 읽는 말 — 바꾸면 그쪽도 같이.
+ */
+const AUDIO_INSTRUCTIONS_BY: Record<AudioLocale, string> = {
+  ko:
+    '한국어 1인 진행자의 짧은 아침 뉴스 브리핑. 자료의 주요 기사를 1번부터 순서대로 "첫째, 둘째, 셋째, 넷째, 다섯째"로 시작해 소개할 것. ' +
+    "숫자·날짜·버전 번호(예: iOS 27.3)·금액은 자료에 적힌 표기를 한 글자도 바꾸지 말고 그대로 읽을 것. " +
+    '자료에 없는 숫자·배경지식·전망·평가·의견 문장을 절대 덧붙이지 말 것 (예: "구조적 한계", "모든 영역으로 진입" 같은 해석 금지). ' +
+    '각 기사의 "왜 중요한가"는 자료 문장 그대로의 뜻만 전할 것. 과장 금지. "자료", "이 자료가" 같은 말 금지. ' +
+    "고유명사 발음: 千问=치엔원(치에논 아님), Kimi=키미, fal=팔, MiniMax=미니맥스, Pika=피카, UniPat=유니팻, Anthropic=앤트로픽, CyberOne=사이버원, 레이쥔, 리자치, 닝더스다이, 딥시크. " +
+    '마지막 문장은 "자세한 내용과 근거 기사는 브리핑 페이지에서 확인하세요."',
+  zh:
+    "用普通话、由一位主播播报的简短晨间新闻简报。按资料中主要新闻的顺序逐条介绍，每条分别以“第一，”“第二，”“第三，”“第四，”“第五，”开头。" +
+    "数字、日期、版本号（例如 iOS 27.3）和金额必须完全按照资料中的写法读出，一个字也不要改。" +
+    "绝对不要添加资料中没有的数字、背景知识、展望、评价或观点。每条新闻的“为什么重要”只传达资料原句的意思，不要夸张。不要说“资料”“这份资料”之类的话。" +
+    "最后一句说：“详细内容和来源报道，请查看简报页面。”",
+  en:
+    'A short morning news briefing read by a single host in English. Introduce the top stories in order, starting each one with "First," "Second," "Third," "Fourth," "Fifth,". ' +
+    "Read every number, date, version number (e.g. iOS 27.3) and amount exactly as written in the source; do not round, convert or change a single digit. " +
+    "Never add numbers, background, outlook, evaluation or opinion that are not in the source. For each story, convey only what its \"Why it matters\" line says, without exaggeration. Do not say \"the source\" or \"this document\". " +
+    "Pronunciation: Qwen = chwen, Kimi = KEE-mee, fal = fal, MiniMax = mini-max, DeepSeek = deep-seek, Anthropic = an-THROP-ik. " +
+    'End with: "Full details and source articles are on the briefing page."',
+};
+export const audioInstructions = (locale: AudioLocale) => AUDIO_INSTRUCTIONS_BY[locale];
+/** 한국어 (이전 이름 — 호환) */
+export const AUDIO_INSTRUCTIONS = AUDIO_INSTRUCTIONS_BY.ko;
 
 export interface TranscriptLine {
   t: number;
@@ -101,9 +137,19 @@ export function checkTranscript(transcript: string, source: string, storyCount: 
   return { ok: unknownNumbers.length === 0 && chaptersFound === storyCount, unknownNumbers, chapters, chaptersFound, storyCount };
 }
 
-export const TRANSCRIBE_PROMPT =
-  "이 한국어 뉴스 음성을 빠짐없이 받아써라. 들리는 그대로 적고 고치지 말 것(숫자도 들리는 그대로 아라비아 숫자로). " +
-  'JSON 하나만 출력: {"lines":[{"t":문장이 시작하는 초(정수),"text":"문장"}]}. 한 문장이 한 항목.';
+const TRANSCRIBE_BY: Record<AudioLocale, string> = {
+  ko: "이 한국어 뉴스 음성을 빠짐없이 받아써라. 들리는 그대로 적고 고치지 말 것(숫자도 들리는 그대로 아라비아 숫자로). ",
+  zh: "把这段中文新闻音频完整地逐字转写成简体中文。听到什么写什么，不要修改（数字也按听到的写成阿拉伯数字，如 1055亿元、30分钟）。",
+  en: "Transcribe this English news audio completely, word for word, without correcting anything. Write numbers as digits exactly as heard (e.g. 105.5 billion yuan, 30 minutes). ",
+};
+/** 받아쓰기 지시 — 음성 언어로 */
+export const transcribePrompt = (locale: AudioLocale) =>
+  TRANSCRIBE_BY[locale] +
+  (locale === "ko"
+    ? 'JSON 하나만 출력: {"lines":[{"t":문장이 시작하는 초(정수),"text":"문장"}]}. 한 문장이 한 항목.' // 기존 한국어 지시 그대로
+    : 'Output a single JSON only: {"lines":[{"t":start second of the sentence (integer),"text":"sentence"}]}. One sentence per item.');
+/** 한국어 (이전 이름 — 호환) */
+export const TRANSCRIBE_PROMPT = transcribePrompt("ko");
 
 /**
  * 두 번 받아쓴 결과에서 "양쪽 모두에 나온" 모르는 숫자만 진짜 오류로 본다.

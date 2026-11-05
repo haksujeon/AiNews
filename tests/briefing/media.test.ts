@@ -100,3 +100,10 @@ test("행 → 화면용: 주소는 판·언어·종류(+만든 시각), 크기 �
   assert.match(set.audio!.url, /\/api\/briefing\/media\/2026-11-04\/ko\/audio\?v=\d+$/);
   assert.equal(set.card, undefined);
 });
+
+test("장 찾기: 중국어 '第一，'·영어 'First,' 서수, 본문의 '第一轮'·'first round' 는 무시", () => {
+  const zh = "A: 0:00 早上好\nA: 0:10 第一，深度求索启动第一轮融资\nA: 0:40 第二，千问办公\nA: 1:10 最后，小米机器人\nA: 1:40 以上就是今天的简报";
+  assert.deepEqual(chaptersFromTranscript(zh, 3).map((c) => [c.t, c.rank]), [[0, null], [10, 1], [40, 2], [70, 3], [100, null]]);
+  const en = "A: 0:00 Good morning.\nA: 0:08 First, DeepSeek opened its second funding round.\nA: 0:30 It is the first round this year.\nA: 0:45 Second, Qwen Office.\nA: 1:05 Third, Xiaomi.\nA: 1:30 That's all for today.";
+  assert.deepEqual(chaptersFromTranscript(en, 3).map((c) => [c.t, c.rank]), [[0, null], [8, 1], [45, 2], [65, 3], [90, null]]);
+});
