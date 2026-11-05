@@ -53,6 +53,7 @@ import type {
 import { entityMentioned, findEntities, properNouns } from "./entities";
 import { applyHanGlossary, dropHanInsideParens, hanResidue } from "../text/han";
 import { HAN_GLOSSARY } from "../text/han-glossary";
+import { normalizeKoNames } from "../text/ko-names";
 import { maskGroundedQuantities } from "./quantity";
 import { sameEvent } from "../news-rank";
 import {
@@ -282,10 +283,11 @@ export interface ContentEdit {
  * 주간·월간 glossPeriodicHan 도 같은 applyHanGlossary·dropHanInsideParens 를 쓴다 (Gate 2).
  */
 export function glossHanText(t: string): string {
-  if (!/[\u3400-\u9fff\uf900-\ufaff]/.test(t)) return t;
+  // 한글 음차 이름("월지암면")은 한자가 없어도 고친다 — 한자 사전을 지난 뒤에 한 번 더 돌려 "문샷AI(문샷AI)" 겹침도 줄인다 (ko-names.ts)
+  if (!/[\u3400-\u9fff\uf900-\ufaff]/.test(t)) return normalizeKoNames(t);
   // 라틴 글자가 붙은 이름 (한자 덩어리만으로는 뜻이 정해지지 않아 사전에 넣지 않는다): B站 = 빌리빌리 (09-16 헤드라인)
   const named = t.replace(/B站/g, "빌리빌리");
-  return applyHanGlossary(dropHanInsideParens(named), HAN_GLOSSARY, { insideParens: true }).text;
+  return normalizeKoNames(applyHanGlossary(dropHanInsideParens(named), HAN_GLOSSARY, { insideParens: true }).text);
 }
 
 export function glossKoHan(content: BriefingContent): { content: BriefingContent; edits: ContentEdit[] } {

@@ -9,6 +9,7 @@
 import { findEntities, nameEntriesIn } from "./entities";
 import { nameIssues, numericValues } from "./translate";
 import { HANGUL_RE, hasHan } from "../text/han";
+import { normalizeKoNames } from "../text/ko-names";
 
 export type Lens = "company" | "topic";
 export type StoryLocale = "ko" | "zh" | "en";
@@ -322,15 +323,15 @@ export function toKoRow(articleId: string, lens: Lens, threadTitle: string, out:
     article_id: articleId,
     lens,
     locale: "ko",
-    thread_title: threadTitle,
-    background: out.background.trim(),
+    thread_title: normalizeKoNames(threadTitle),
+    background: normalizeKoNames(out.background.trim()),
     timeline: out.timeline.map((it) => {
       const refs = it.refs.map((x) => by.get(x)!).filter(Boolean);
       const first = refs.find((p) => p.d.slice(5) === it.date) ?? refs[0];
-      return { date: first.d, text: it.text.trim(), refs: refs.map((p) => ({ id: p.id, source: p.s, title: p.title_kr })) };
+      return { date: first.d, text: normalizeKoNames(it.text.trim()), refs: refs.map((p) => ({ id: p.id, source: p.s, title: normalizeKoNames(p.title_kr) })) };
     }),
-    now_text: out.now.trim(),
-    caution: out.caution?.trim() || null,
+    now_text: normalizeKoNames(out.now.trim()),
+    caution: normalizeKoNames(out.caution?.trim() ?? "") || null,
   };
 }
 

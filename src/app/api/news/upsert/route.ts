@@ -4,6 +4,7 @@ import { requireIngestToken } from '@/lib/ingest-auth';
 import { scheduleRelatedCompute } from '@/lib/related';
 import { sanitizeRegionFields } from '@/lib/region';
 import { cleanInsightItem, insightFlags, INSIGHT_VERSION } from '@/lib/insights';
+import { normalizeKoNames } from '@/lib/text/ko-names';
 
 // POST /api/news/upsert
 // n8n 워크플로우에서 호출: 뉴스 아이템 upsert
@@ -26,6 +27,9 @@ import { cleanInsightItem, insightFlags, INSIGHT_VERSION } from '@/lib/insights'
 //  - 저장 전 괄호 속 한자 병기를 지우고(cleanInsightItem), 남은 문제는 insight_flags 에 표시한다(insightFlags).
 //  - 인사이트가 실린 요청에서만 insight_flags·insight_version 을 정한다. 문제가 없으면 insight_flags = NULL 로 지운다
 //    (그래서 이 두 열은 "빈 값 유지" 규칙을 따르지 않고 그대로 덮어쓴다).
+//
+// 회사 이름 표기 (2026-11-05, src/lib/text/ko-names.ts): 한국어 열은 저장 전에 normalizeKoNames 로 맞춘다
+//  (번역 LLM 이 月之暗面 을 "월지암면" 으로 옮겨도 "문샷AI" 로). 브리핑·히스토리 생성과 같은 함수 (Gate 2).
 
 const TEXT_COLS = new Set([
   'source_name','source_url','title_cn','title_kr','title_en',
@@ -35,6 +39,9 @@ const TEXT_COLS = new Set([
   'sentiment','category','thumbnail_url','og_image_url','country',
   'subject_region','region_version',
 ]);
+
+/** 회사 이름 표기를 맞추는 한국어 열 */
+const KO_TEXT_COLS = ['title_kr', 'summary_kr', 'content_kr', 'ai_insights_kr', 'ai_insights_detail_kr'] as const;
 
 /** 인사이트가 실린 요청에서 서버가 정하는 열 — 기존 값 유지 없이 그대로 덮어쓴다 */
 const OVERWRITE_COLS = new Set(['insight_flags', 'insight_version']);
@@ -90,6 +97,9 @@ export async function POST(request: NextRequest) {
         item.source_url = item.source_url.trim() || null;
       }
       sanitizeRegionFields(item);
+      for (const k of KO_TEXT_COLS) {
+        if (typeof item[k] === 'string') item[k] = normalizeKoNames(item[k] as string);
+      }
 
       if (typeof item.ai_insights_kr === 'string' && item.ai_insights_kr.trim()) {
         item = cleanInsightItem(item);
