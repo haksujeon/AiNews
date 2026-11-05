@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { SubscribeLink } from "@/components/newsletter/subscribe-link";
 import { ArrowRight } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import type { PublicBriefing } from "@/lib/briefing/public";
@@ -208,6 +209,7 @@ export async function Landing({ locale, briefing, total }: { locale: string; bri
           <h2 className="text-[26px] font-[850] tracking-[-0.02em] text-ink sm:text-[30px]">{t("subTitle")}</h2>
           <p className="mt-1.5 text-[15.5px] text-ink-2">{t("subBody")}</p>
         </div>
+        <SubscribeLink source="landing" variant="button" className="min-h-[52px] px-6 text-[16px]" />
         <Link href="/" className="inline-flex min-h-[52px] items-center rounded-md bg-ink px-6 text-[16px] font-bold text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {t("ctaToday")}
         </Link>

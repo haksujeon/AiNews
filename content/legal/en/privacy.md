@@ -5,8 +5,9 @@ AI NEWS (the "Service") processes personal data as described below, in complianc
 
 ## 1. Data we process
 
-- **Newsletter subscription (required):** email address, preferred language
-- **Newsletter subscription (optional):** topics of interest, name, organization
+- **Newsletter subscription (required):** company, name, email address, preferred language
+- **Newsletter subscription (optional):** job title, topics of interest
+- **Signup source:** which QR code or page the signup came from
 - **Consent records:** time of consent, policy version consented to, IP address at the time of consent
 - **Delivery records:** send time and result (delivered, bounced, unsubscribed)
 - **Inquiries:** your email address and the content of your message
@@ -35,7 +36,7 @@ We do not provide your personal data to third parties, except where lawfully req
 
 We entrust newsletter delivery to the following processor:
 
-- **Processor:** email delivery provider (to be decided — Amazon SES or Resend)
+- **Processor:** Google LLC (Gmail) — we will update this if the provider changes
 - **Tasks:** sending emails and processing delivery and bounce results
 - **Transfers abroad:** the provider's servers may be located outside Korea. Once the provider is chosen, we will list the destination country, the timing and method of transfer, and the retention period here.
 

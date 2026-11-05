@@ -11,10 +11,11 @@ import {
   Loader2,
   RotateCw,
   X,
+  QrCode,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { getCategoryLabel } from "@/lib/news-utils";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { extractErrorMessage } from "@/lib/api-error";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,16 @@ interface Subscriber {
   categories: string[];
   language: string;
   is_active: boolean;
+  job_title: string | null;
+  source: string | null;
+  confirmed_at: string | null;
+  unsubscribed_at: string | null;
+}
+
+/** 구독 중 / 확인 대기(신청 후 확인 메일을 아직 안 누름) / 해지 — scripts/2026-11-05-newsletter-signup.sql */
+function statusOf(s: Subscriber): "active" | "pending" | "inactive" {
+  if (s.is_active) return "active";
+  return !s.confirmed_at && !s.unsubscribed_at ? "pending" : "inactive";
 }
 
 const ALL_CATEGORIES = [
@@ -142,11 +153,12 @@ export function SubscribersContainer() {
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const organization = formData.get("organization") as string;
+    const job_title = formData.get("job_title") as string;
     const language = formData.get("language") as string;
     const categoriesStr = formData.get("categories") as string;
     const categories = categoriesStr ? categoriesStr.split(",") : ["all"];
 
-    const body = { name, email, organization, language, categories };
+    const body = { name, email, organization, job_title, language, categories };
 
     try {
       const url = editTarget
@@ -232,10 +244,18 @@ export function SubscribersContainer() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t("subscribers")}</h1>
-        <Button size="sm" onClick={openAdd}>
-          <Plus className="w-4 h-4 mr-1.5" />
-          {t("add")}
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/admin/subscribers/qr">
+              <QrCode className="w-4 h-4 mr-1.5" aria-hidden="true" />
+              {t("qrTitle")}
+            </Link>
+          </Button>
+          <Button size="sm" onClick={openAdd}>
+            <Plus className="w-4 h-4 mr-1.5" />
+            {t("add")}
+          </Button>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -257,6 +277,7 @@ export function SubscribersContainer() {
           <SelectContent>
             <SelectItem value="all">{t("filterAll")}</SelectItem>
             <SelectItem value="true">{t("active")}</SelectItem>
+            <SelectItem value="pending">{t("pending")}</SelectItem>
             <SelectItem value="false">{t("inactive")}</SelectItem>
           </SelectContent>
         </Select>
@@ -333,9 +354,10 @@ export function SubscribersContainer() {
                   <tr key={sub.id} className="border-b border-border/30 hover:bg-accent/20 transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-medium">{sub.name}</div>
-                      {sub.organization && (
-                        <div className="text-xs text-muted-foreground">{sub.organization}</div>
+                      {(sub.organization || sub.job_title) && (
+                        <div className="text-xs text-muted-foreground">{[sub.organization, sub.job_title].filter(Boolean).join(" · ")}</div>
                       )}
+                      {sub.source && <div className="text-[11px] text-muted-foreground/80">{t("sourceLabel", { source: sub.source })}</div>}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{sub.email}</td>
                     <td className="px-4 py-3 hidden md:table-cell">
@@ -358,10 +380,15 @@ export function SubscribersContainer() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`flex items-center gap-1.5 text-xs ${sub.is_active ? "text-green-500" : "text-muted-foreground"}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${sub.is_active ? "bg-green-500" : "bg-muted-foreground"}`} />
-                        {sub.is_active ? t("active") : t("inactive")}
-                      </span>
+                      {(() => {
+                        const st = statusOf(sub);
+                        return (
+                          <span className={cn("flex items-center gap-1.5 text-xs", st === "active" ? "text-green-500" : st === "pending" ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
+                            <span className={cn("w-1.5 h-1.5 rounded-full", st === "active" ? "bg-green-500" : st === "pending" ? "bg-amber-500" : "bg-muted-foreground")} />
+                            {t(st)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <DropdownMenu>
@@ -509,6 +536,10 @@ function SubscriberFormDialog({
               name="organization"
               defaultValue={subscriber?.organization || ""}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="job_title">{t("fieldJobTitle")}</Label>
+            <Input id="job_title" name="job_title" defaultValue={subscriber?.job_title || ""} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">{t("colEmail")} *</Label>

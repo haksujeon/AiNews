@@ -67,6 +67,7 @@ const T = {
     footAi: "브리핑은 공개된 중국 매체 보도를 바탕으로 AI가 작성하고, 숫자·인용은 근거 기사와 대조해 검사합니다.",
     unsub: "수신 거부",
     unsubNote: "열리는 화면에서 버튼 한 번으로 발송을 멈출 수 있습니다.",
+    recommend: "동료에게 추천하기 (구독 신청 화면)",
     sender: "보낸 곳: AI 뉴스 (news.aibaseclub.com) · 문의는 이 메일에 회신해 주세요.",
     section: { models: "모델", products: "제품", funding: "투자", chips: "칩·반도체", policy: "정책", safety: "안전", robotics: "로봇", research: "연구", industry: "산업" } as Record<string, string>,
     dow: ["일", "월", "화", "수", "목", "금", "토"],
@@ -112,6 +113,7 @@ const T = {
     footAi: "简报由 AI 根据公开的中国媒体报道撰写，数字和引用均与来源文章核对。",
     unsub: "退订",
     unsubNote: "在打开的页面上点击一次按钮即可停止发送。",
+    recommend: "推荐给同事（订阅页面）",
     sender: "发件方：AI 新闻（news.aibaseclub.com）· 如有疑问请直接回复本邮件。",
     section: { models: "模型", products: "产品", funding: "投融资", chips: "芯片", policy: "政策", safety: "安全", robotics: "机器人", research: "研究", industry: "产业" } as Record<string, string>,
     dow: ["日", "一", "二", "三", "四", "五", "六"],
@@ -157,6 +159,7 @@ const T = {
     footAi: "Written by AI from public Chinese media reports; numbers and quotes are checked against the source articles.",
     unsub: "Unsubscribe",
     unsubNote: "One button on the page that opens stops all emails.",
+    recommend: "Recommend to a colleague (signup page)",
     sender: "From: AI News (news.aibaseclub.com) · Reply to this email with any questions.",
     section: { models: "Models", products: "Products", funding: "Funding", chips: "Chips", policy: "Policy", safety: "Safety", robotics: "Robotics", research: "Research", industry: "Industry" } as Record<string, string>,
     dow: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -165,7 +168,8 @@ const T = {
   },
 } satisfies Record<BriefingLocale, unknown>;
 
-const C = {
+/** 메일 색·글꼴 — 아침 메일과 구독 확인·환영 메일(signup-email.ts)이 같이 쓴다 */
+export const C = {
   ink: "#1f2a2e",
   sub: "#5b6b70",
   faint: "#8a979b",
@@ -178,9 +182,9 @@ const C = {
   amber: "#8a5a00",
   hist: "#f6f8f7",
 };
-const FONT = `-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','PingFang SC','Microsoft YaHei',sans-serif`;
+export const FONT = `-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','PingFang SC','Microsoft YaHei',sans-serif`;
 
-const esc = (s: string | null | undefined) =>
+export const esc = (s: string | null | undefined) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 /** "2026-11-03" → 그 언어 날짜 ("11월 3일(화)"). 합본(period_end 다름)은 범위 */
@@ -404,7 +408,8 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
 </table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:${MAIL_WIDTH}px"><tr><td class="px" style="padding:18px 24px;font:12px/1.7 ${FONT};color:${C.faint}">
   ${esc(t.footReason(opts.email))}<br>${esc(t.footAi)}${hasHistory ? `<br>${esc(t.storyNote)}` : ""}<br>
-  <a href="${esc(opts.unsubscribeUrl)}" style="color:${C.sub};font-weight:700">${esc(t.unsub)}</a> — ${esc(t.unsubNote)}<br>${esc(t.sender)}
+  <a href="${esc(opts.unsubscribeUrl)}" style="color:${C.sub};font-weight:700">${esc(t.unsub)}</a> — ${esc(t.unsubNote)}<br>
+  <a href="${esc(`${absoluteUrl(b.locale, "/subscribe")}?src=mail`)}" style="color:${C.jade};font-weight:700">${esc(t.recommend)} →</a><br>${esc(t.sender)}
 </td></tr></table>
 </td></tr></table>
 </body></html>`;

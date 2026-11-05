@@ -8,10 +8,10 @@
  */
 export const CONTACT_EMAIL = (process.env.CONTACT_EMAIL || "contact@aibaseclub.com").trim();
 
-export const CONSENT_VERSION = "2026-11-02-draft";
+export const CONSENT_VERSION = "2026-11-05-draft"; // 2026-11-05: 회사·이름 필수, 직책 선택, 신청 경로, 수탁자 Gmail
 
 /** 처리방침 판의 시행일(표시용). 법무 승인 후 확정 */
-export const PRIVACY_EFFECTIVE_DATE = "2026-11-02";
+export const PRIVACY_EFFECTIVE_DATE = "2026-11-05";
 
 /** 브리핑·요약에 쓰는 모델(공개 표기). LiteLLM 별칭이 아니라 제공사·계열로 적는다 */
 export const MODEL_DISCLOSURE = "Anthropic Claude (Haiku)";

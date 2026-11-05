@@ -11,10 +11,14 @@ interface Subscriber {
   categories: string[];
   language: string;
   is_active: boolean;
+  job_title: string | null;
+  source: string | null;
+  confirmed_at: string | null;
+  unsubscribed_at: string | null;
 }
 
 const SELECT_FIELDS =
-  "id,created_at,name,organization,email,categories,language,is_active";
+  "id,created_at,name,organization,email,categories,language,is_active,job_title,source,confirmed_at,unsubscribed_at";
 
 export async function GET(request: NextRequest) {
   const authError = await requireAdminAuth(request);
@@ -32,9 +36,17 @@ export async function GET(request: NextRequest) {
 
     if (active === "true") params.is_active = "eq.true";
     else if (active === "false") params.is_active = "eq.false";
+    else if (active === "pending") {
+      // 확인 대기 = 아직 확인 메일을 누르지 않은 신청 (scripts/2026-11-05-newsletter-signup.sql)
+      params.is_active = "eq.false";
+      params.confirmed_at = "is.null";
+      params.unsubscribed_at = "is.null";
+    }
 
-    if (search) {
-      params.or = `(name.ilike.*${search}*,email.ilike.*${search}*,organization.ilike.*${search}*)`;
+    // 검색어는 조회 조건 문법 글자(쉼표·괄호·별표·점·콜론·따옴표·역슬래시)를 빼고 넣는다 — 조건을 바꿔 끼우지 못하게
+    const q = search.replace(/[,()*.:"\\]/g, " ").trim().slice(0, 60);
+    if (q) {
+      params.or = `(name.ilike.*${q}*,email.ilike.*${q}*,organization.ilike.*${q}*,job_title.ilike.*${q}*)`;
     }
 
     const subscribers = await supabaseAdminFetch<Subscriber[]>(
@@ -58,7 +70,7 @@ export async function POST(request: NextRequest) {
   if (authError) return authError;
 
   const body = await request.json().catch(() => ({}));
-  const { name, email, categories, organization, language } = body;
+  const { name, email, categories, organization, language, job_title } = body;
 
   const errors: Record<string, string> = {};
   if (!name?.trim()) errors.name = "Name is required";
@@ -84,8 +96,11 @@ export async function POST(request: NextRequest) {
           email: email.trim().toLowerCase(),
           categories,
           organization: organization?.trim() || null,
+          job_title: typeof job_title === "string" ? job_title.trim() || null : null,
           language: language || "ko",
           is_active: true,
+          // 관리자가 직접 넣은 구독자는 확인된 것으로 본다
+          confirmed_at: new Date().toISOString(),
         }),
       }
     );

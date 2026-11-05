@@ -29,9 +29,15 @@ export async function PUT(
     updateData.email = body.email.trim().toLowerCase();
   if (body.organization !== undefined)
     updateData.organization = body.organization?.trim() || null;
+  if (body.job_title !== undefined)
+    updateData.job_title = typeof body.job_title === "string" ? body.job_title.trim() || null : null;
   if (body.categories !== undefined) updateData.categories = body.categories;
   if (body.language !== undefined) updateData.language = body.language;
-  if (body.is_active !== undefined) updateData.is_active = body.is_active;
+  if (body.is_active !== undefined) {
+    updateData.is_active = body.is_active;
+    // 관리자가 다시 켜면 해지 표시를 지운다 (확인 대기였던 신청을 켜면 확인된 것으로 본다)
+    if (body.is_active === true) updateData.unsubscribed_at = null;
+  }
 
   if (Object.keys(updateData).length === 0) {
     return NextResponse.json(

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { mainNavItems } from "@/components/layout/bottom-tabs";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { SubscribeLink } from "@/components/newsletter/subscribe-link";
 
 /**
  * 마스트헤드: 워드마크(로케일별 "AI 뉴스") + 작은 부제. 아이콘 타일·두 색 로고·그라데이션 선 없음.
@@ -52,6 +53,8 @@ export function Header() {
           </nav>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* 구독 신청 (2026-11-05). 신청 화면에서는 숨긴다 */}
+          {!pathname.startsWith("/subscribe") && <SubscribeLink source="header" variant="nav" />}
           <ThemeToggle />
           <LanguageSwitcher />
         </div>
