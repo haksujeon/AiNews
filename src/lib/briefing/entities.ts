@@ -6,6 +6,8 @@
  * (예: "메타" 가 "메타버스" 에 걸리면 안 된다).
  */
 
+import { KO_GLOSSARY } from "../text/ko-glossary";
+
 export interface Entity {
   key: string;
   aliases: (string | RegExp)[];
@@ -96,6 +98,17 @@ ENTITIES.find((e) => e.key === "iluvatar")?.aliases.push("텐셴수");
 }
 ENTITIES.find((e) => e.key === "jd")?.aliases.push(/\bJD\b/);
 ENTITIES.find((e) => e.key === "baai")?.aliases.push("Beijing Academy of Artificial Intelligence");
+
+// 2026-11-06 표기 사전(text/ko-glossary.ts): 실체마다 정한 한국어 표기를 별칭 맨 앞에 둔다 (이름표 줄 ko[0]·번역 대조).
+// 옛 표기(메이투안·지푸·즈위안 …)는 지난 글 판정에 필요해 별칭에 남긴다. 실체 찾기 = 사전 항목의 중국어·영문 표기가 별칭에 있는 것
+for (const g of KO_GLOSSARY) {
+  if (g.kind === "term" || g.noAlias) continue;
+  const keys = [...g.zh, ...(g.en ? [g.en] : [])];
+  const ent = ENTITIES.find((e) => e.aliases.some((a) => typeof a === "string" && keys.includes(a)));
+  if (!ent) continue;
+  ent.aliases = [g.ko, ...ent.aliases.filter((a) => a !== g.ko)];
+  for (const f of g.fix ?? []) if (!ent.aliases.includes(f)) ent.aliases.push(f);
+}
 
 /**
  * 번역 이름표 (한국어 · 영어 · 중국어). 번역기에 NAME_GLOSSARY 로 주고, 번역본의 이름을 이것과 대조한다 (translate.ts checkNames).

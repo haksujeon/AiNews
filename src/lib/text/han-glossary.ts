@@ -5,8 +5,12 @@
  * - 기업·기관·제품 이름은 briefing/entities.ts 의 한국어 별칭과 같은 표기를 쓴다.
  *   (entities.ts 는 별칭이 짝지어져 있지 않아 — 千问 은 alibaba 항목 — 자동으로 만들지 않고 짝을 손으로 둔다)
  * - 뜻이 여럿인 일반 낱말(新, 加 …)은 넣지 않는다. 그런 덩어리는 3단계(LLM 재번역)로 간다.
+ * - 2026-11-06: 표기 사전(ko-glossary.ts)의 회사·제품·기관 표기가 이 사전보다 앞선다 (아래 맨 끝에서 덮어쓴다, hanSkip 은 빼고).
+ *   손으로 둔 짝도 사전과 같게 고쳤다: 千问 → 큐원, 美团 → 메이퇀, 可灵 → 클링, 比亚迪 → BYD, 智谱 → 즈푸, 영문 이름 4곳.
  */
-export const HAN_GLOSSARY: ReadonlyMap<string, string> = new Map([
+import { KO_GLOSSARY } from "./ko-glossary";
+
+const MANUAL: [string, string][] = [
   // 중국 기업·제품 (entities.ts 한국어 별칭)
   ["字节", "바이트댄스"],
   ["字节跳动", "바이트댄스"],
@@ -14,8 +18,8 @@ export const HAN_GLOSSARY: ReadonlyMap<string, string> = new Map([
   ["阿里", "알리바바"],
   ["阿里巴巴", "알리바바"],
   ["阿里云", "알리클라우드"],
-  ["千问", "치엔원"],
-  ["通义千问", "통이치엔원"],
+  ["千问", "큐원"],
+  ["通义千问", "큐원"],
   ["腾讯", "텐센트"],
   ["混元", "훈위안"],
   ["微信", "위챗"],
@@ -24,7 +28,7 @@ export const HAN_GLOSSARY: ReadonlyMap<string, string> = new Map([
   ["深度求索", "딥시크"],
   ["梁文锋", "량원펑"],
   ["月之暗面", "문샷AI"],
-  ["智谱", "지푸"],
+  ["智谱", "즈푸"],
   ["百度", "바이두"],
   ["小米", "샤오미"],
   ["寒武纪", "캄브리콘"],
@@ -32,22 +36,22 @@ export const HAN_GLOSSARY: ReadonlyMap<string, string> = new Map([
   ["长鑫", "창신메모리"],
   ["宇树", "유니트리"],
   ["宇树科技", "유니트리"],
-  ["无问芯穹", "무문신궁"],
-  ["無問芯穹", "무문신궁"],
-  ["美团", "메이투안"],
+  ["无问芯穹", "Infinigence"],
+  ["無問芯穹", "Infinigence"],
+  ["美团", "메이퇀"],
   ["快手", "콰이쇼우"],
-  ["可灵", "커링"],
+  ["可灵", "클링"],
   ["京东", "징둥"],
   ["阶跃", "스텝펀"],
   ["商汤", "센스타임"],
   ["科大讯飞", "아이플라이텍"],
-  ["比亚迪", "비야디"],
+  ["比亚迪", "BYD"],
   ["蚂蚁集团", "앤트그룹"],
   // 2026-11-02 재감사(round 2): 10-27 "캡컷(剪映 국제판)" 한자 2자로 주요 기사 삭제, 09-16 B站 → '비리빌리' 오표기
   ["剪映", "젠잉"],
   ["哔哩哔哩", "빌리빌리"],
-  ["逐际动力", "즈지동력"],
-  ["天数智芯", "톈수즈신"],
+  ["逐际动力", "LimX Dynamics"],
+  ["天数智芯", "Iluvatar CoreX"],
   // 해외 기업 (entities.ts)
   ["英伟达", "엔비디아"],
   ["苹果", "애플"],
@@ -67,4 +71,11 @@ export const HAN_GLOSSARY: ReadonlyMap<string, string> = new Map([
   // 일반 고유명사·용어
   ["菲尔兹", "필즈"],
   ["独角兽", "유니콘"],
-]);
+];
+
+/** 표기 사전에서: 회사·제품·기관의 4자 이하 중국어 표기 (일반 낱말·지명과 겹치는 hanSkip 제외) */
+const FROM_GLOSSARY: [string, string][] = KO_GLOSSARY.filter((e) => e.kind !== "term").flatMap((e) =>
+  e.zh.filter((z) => z.length <= 4 && !(e.hanSkip ?? []).includes(z)).map((z): [string, string] => [z, e.ko])
+);
+
+export const HAN_GLOSSARY: ReadonlyMap<string, string> = new Map([...MANUAL, ...FROM_GLOSSARY]);

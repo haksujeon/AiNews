@@ -4,7 +4,7 @@ import { requireIngestToken } from '@/lib/ingest-auth';
 import { scheduleRelatedCompute } from '@/lib/related';
 import { sanitizeRegionFields } from '@/lib/region';
 import { cleanInsightItem, insightFlags, INSIGHT_VERSION } from '@/lib/insights';
-import { normalizeKoNames } from '@/lib/text/ko-names';
+import { normalizeKeyTermsKo, normalizeKoNames } from '@/lib/text/ko-names';
 
 // POST /api/news/upsert
 // n8n 워크플로우에서 호출: 뉴스 아이템 upsert
@@ -30,6 +30,7 @@ import { normalizeKoNames } from '@/lib/text/ko-names';
 //
 // 회사 이름 표기 (2026-11-05, src/lib/text/ko-names.ts): 한국어 열은 저장 전에 normalizeKoNames 로 맞춘다
 //  (번역 LLM 이 月之暗面 을 "월지암면" 으로 옮겨도 "문샷AI" 로). 브리핑·히스토리 생성과 같은 함수 (Gate 2).
+//  2026-11-06: 표기 사전(src/lib/text/ko-glossary.ts) 전체로 넓혔다 — 유수과기 → 유니트리, 구현지능 → 피지컬 AI 등.
 
 const TEXT_COLS = new Set([
   'source_name','source_url','title_cn','title_kr','title_en',
@@ -100,6 +101,8 @@ export async function POST(request: NextRequest) {
       for (const k of KO_TEXT_COLS) {
         if (typeof item[k] === 'string') item[k] = normalizeKoNames(item[k] as string);
       }
+      // 2026-11-06 표기 사전: key_terms 의 한국어 설명도 같은 표기로 (쉬운 AI 설명 '자세히'에 그대로 쓰인다). 문자열로 오면 그대로 둔다
+      if (Array.isArray(item.key_terms)) item.key_terms = normalizeKeyTermsKo(item.key_terms);
 
       if (typeof item.ai_insights_kr === 'string' && item.ai_insights_kr.trim()) {
         item = cleanInsightItem(item);

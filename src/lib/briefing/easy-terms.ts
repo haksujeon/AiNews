@@ -11,6 +11,8 @@ import type { EasyTerm, KeyTerm, StoredBriefingContent } from "./types";
 export type { EasyTerm };
 import { findEntities, PRODUCT_NAMES } from "./entities";
 import { hasHan } from "../text/han";
+import { glossByZh } from "../text/ko-glossary";
+import { normalizeKoNames } from "../text/ko-names";
 
 export const EASY_TERMS_PROMPT_VERSION = "easy-terms-v1";
 export const EASY_TERMS_MODEL = process.env.EASY_TERMS_MODEL || "anthropic-api-sonnet-5-5";
@@ -153,6 +155,11 @@ export function checkEasyTerms(
       used.add(term);
       for (const l of EASY_LOCALES) {
         const n = str(name[l]);
+        if (l === "ko") {
+          // 2026-11-06 표기 사전: 사전에 있는 용어는 사전 표기로 고정(본문과 같게 — 具身智能 = 피지컬 AI), 설명문도 같은 표기로 (ko-names.ts, Gate 2)
+          ok.ko.push({ term, pinyin: cand.pinyin, name: glossByZh(term)?.ko ?? normalizeKoNames(n), easy: normalizeKoNames(str(easy.ko)), detail: normalizeKoNames(cand.detail.ko) });
+          continue;
+        }
         // 영어 이름은 첫 글자만 대문자로 맞춘다 (모델이 "watchdog"·"Pareto frontier" 를 섞어 쓴다)
         ok[l].push({ term, pinyin: cand.pinyin, name: l === "en" ? n.charAt(0).toUpperCase() + n.slice(1) : n, easy: str(easy[l]), detail: cand.detail[l] });
       }

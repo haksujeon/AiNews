@@ -1,0 +1,150 @@
+/**
+ * 한국어 표기 사전 — 중국 회사·제품·기관 이름과 AI 용어를 한국어로 어떻게 쓰는지 한 곳에 둔다 (2026-11-06 사용자 승인 "제안대로").
+ *
+ * 원칙 (2026-11-06 사용자 결정)
+ *  - 회사·제품: 한국 언론 표기 우선 → 없으면 영문 공식 이름. 한자음 읽기(유수과기·상탕·면벽지능)는 쓰지 않는다.
+ *  - 사람: 중국어 원음 (량원펑·왕싱싱 — 지금과 같음)
+ *  - 용어: 한국 업계 표준. 具身智能 = "피지컬 AI"
+ *
+ * 쓰는 곳 (Gate 2 — 같은 표기는 어디서나 같은 결과)
+ *  - ko-names.ts normalizeKoNames: fix 표기를 ko 로 자동으로 고친다 (기사 저장·데일리/주간/월간 검증·히스토리·쉬운 AI 설명·일괄 정리)
+ *  - han-glossary.ts: 한국어 글에 남은 한자 이름(company·product·org 의 zh)을 ko 로
+ *  - entities.ts: 실체 별칭 맨 앞에 ko 를 둔다 (이름표·번역 대조)
+ *  - n8n 번역 지시 (scripts/n8n-*-prompt): 그 기사 원문에 나온 항목만 골라 "이렇게 쓰고(ko) 이렇게 쓰지 말 것(fix+avoid)"
+ *
+ * fix: 자동으로 고칠 잘못된 표기 — 다른 낱말과 겹칠 위험이 없는 것만. 3자 이하 한글 표기는 낱말 경계(앞뒤 한글 없음, 조사 허용)에서만 고친다.
+ * avoid: 자동으로 고치지 않고 번역 지시에서만 "쓰지 말 것"으로 알린다 (짧거나 다른 낱말과 겹침: 산력 ⊂ 생산력, 착지 ⊂ 종착지)
+ * hanSkip: han-glossary 에 넣지 않을 중국어 표기 (일반 낱말·지명과 겹침: 理想 = 이상, 宁德 = 지명)
+ */
+export type GlossKind = "company" | "product" | "org" | "term";
+export interface GlossEntry {
+  kind: GlossKind;
+  /** 정한 한국어 표기 */
+  ko: string;
+  zh: string[];
+  en?: string;
+  fix?: string[];
+  avoid?: string[];
+  hanSkip?: string[];
+  /** 실체 별칭(entities.ts)에 넣지 않는다 — 다른 뜻과 겹치는 이름 (푸리에 = 푸리에 변환) */
+  noAlias?: true;
+  note?: string;
+}
+
+export const KO_GLOSSARY: readonly GlossEntry[] = [
+  // ── 회사 (한국 언론 표기)
+  { kind: "company", ko: "유니트리", zh: ["宇树", "宇树科技"], en: "Unitree", fix: ["유수과기", "유수 과학기술", "유수테크", "우수커지"], avoid: ["유수"] },
+  { kind: "company", ko: "센스타임", zh: ["商汤", "商汤科技"], en: "SenseTime", fix: ["상탕"] },
+  { kind: "company", ko: "애지봇", zh: ["智元机器人", "智元"], en: "AgiBot", fix: ["지원로봇", "지원 로봇", "즈위안 로봇", "즈위안로봇", "지위안로봇", "지위안 로봇"], avoid: ["지원", "즈위안"], hanSkip: ["智元"], note: "智元 단독은 매체 新智元 과 겹친다" },
+  { kind: "company", ko: "갤봇", zh: ["银河通用"], en: "Galbot", fix: ["은하통용", "은하범용", "인허퉁융"] },
+  { kind: "company", ko: "유비테크", zh: ["优必选"], en: "UBTech", fix: ["우필선"] },
+  { kind: "company", ko: "푸리에", zh: ["傅利叶"], en: "Fourier", fix: ["부리엽"], noAlias: true, note: "'푸리에 변환'과 겹쳐 실체 별칭에는 넣지 않는다" },
+  { kind: "company", ko: "모델베스트", zh: ["面壁智能"], en: "ModelBest", fix: ["면벽지능", "몐비즈넝", "몐비 즈넝"] },
+  { kind: "company", ko: "스텝펀", zh: ["阶跃星辰", "阶跃"], en: "StepFun", fix: ["계약성신", "제웨싱천"] },
+  { kind: "company", ko: "미니맥스", zh: ["稀宇", "稀宇科技"], en: "MiniMax" },
+  { kind: "company", ko: "바이촨", zh: ["百川智能", "百川"], en: "Baichuan", fix: ["백천지능"], hanSkip: ["百川"] },
+  { kind: "company", ko: "즈푸", zh: ["智谱", "智谱AI"], en: "Zhipu", fix: ["지보AI", "지보 AI", "지푸"], note: "기사 다수 '즈푸' (2026-11-06 결정). 지푸 → 즈푸" },
+  { kind: "company", ko: "문샷AI", zh: ["月之暗面"], en: "Moonshot AI", fix: ["월지암면", "월지암", "월의 어두운 면", "문샷 AI", "문샷"], note: "2026-11-05 결정" },
+  { kind: "company", ko: "딥시크", zh: ["深度求索"], en: "DeepSeek", fix: ["심도구색"] },
+  { kind: "company", ko: "아이플라이텍", zh: ["科大讯飞"], en: "iFlytek", fix: ["커다쉰페이", "커다 쉰페이", "과대신비"] },
+  { kind: "company", ko: "캄브리콘", zh: ["寒武纪"], en: "Cambricon", fix: ["한무기"] },
+  { kind: "company", ko: "무어스레드", zh: ["摩尔线程"], en: "Moore Threads", fix: ["모어스레드", "마얼셴청", "모얼셴청"] },
+  { kind: "company", ko: "메타엑스", zh: ["沐曦"], en: "MetaX", fix: ["목희", "목시"], avoid: ["무시"] },
+  { kind: "company", ko: "비렌", zh: ["壁仞", "壁仞科技"], en: "Biren", fix: ["벽인과기"], avoid: ["비런"] },
+  { kind: "company", ko: "하이곤", zh: ["海光信息", "海光"], en: "Hygon", fix: ["하이광 정보", "하이광정보", "해광정보"], avoid: ["하이광"] },
+  { kind: "company", ko: "쿤룬신", zh: ["昆仑芯"], en: "Kunlunxin", fix: ["곤륜심"] },
+  { kind: "company", ko: "SMIC", zh: ["中芯国际", "中芯"], en: "SMIC", fix: ["중신궈지", "중심국제"] },
+  { kind: "company", ko: "창신메모리", zh: ["长鑫"], en: "CXMT" },
+  { kind: "company", ko: "호라이즌 로보틱스", zh: ["地平线"], en: "Horizon Robotics", fix: ["지평선 로보틱스", "지핑셴"], hanSkip: ["地平线"] },
+  { kind: "company", ko: "메이퇀", zh: ["美团"], en: "Meituan", fix: ["메이투안"], avoid: ["미단"] },
+  { kind: "company", ko: "콰이쇼우", zh: ["快手"], en: "Kuaishou", fix: ["콰이서우"], avoid: ["쾌수"] },
+  { kind: "company", ko: "징둥", zh: ["京东"], en: "JD.com", avoid: ["경동"] },
+  { kind: "company", ko: "CATL", zh: ["宁德时代"], en: "CATL", fix: ["닝더스다이", "녕덕시대"] },
+  { kind: "company", ko: "BYD", zh: ["比亚迪"], en: "BYD", fix: ["비야디"] },
+  { kind: "company", ko: "샤오펑", zh: ["小鹏"], en: "XPeng", fix: ["소붕"] },
+  { kind: "company", ko: "리오토", zh: ["理想汽车", "理想"], en: "Li Auto", fix: ["리샹 자동차", "리샹자동차", "이상자동차"], hanSkip: ["理想"] },
+  { kind: "company", ko: "니오", zh: ["蔚来"], en: "NIO", avoid: ["웨이라이"], note: "'하오웨이라이(好未来)'와 겹쳐 자동으로 고치지 않는다" },
+  { kind: "company", ko: "TAL에듀케이션", zh: ["好未来"], en: "TAL Education", fix: ["하오웨이라이"] },
+  { kind: "company", ko: "넷이즈", zh: ["网易"], en: "NetEase", avoid: ["왕이"] },
+  { kind: "company", ko: "샤오훙슈", zh: ["小红书"], en: "Xiaohongshu", fix: ["샤오홍슈", "소홍서"] },
+  { kind: "company", ko: "바이두", zh: ["百度"], en: "Baidu", avoid: ["백도"] },
+  { kind: "company", ko: "텐센트", zh: ["腾讯"], en: "Tencent", avoid: ["등신"] },
+  { kind: "company", ko: "화웨이", zh: ["华为"], en: "Huawei", avoid: ["화위"] },
+  { kind: "company", ko: "바이트댄스", zh: ["字节跳动", "字节"], en: "ByteDance", fix: ["자절도동", "쯔제탸오둥"] },
+  { kind: "company", ko: "알리바바", zh: ["阿里巴巴", "阿里"], en: "Alibaba" },
+  { kind: "company", ko: "샤오미", zh: ["小米"], en: "Xiaomi", avoid: ["소미"] },
+  { kind: "company", ko: "앤트그룹", zh: ["蚂蚁集团"], en: "Ant Group" },
+  // 영문 공식 이름 (한국 언론 표기가 정해지지 않음)
+  { kind: "company", ko: "부스터 로보틱스", zh: ["加速进化"], en: "Booster Robotics", fix: ["가속진화"] },
+  { kind: "company", ko: "LimX Dynamics", zh: ["逐际动力"], en: "LimX Dynamics", fix: ["즈지동력", "즈지 동력", "지지동력"] },
+  { kind: "company", ko: "Astribot", zh: ["星尘智能"], en: "Astribot", fix: ["성진지능"] },
+  { kind: "company", ko: "ShengShu", zh: ["生数科技"], en: "ShengShu", fix: ["생수과기", "셩수과기"] },
+  { kind: "company", ko: "01.AI", zh: ["零一万物"], en: "01.AI", fix: ["영일만물", "링이완우"] },
+  { kind: "company", ko: "Infinigence", zh: ["无问芯穹", "無問芯穹"], en: "Infinigence", fix: ["무문신궁", "우원신충"] },
+  { kind: "company", ko: "Iluvatar CoreX", zh: ["天数智芯"], en: "Iluvatar CoreX", fix: ["톈수즈신", "텐셴수"] },
+  { kind: "company", ko: "DataCanvas", zh: ["九章云极"], en: "DataCanvas", fix: ["구장윈지", "구장운극"] },
+  { kind: "org", ko: "BAAI", zh: ["智源研究院", "北京智源"], en: "BAAI", fix: ["지위안연구원", "지위안 연구원"] },
+
+  // ── 제품
+  { kind: "product", ko: "어니봇", zh: ["文心一言"], en: "ERNIE Bot", fix: ["문심일언", "원신이옌"] },
+  { kind: "product", ko: "어니", zh: ["文心大模型", "文心"], en: "ERNIE", fix: ["문심 대모델", "문심대모델"], avoid: ["문심"], hanSkip: ["文心"], note: "'문심 5.5' 처럼 숫자 앞의 문심은 ko-names.ts 가 고친다" },
+  { kind: "product", ko: "큐원", zh: ["通义千问", "千问", "通义"], en: "Qwen", fix: ["통의천문", "퉁이첸원", "통이치엔원", "통이천문", "통이첸원", "치엔원"] },
+  { kind: "product", ko: "클링", zh: ["可灵"], en: "Kling", fix: ["커링"] },
+  { kind: "product", ko: "훈위안", zh: ["混元"], en: "Hunyuan", avoid: ["혼원"], note: "'혼원3' 처럼 숫자 앞은 ko-names.ts 가 고친다" },
+  { kind: "product", ko: "더우바오", zh: ["豆包"], en: "Doubao", fix: ["두바오"], avoid: ["두포"] },
+  { kind: "product", ko: "위안바오", zh: ["元宝"], en: "Yuanbao", avoid: ["원보"], hanSkip: ["元宝"] },
+  { kind: "product", ko: "아폴로 고", zh: ["萝卜快跑"], en: "Apollo Go", fix: ["뤄보콰이파오", "나복쾌주"] },
+
+  // ── AI 용어 (한국 업계 표준)
+  {
+    kind: "term", ko: "피지컬 AI", zh: ["具身智能", "物理AI", "物理人工智能"], en: "physical AI",
+    fix: ["구현지능", "구현 지능", "구현형 지능", "구현형 AI", "구현형 인공지능", "체화 지능", "체화지능", "체화 AI", "임바디드 AI", "엠바디드 AI", "임바디드 지능", "신체 지능", "물리 AI"],
+    note: "具身机器人 '구현형 로봇' → '피지컬 AI 로봇' 은 ko-names.ts 규칙",
+  },
+  { kind: "term", ko: "AI 에이전트", zh: ["智能体"], en: "AI agent", fix: ["지능체", "스마트 에이전트"], note: "'에이전트' 단독은 그대로 둔다" },
+  { kind: "term", ko: "컴퓨팅 파워", zh: ["算力"], en: "computing power", avoid: ["산력"], note: "'연산 능력'·'연산력'은 허용" },
+  { kind: "term", ko: "월드 모델", zh: ["世界模型"], en: "world model", fix: ["세계 모델", "세계모델"] },
+  { kind: "term", ko: "대형 모델", zh: ["大模型"], en: "large model", fix: ["대모델", "대모형"], note: "大语言模型 은 '거대언어모델(LLM)'" },
+  { kind: "term", ko: "토큰", zh: ["词元"], en: "token", avoid: ["사원"] },
+  { kind: "term", ko: "온디바이스", zh: ["端侧"], en: "on-device", fix: ["단말 측", "단측"] },
+  { kind: "term", ko: "슈퍼노드", zh: ["超节点"], en: "supernode", fix: ["초노드", "초 노드", "슈퍼 노드"] },
+  { kind: "term", ko: "휴머노이드 로봇", zh: ["人形机器人"], en: "humanoid robot", fix: ["인형 로봇", "인형로봇"], note: "'인간형 로봇'은 허용" },
+  { kind: "term", ko: "로봇 손", zh: ["灵巧手"], en: "dexterous hand", fix: ["영교수", "민첩한 손"] },
+  { kind: "term", ko: "기반 모델", zh: ["基座模型", "基础模型"], en: "foundation model", fix: ["기좌 모델"], note: "'파운데이션 모델'도 허용 (2026-11-06 결정: 기반 모델 유지)" },
+  { kind: "term", ko: "데이터 플라이휠", zh: ["数据飞轮"], en: "data flywheel", fix: ["데이터 바퀴"] },
+  { kind: "term", ko: "오픈 웨이트", zh: ["开放权重"], en: "open weights", fix: ["개방 가중치"] },
+  { kind: "term", ko: "오픈소스", zh: ["开源"], en: "open source", avoid: ["개원"] },
+  { kind: "term", ko: "사후 학습", zh: ["后训练"], en: "post-training", fix: ["후훈련"] },
+  { kind: "term", ko: "해외 진출", zh: ["出海"], en: "going global", fix: ["출해"] },
+  { kind: "term", ko: "상용화", zh: ["落地"], en: "deployment", avoid: ["착지", "낙지"] },
+  { kind: "term", ko: "과당 경쟁", zh: ["内卷"], en: "involution", fix: ["내권"] },
+  { kind: "term", ko: "커촹반", zh: ["科创板"], en: "STAR Market", fix: ["과창판", "과학기술혁신판"] },
+  { kind: "term", ko: "AI 데이터센터", zh: ["智算中心"], en: "AI computing center", fix: ["지산 센터", "지산센터", "지능 컴퓨팅 센터"] },
+  { kind: "term", ko: "GPU 1만 장 클러스터", zh: ["万卡集群"], en: "10,000-GPU cluster", fix: ["만 카드 클러스터", "만카드 클러스터", "만카 클러스터"] },
+  { kind: "term", ko: "컨텍스트", zh: ["上下文"], en: "context", fix: ["상하문"] },
+  { kind: "term", ko: "사고 사슬(CoT)", zh: ["思维链"], en: "chain of thought", fix: ["사유 체인", "사유 사슬"] },
+  { kind: "term", ko: "전문가 혼합(MoE)", zh: ["混合专家模型"], en: "mixture of experts", fix: ["혼합 전문가 모델"] },
+  { kind: "term", ko: "멀티모달", zh: ["多模态"], en: "multimodal", fix: ["다모태"] },
+  { kind: "term", ko: "파인튜닝", zh: ["微调"], en: "fine-tuning", avoid: ["미조"] },
+  { kind: "term", ko: "네이티브", zh: ["原生"], en: "native", fix: ["원생 멀티모달", "원생 모델"] },
+  { kind: "term", ko: "숏드라마", zh: ["短剧"], en: "short drama", avoid: ["단극"], note: "'단극'은 '단극 체제'와 겹친다" },
+  { kind: "term", ko: "스마트 콕핏", zh: ["智能座舱", "座舱"], en: "smart cockpit", fix: ["스마트 좌석실", "좌창"] },
+  { kind: "term", ko: "스마트 드라이빙", zh: ["智驾", "智能驾驶"], en: "intelligent driving", fix: ["지가 시스템"] },
+  { kind: "term", ko: "컴퓨팅·전력 연계", zh: ["算电协同"], en: "compute-power coordination", fix: ["산전 협동", "산전 협력"] },
+  { kind: "term", ko: "신질생산력", zh: ["新质生产力"], en: "new quality productive forces" },
+  { kind: "term", ko: "자기 진화", zh: ["自进化"], en: "self-evolution", fix: ["자진화"], note: "'자가 진화' 허용" },
+  { kind: "term", ko: "재귀적 자기 개선", zh: ["递归自我改进"], en: "recursive self-improvement" },
+  { kind: "term", ko: "해자", zh: ["护城河"], en: "moat" },
+  { kind: "term", ko: "유니콘", zh: ["独角兽"], en: "unicorn", fix: ["독각수"] },
+];
+
+/** 중국어 표기 → 항목 (쉬운 AI 설명의 용어 이름, 번역 지시용) */
+export function glossByZh(zh: string): GlossEntry | undefined {
+  const t = zh.trim();
+  return KO_GLOSSARY.find((e) => e.zh.includes(t));
+}
+
+/** 원문(중국어)에 나오는 항목만 — 번역 지시에 그 기사 몫만 넣는다 */
+export function glossEntriesInZh(text: string): GlossEntry[] {
+  return KO_GLOSSARY.filter((e) => e.zh.some((z) => text.includes(z)));
+}

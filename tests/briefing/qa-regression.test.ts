@@ -330,7 +330,7 @@ test("주간 한자 정리: W44 big_picture 의 '구현형 AI(具身智能)와 �
   const { glossPeriodicHan } = await import("../../src/lib/briefing/periodic/generate");
   const c = normalizeWeekly({ headline: "h", dek: "d", big_picture: [{ title: "t", text: "구현형 AI(具身智能)와 智能体 등 용어 언급이 늘었다." }], term: { term: "智能体", why: "智能体 언급" } }).content;
   const g = glossPeriodicHan(c);
-  assert.equal(g.big_picture[0].text, "구현형 AI와 에이전트 등 용어 언급이 늘었다.");
+  assert.equal(g.big_picture[0].text, "피지컬 AI와 에이전트 등 용어 언급이 늘었다.");
   assert.equal(g.term!.term, "智能体"); // 용어 칸 원어는 그대로
   assert.equal(g.term!.why, "에이전트 언급");
 });

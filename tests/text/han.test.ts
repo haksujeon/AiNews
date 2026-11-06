@@ -34,7 +34,7 @@ test("문장 전체 중국어는 3단계 (LLM 재번역 대상), 그 문장을 �
 
 test("숫자·라틴 문자와 붙은 한자: 숫자는 한자로 세지 않고, 사전 키와 정확히 같은 덩어리만 바꾼다", () => {
   assert.deepEqual(hanResidue("알리바바가 千问3.7 시리즈를 공개").tokens, ["千问"]);
-  assert.equal(applyHanGlossary("알리바바가 千问3.7 시리즈를 공개", HAN_GLOSSARY).text, "알리바바가 치엔원3.7 시리즈를 공개");
+  assert.equal(applyHanGlossary("알리바바가 千问3.7 시리즈를 공개", HAN_GLOSSARY).text, "알리바바가 큐원3.7 시리즈를 공개");
   // "2300颗星星" 은 사전에 없음 → 3단계
   const c = classifyHan("Github에서 2300颗星星을 받았다", HAN_GLOSSARY);
   assert.equal(c.stage, 3);
@@ -49,20 +49,20 @@ test("숫자·라틴 문자와 붙은 한자: 숫자는 한자로 세지 않고,
 test("치환 뒤 조사를 새 낱말 받침에 맞춘다 (은/는·이/가·을/를·과/와·으로/로)", () => {
   const g = (t: string) => applyHanGlossary(t, HAN_GLOSSARY).text;
   assert.equal(g("科大讯飞가 발표"), "아이플라이텍이 발표");
-  assert.equal(g("千问는 새 모델"), "치엔원은 새 모델");
-  assert.equal(g("千问를 공개"), "치엔원을 공개");
-  assert.equal(g("千问와 경쟁"), "치엔원과 경쟁");
-  assert.equal(g("千问로 전환"), "치엔원으로 전환");
+  assert.equal(g("千问는 새 모델"), "큐원은 새 모델");
+  assert.equal(g("千问를 공개"), "큐원을 공개");
+  assert.equal(g("千问와 경쟁"), "큐원과 경쟁");
+  assert.equal(g("千问로 전환"), "큐원으로 전환");
   assert.equal(g("豆包은 무료"), "더우바오는 무료"); // 받침 없음
   assert.equal(g("豆包으로 전환"), "더우바오로 전환");
   assert.equal(g("台积电이 증설"), "TSMC가 증설"); // 라틴 끝 = 받침 없음으로 봄
-  assert.equal(g("千问."), "치엔원.");
+  assert.equal(g("千问."), "큐원.");
   // 조사가 아니라 낱말 첫 글자면 그대로 (가격·이다·이용)
-  assert.equal(g("千问가격 인상"), "치엔원가격 인상");
-  assert.equal(g("千问이다"), "치엔원이다");
+  assert.equal(g("千问가격 인상"), "큐원가격 인상");
+  assert.equal(g("千问이다"), "큐원이다");
   assert.equal(g("豆包이용자"), "더우바오이용자");
   // 연달아 나와도 위치가 어긋나지 않는다
-  assert.equal(g("千问는英伟达가"), "치엔원은엔비디아가");
+  assert.equal(g("千问는英伟达가"), "큐원은엔비디아가");
 });
 
 test("사전 치환 + 남은 덩어리 → 3단계, fixed 에는 치환이 먼저 반영", () => {

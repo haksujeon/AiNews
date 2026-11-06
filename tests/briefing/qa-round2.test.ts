@@ -174,7 +174,7 @@ test("10-29 en 'Tianhai 300'(ko 천가오300 = 天垓300 → Tiangai) / 07-15 en
   assert.deepEqual(nameIssues(ko.title, "国产GPU天垓300现场测试称快于H200", "zh"), []);
   // round 2 재생성 10-31 zh 오탐: "애플 인텔리전스" 의 "인텔" 은 인텔이 아니다
   assert.deepEqual(
-    nameIssues("애플 인텔리전스 중국판, 알리바바 치엔원 연동… 11월 4일 iOS 개발자 베타에서 테스트 시작", "苹果Apple智能中国版接入阿里千问，11月4日起向iOS开发者Beta版开放测试", "zh"),
+    nameIssues("애플 인텔리전스 중국판, 알리바바 큐원 연동… 11월 4일 iOS 개발자 베타에서 테스트 시작", "苹果Apple智能中国版接入阿里千问，11月4日起向iOS开发者Beta版开放测试", "zh"),
     []
   );
   assert.ok(nameIssues("인텔이 새 칩을 공개했다", "某公司发布新芯片", "zh").some((p) => /英特尔/.test(p)));
@@ -187,7 +187,7 @@ test("10-27: '캡컷(剪映 국제판)' 한자 2자 — 괄호 안 한자를 지
   const g = glossKoHan(c);
   assert.equal(g.content.top_stories[0].what, "바이트댄스가 캡컷(국제판)을 ChatGPT에 연동한다고 밝혔다.");
   assert.equal(g.edits[0].action, "gloss");
-  assert.equal(glossKoHan({ ...c, top_stories: [{ ...c.top_stories[0], what: "剪映은 편집 앱이다. 千问 연동." }] }).content.top_stories[0].what, "젠잉은 편집 앱이다. 치엔원 연동.");
+  assert.equal(glossKoHan({ ...c, top_stories: [{ ...c.top_stories[0], what: "剪映은 편집 앱이다. 千问 연동." }] }).content.top_stories[0].what, "젠잉은 편집 앱이다. 큐원 연동.");
   // round 2 재생성 09-16: 헤드라인 "B站 AI 무한 경기장 출범…" — 한자 '站' 하나로 판 전체가 대체 판이 됐다 (subject 도 같은 표기로)
   const b = glossKoHan({ ...c, headline: "B站 AI 무한 경기장 출범…GPT-6 Astra 1위", top_stories: [{ ...c.top_stories[0], subject: "B站" }] });
   assert.equal(b.content.headline, "빌리빌리 AI 무한 경기장 출범…GPT-6 Astra 1위");
