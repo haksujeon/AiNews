@@ -77,13 +77,43 @@ export const KO_GLOSSARY: readonly GlossEntry[] = [
   // 영문 공식 이름 (한국 언론 표기가 정해지지 않음)
   { kind: "company", ko: "부스터 로보틱스", zh: ["加速进化"], en: "Booster Robotics", fix: ["가속진화"] },
   { kind: "company", ko: "LimX Dynamics", zh: ["逐际动力"], en: "LimX Dynamics", fix: ["즈지동력", "즈지 동력", "지지동력"] },
-  { kind: "company", ko: "Astribot", zh: ["星尘智能"], en: "Astribot", fix: ["성진지능"] },
   { kind: "company", ko: "ShengShu", zh: ["生数科技"], en: "ShengShu", fix: ["생수과기", "셩수과기"] },
   { kind: "company", ko: "01.AI", zh: ["零一万物"], en: "01.AI", fix: ["영일만물", "링이완우"] },
   { kind: "company", ko: "Infinigence", zh: ["无问芯穹", "無問芯穹"], en: "Infinigence", fix: ["무문신궁", "우원신충"] },
   { kind: "company", ko: "Iluvatar CoreX", zh: ["天数智芯"], en: "Iluvatar CoreX", fix: ["톈수즈신", "텐셴수"] },
   { kind: "company", ko: "DataCanvas", zh: ["九章云极"], en: "DataCanvas", fix: ["구장윈지", "구장운극"] },
   { kind: "org", ko: "BAAI", zh: ["智源研究院", "北京智源"], en: "BAAI", fix: ["지위안연구원", "지위안 연구원"] },
+
+  // 2026-11-06 후보 보고서에서 추가 (사용자 승인 "사전 초안 제안대로 진행")
+  // 한국 언론 표기
+  { kind: "company", ko: "엔플레임", zh: ["燧原科技", "燧原"], en: "Enflame", fix: ["수위안 테크놀로지", "수위안테크놀로지", "수위안커지", "수원커지", "쑤이위안커지"], note: "한국경제" },
+  { kind: "company", ko: "노에틱스", zh: ["松延动力"], en: "Noetix Robotics", fix: ["송옌동력", "쏭옌동력", "송옌 동력"], note: "로봇신문·ZDNet" },
+  { kind: "company", ko: "포패러다임", zh: ["范式智能", "第四范式", "范式集团"], en: "4Paradigm", fix: ["판식지능", "범식지능", "제4범식", "제사범식"], note: "第四范式 이 2025년 范式集团 으로 이름 바꿈 (ZDNet)" },
+  { kind: "company", ko: "덱스포스", zh: ["跨维智能"], en: "DexForce", fix: ["크로스디멘션 인텔리전스", "크로스디멘션인텔리전스", "과유지능"], note: "로봇신문" },
+  { kind: "company", ko: "키네틱스AI", zh: ["超维动力"], en: "Kinetix AI", fix: ["초유동력", "차오웨이동력"], note: "로봇신문" },
+  { kind: "company", ko: "원더쉐어", zh: ["万兴科技"], en: "Wondershare", fix: ["완싱커지", "완싱과기", "만흥과기"], note: "회사 보도자료 표기 (외래어 표기법은 '원더셰어')" },
+  { kind: "company", ko: "창안자동차", zh: ["长安汽车"], en: "Changan Automobile", fix: ["장안자동차", "장안 자동차", "창안 자동차"], note: "ZDNet. 长安 단독은 지명" },
+  { kind: "company", ko: "라이트휠", zh: ["光轮智能"], en: "Lightwheel", fix: ["광륜지능", "광룬즈넝", "광륜 지능"], note: "로봇신문" },
+  { kind: "company", ko: "모펫AI", zh: ["墨芯人工智能", "墨芯"], en: "Moffett AI", fix: ["모신인공지능", "모신 인공지능", "묵심인공지능"], note: "AI타임스. 모신과기(魔芯科技)는 다른 회사" },
+  { kind: "company", ko: "스피릿AI", zh: ["千寻智能"], en: "Spirit AI", fix: ["천심지능", "치엔쉰즈넝", "첸쉰즈넝", "천쉰지능", "스피리트AI"], note: "서울경제 '스피릿AI', 로봇신문 '스피리트AI'" },
+  { kind: "company", ko: "비타다이나믹스", zh: ["维他动力"], en: "Vita Dynamics", fix: ["웨이타동력", "유타동력"], note: "로봇신문" },
+  { kind: "company", ko: "엑스스퀘어로봇", zh: ["自变量机器人", "自变量"], en: "X Square Robot", fix: ["자변량 로봇", "자변량로봇", "자변량"], hanSkip: ["自变量"], note: "로봇신문. 自变量 단독은 수학 용어(독립 변수)와 겹쳐 한자 사전에는 넣지 않는다" },
+  { kind: "company", ko: "아스트리봇", zh: ["星尘智能"], en: "Astribot", fix: ["성진지능", "싱천지능", "애스트리봇"], note: "로봇신문 (2026-11-06 영문 → 한국어 표기)" },
+  { kind: "company", ko: "아파리 테크놀로지", zh: ["千里科技"], en: "AFARI", fix: ["치리과기", "천리과기", "첸리커지", "치엔리커지"], note: "아주경제. 옛 力帆科技, 지리 계열" },
+  // 한국 언론 표기 없음 → 영문 공식 이름
+  { kind: "company", ko: "Approaching.AI", zh: ["趋境科技"], en: "Approaching.AI", fix: ["취징커지", "취징과기", "추경과기"] },
+  { kind: "company", ko: "AIsphere", zh: ["爱诗科技"], en: "AIsphere", fix: ["아이스 테크놀로지", "아이시커지", "아이시 과기", "애시과기"], avoid: ["아이시"], note: "제품 PixVerse 는 그대로" },
+  { kind: "company", ko: "MOSI", zh: ["模思智能"], en: "MOSI", fix: ["모사지능", "모쓰즈넝"] },
+  { kind: "company", ko: "Evoken", zh: ["演语科技"], en: "Evoken", fix: ["연어과기", "옌위커지", "연어 과기"], note: "LiblibAI 운영사" },
+  { kind: "company", ko: "Apex Intelligence", zh: ["超衍智能"], en: "Apex Intelligence", fix: ["초연지능", "차오옌즈넝"] },
+  { kind: "company", ko: "Riemann Dynamics", zh: ["黎曼动力"], en: "Riemann Dynamics", fix: ["리만동력", "리만 동력"] },
+  // 영문 이름 확인 안 됨 → 중국어 원음 한글 + 테크놀로지 (2026-11-06 결정)
+  { kind: "company", ko: "다마오 테크놀로지", zh: ["达卯科技"], fix: ["달마오 과기", "달마오과기", "다마오 과기", "다마오과기", "달묘과기"] },
+  { kind: "company", ko: "광판 테크놀로지", zh: ["光帆科技"], fix: ["광범과기", "광판과기", "광판커지", "광범 과기"], note: "'광범위 테크'(오역)는 '광범위'와 겹쳐 자동으로 고치지 않는다" },
+  { kind: "company", ko: "우제 다이내믹스", zh: ["无界动力"], fix: ["무계동력", "우제동력", "무계 동력"] },
+  { kind: "company", ko: "징숴 테크놀로지", zh: ["景烁科技"], fix: ["경삭과기", "징숴커지", "징숴과기"] },
+  { kind: "org", ko: "SAIS", zh: ["上海科学智能研究院"], en: "Shanghai Academy of AI for Science", fix: ["상하이 과학지능연구원", "상하이과학지능연구원", "상하이 과학지능 연구원"] },
+  { kind: "org", ko: "신랑커지", zh: ["新浪科技"], en: "Sina Tech", fix: ["신랑과기"], note: "매체 (뉴스1 표기)" },
 
   // ── 제품
   { kind: "product", ko: "어니봇", zh: ["文心一言"], en: "ERNIE Bot", fix: ["문심일언", "원신이옌"] },
@@ -136,6 +166,7 @@ export const KO_GLOSSARY: readonly GlossEntry[] = [
   { kind: "term", ko: "재귀적 자기 개선", zh: ["递归自我改进"], en: "recursive self-improvement" },
   { kind: "term", ko: "해자", zh: ["护城河"], en: "moat" },
   { kind: "term", ko: "유니콘", zh: ["独角兽"], en: "unicorn", fix: ["독각수"] },
+  { kind: "term", ko: "AI for Science", zh: ["科学智能"], en: "AI for Science", avoid: ["과학지능"], note: "'과학지능'은 다른 뜻과 겹쳐 자동으로 고치지 않는다" },
 ];
 
 /** 중국어 표기 → 항목 (쉬운 AI 설명의 용어 이름, 번역 지시용) */
