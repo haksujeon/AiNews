@@ -14,7 +14,8 @@ import type { GlanceItem } from "@/lib/briefing/glance";
  * 숫자는 card-spec 이 검사한 것만. 증감·미터는 bigTrend 가 기사 글로 정한다.
  */
 
-export type GlanceCell = GlanceItem & { sectionLabel: string; outlets?: string };
+/** fx = 큰 숫자가 금액일 때 그 언어 통화 환산 값 ("약 2조 1,400억 원", fx/convert.ts). 페이지만 — 카드 그림은 넘기지 않는다 */
+export type GlanceCell = GlanceItem & { sectionLabel: string; outlets?: string; fx?: string | null };
 
 const SECTION_ICON: Record<string, ComponentType<{ className?: string; "aria-hidden"?: boolean }>> = {
   funding: Coins,
@@ -154,6 +155,7 @@ export function InfographicCell({ item }: { item: GlanceCell }) {
       {item.big && (
         <span className="mt-2.5 block">
           <BigValue big={item.big} className="text-[23px]" />
+          {item.fx && <span className="block text-[12.5px] font-semibold leading-snug text-ink-2 tabular-nums" data-testid="glance-fx">{item.fx}</span>}
           <span className="mt-0.5 block text-[12px] leading-snug text-ink-2">{item.big.label}</span>
           {item.big.meter != null && (
             <span className="mt-2 block">
@@ -188,6 +190,7 @@ export function InfographicRow({ item }: { item: GlanceCell }) {
         {item.big && (
           <>
             <BigValue big={item.big} className="text-[16px]" />
+            {item.fx && <span className="text-[11px] font-semibold leading-tight text-ink-2 tabular-nums" data-testid="glance-fx">{item.fx}</span>}
             <span className="text-[10.5px] leading-tight text-ink-3">{item.big.label}</span>
           </>
         )}

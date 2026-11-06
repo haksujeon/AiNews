@@ -5,6 +5,8 @@ import { useTranslations } from "next-intl";
 import { ChevronDown } from "lucide-react";
 import type { NewsItem } from "@/lib/supabase";
 import type { PublicNewsItem } from "@/lib/news-gist";
+import type { FxRates } from "@/lib/fx/convert";
+import { FxNote } from "@/components/fx/fx-note";
 import { cn } from "@/lib/utils";
 import {
   formatDate,
@@ -81,7 +83,8 @@ export function ArticleBody({
   locale,
   headingTag: Heading = "h2",
 }: {
-  news: PublicNewsItem;
+  /** fx: 금액 환산에 쓴 환율 (서버 withNewsFx, fx/news.ts). 있으면 맨 아래 각주 */
+  news: PublicNewsItem & { fx?: FxRates | null };
   locale: string;
   headingTag?: HeadingTag;
 }) {
@@ -121,6 +124,8 @@ export function ArticleBody({
           <p className="mt-3 text-xs leading-relaxed text-ink-3">{t("gistNote")}</p>
         </section>
       )}
+
+      {news.fx && <FxNote fx={news.fx} locale={locale} className="block text-xs leading-relaxed text-ink-3" />}
 
       {/* 전문은 항상 원문 매체에서 — 요지가 있어도 없어도 같은 안내 */}
       {news.source_url && (

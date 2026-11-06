@@ -352,7 +352,15 @@
     "storyLensTopic": "相关主题历史",
     "storyNow": "本次报道",
     "storyCollapse": "收起",
-    "storyNote": "试用功能：由 AI 仅根据过往报道整理。日期为报道日期，可点击来源核对。"
+    "storyNote": "试用功能：由 AI 仅根据过往报道整理。日期为报道日期，可点击来源核对。",
+    "fxNote": "括号内“约…元”按{date}欧洲央行参考汇率（{rates}）换算，仅供参考。",
+    "fxRate": "{from} = {rate}元",
+    "fxUnit_USD": "1美元",
+    "fxUnit_CNY": "1元",
+    "fxUnit_HKD": "1港元",
+    "fxUnit_JPY": "1日元",
+    "fxUnit_EUR": "1欧元",
+    "fxUnit_KRW": "1韩元"
   },
   "briefingAdmin": {
     "nav": "简报审核",

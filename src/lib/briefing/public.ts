@@ -15,6 +15,7 @@ import { loadEasyTerms } from "./easy-terms-store";
 import { attachStoryContext, loadStoryContext } from "./story-context";
 import type { BriefingMediaSet } from "./media";
 import { loadBriefingMedia } from "./media-store";
+import type { FxRates } from "../fx/convert";
 
 export interface BriefingArticleRef {
   id: string;
@@ -40,6 +41,10 @@ export interface PublicBriefing {
   articles: Record<string, BriefingArticleRef>;
   /** 음성·카드 (briefing_media). 공개는 승인본만, 관리자 검토 화면은 검토 중인 것도. 없으면 {} */
   media?: BriefingMediaSet;
+  /** 금액 환산에 쓴 환율 (fx/briefing.ts withFxNotes 가 붙인다 — 화면·메일만). 없으면 환산 표기 없음 */
+  fx?: FxRates | null;
+  /** 이 판에 환산 표기가 붙었나 (각주를 달지) */
+  fxApplied?: boolean;
 }
 
 /** 보이는 기사만 남기고, 근거가 모두 사라진 항목은 뺀다 (순수 함수) */

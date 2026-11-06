@@ -352,7 +352,15 @@
     "storyLensTopic": "Related topic history",
     "storyNow": "This story",
     "storyCollapse": "Collapse",
-    "storyNote": "A beta feature: AI summarized earlier articles only. Dates are report dates; tap a source to check it."
+    "storyNote": "A beta feature: AI summarized earlier articles only. Dates are report dates; tap a source to check it.",
+    "fxNote": "Figures marked “about $…” are converted at the ECB reference rate of {date} ({rates}), for reference only.",
+    "fxRate": "{from} = ${rate}",
+    "fxUnit_USD": "$1",
+    "fxUnit_CNY": "1 yuan",
+    "fxUnit_HKD": "HK$1",
+    "fxUnit_JPY": "¥1",
+    "fxUnit_EUR": "€1",
+    "fxUnit_KRW": "1 won"
   },
   "briefingAdmin": {
     "nav": "Briefing review",

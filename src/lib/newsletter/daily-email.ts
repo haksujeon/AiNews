@@ -9,6 +9,8 @@
 import type { PublicBriefing } from "@/lib/briefing/public";
 import type { BriefingLocale, StoryContext } from "@/lib/briefing/types";
 import { SITE_ORIGIN, absoluteUrl } from "@/lib/site";
+import { convertAmountText, fxFootnoteParts, type FxLocale } from "@/lib/fx/convert";
+import type { Currency } from "@/lib/briefing/quantity";
 
 export interface DailyEmailOptions {
   /** 받는 사람 이름 (없으면 인사 생략) */
@@ -65,6 +67,9 @@ const T = {
     cta: "사이트에서 브리핑 전체 보기",
     footReason: (e: string) => `${e} 주소로 '중국 AI 데일리'를 구독하셔서 보내 드리는 메일입니다. 매일 아침 7시(한국 시각)에 전날 소식을 보냅니다(월요일은 토·일 합본).`,
     footAi: "브리핑은 공개된 중국 매체 보도를 바탕으로 AI가 작성하고, 숫자·인용은 근거 기사와 대조해 검사합니다.",
+    // 금액 환산 각주 (사이트 briefing.fxNote 와 같은 문구)
+    fxNote: (d: string, r: string) => `괄호 안 ‘약 …원’은 ${d} ECB 기준 환율(${r})로 바꾼 참고값입니다.`,
+    fxRate: (from: Currency, rate: string) => `${({ USD: "1달러", CNY: "1위안", HKD: "1홍콩달러", JPY: "1엔", EUR: "1유로", KRW: "1원" } as const)[from]} = ${rate}원`,
     unsub: "수신 거부",
     unsubNote: "열리는 화면에서 버튼 한 번으로 발송을 멈출 수 있습니다.",
     recommend: "동료에게 추천하기 (구독 신청 화면)",
@@ -113,6 +118,8 @@ const T = {
     cta: "在网站上阅读完整简报",
     footReason: (e: string) => `您以 ${e} 订阅了“中国AI日报”，因此收到本邮件。每天早上7点（韩国时间）发送前一天的动态（周一为周六、周日合刊）。`,
     footAi: "简报由 AI 根据公开的中国媒体报道撰写，数字和引用均与来源文章核对。",
+    fxNote: (d: string, r: string) => `括号内“约…元”按${d}欧洲央行参考汇率（${r}）换算，仅供参考。`,
+    fxRate: (from: Currency, rate: string) => `${({ USD: "1美元", CNY: "1元", HKD: "1港元", JPY: "1日元", EUR: "1欧元", KRW: "1韩元" } as const)[from]} = ${rate}元`,
     unsub: "退订",
     unsubNote: "在打开的页面上点击一次按钮即可停止发送。",
     recommend: "推荐给同事（订阅页面）",
@@ -161,6 +168,8 @@ const T = {
     cta: "Read the full briefing on the site",
     footReason: (e: string) => `You receive this because ${e} subscribed to China AI Daily. It arrives every morning at 7:00 KST with the previous day's news (Mondays: Sat–Sun combined).`,
     footAi: "Written by AI from public Chinese media reports; numbers and quotes are checked against the source articles.",
+    fxNote: (d: string, r: string) => `Figures marked “about $…” are converted at the ECB reference rate of ${d} (${r}), for reference only.`,
+    fxRate: (from: Currency, rate: string) => `${({ USD: "$1", CNY: "1 yuan", HKD: "HK$1", JPY: "¥1", EUR: "€1", KRW: "1 won" } as const)[from]} = $${rate}`,
     unsub: "Unsubscribe",
     unsubNote: "One button on the page that opens stops all emails.",
     recommend: "Recommend to a colleague (signup page)",
@@ -331,6 +340,11 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   // 숫자: PC 두 칸 격자, 휴대폰 한 칸
   const pairs: (typeof c.key_numbers)[] = [];
   for (let i = 0; i < c.key_numbers.length; i += 2) pairs.push(c.key_numbers.slice(i, i + 2));
+  // 큰 숫자가 금액이면 환산 값 한 줄 (사이트 한눈에 보기와 같은 convertAmountText)
+  const fxLine = (v: string) => {
+    const x = b.fx ? convertAmountText(v, b.locale as FxLocale, b.fx) : null;
+    return x ? `<div style="font:600 13px/1.4 ${FONT};color:${C.sub}">${esc(x)}</div>` : "";
+  };
   const numbers = c.key_numbers.length
     ? heading(t.numbers) +
       `<tr><td class="px" style="padding:0 ${PX}px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${pairs
@@ -339,7 +353,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
             `<tr>${r
               .map(
                 (k, j) =>
-                  `<td class="col" width="50%" style="vertical-align:top;padding:${j ? "10px 0 14px 10px" : "10px 10px 14px 0"};border-top:2px solid ${C.ink}"><div style="font:800 21px/1.3 ${FONT};color:${C.ink}">${esc(k.value)}</div><div style="padding-top:3px;font:13px/1.5 ${FONT};color:${C.sub}"><a href="${esc(siteArticle(k.ref))}" style="color:${C.sub};text-decoration:none">${esc(k.label)}</a></div></td>`
+                  `<td class="col" width="50%" style="vertical-align:top;padding:${j ? "10px 0 14px 10px" : "10px 10px 14px 0"};border-top:2px solid ${C.ink}"><div style="font:800 21px/1.3 ${FONT};color:${C.ink}">${esc(k.value)}</div>${fxLine(k.value)}<div style="padding-top:3px;font:13px/1.5 ${FONT};color:${C.sub}"><a href="${esc(siteArticle(k.ref))}" style="color:${C.sub};text-decoration:none">${esc(k.label)}</a></div></td>`
               )
               .join("")}${r.length < 2 ? `<td class="col" width="50%"></td>` : ""}</tr>`
         )
@@ -373,6 +387,10 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
       `<tr><td class="px" style="padding:0 ${PX}px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C.line};border-radius:8px"><tr><td style="padding:13px 17px;font:14.5px/1.65 ${FONT};color:${C.ink}"><span style="font-size:19px;font-weight:700">${esc(c.term_of_the_day.term)}</span> <span style="color:${C.faint}">${esc(c.term_of_the_day.pinyin)}</span><br>${esc(c.term_of_the_day.explanation ?? "")}</td></tr></table></td></tr>`
     : "";
 
+  const fxFoot =
+    b.fx && (b.fxApplied || c.key_numbers.some((k) => fxLine(k.value)))
+      ? `<br>${esc(t.fxNote(editionDateLabel(b.locale, b.fx.date), fxFootnoteParts(b.locale as FxLocale, b.fx).map((p) => t.fxRate(p.from, p.rate)).join(" · ")))}`
+      : "";
   const total = c.meta.candidate_count;
   const cited = c.meta.cited_count;
   const preheader = c.lede;
@@ -414,7 +432,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   <tr><td align="center" class="px" style="padding:34px ${PX}px 30px"><a href="${esc(briefingUrl)}" style="display:inline-block;background:${C.jade};color:#fff;text-decoration:none;font:700 15px/1 ${FONT};padding:15px 28px;border-radius:8px">${esc(t.cta)} →</a></td></tr>
 </table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:${MAIL_WIDTH}px"><tr><td class="px" style="padding:18px 24px;font:12px/1.7 ${FONT};color:${C.faint}">
-  ${esc(t.footReason(opts.email))}<br>${esc(t.footAi)}${hasHistory ? `<br>${esc(t.storyNote)}` : ""}<br>
+  ${esc(t.footReason(opts.email))}<br>${esc(t.footAi)}${hasHistory ? `<br>${esc(t.storyNote)}` : ""}${fxFoot}<br>
   <a href="${esc(opts.unsubscribeUrl)}" style="color:${C.sub};font-weight:700">${esc(t.unsub)}</a> — ${esc(t.unsubNote)}<br>
   <a href="${esc(`${absoluteUrl(b.locale, "/subscribe")}?src=mail`)}" style="color:${C.jade};font-weight:700">${esc(t.recommend)} →</a><br>${esc(t.sender)}
 </td></tr></table>

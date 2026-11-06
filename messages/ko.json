@@ -352,7 +352,15 @@
     "storyLensTopic": "관련 주제 히스토리",
     "storyNow": "이번 기사",
     "storyCollapse": "접기",
-    "storyNote": "AI가 지난 기사만으로 정리한 시범 기능입니다. 날짜는 보도 날짜이고, 각 줄의 근거 기사를 눌러 확인할 수 있습니다."
+    "storyNote": "AI가 지난 기사만으로 정리한 시범 기능입니다. 날짜는 보도 날짜이고, 각 줄의 근거 기사를 눌러 확인할 수 있습니다.",
+    "fxNote": "괄호 안 ‘약 …원’은 {date} ECB 기준 환율({rates})로 바꾼 참고값입니다.",
+    "fxRate": "{from} = {rate}원",
+    "fxUnit_USD": "1달러",
+    "fxUnit_CNY": "1위안",
+    "fxUnit_HKD": "1홍콩달러",
+    "fxUnit_JPY": "1엔",
+    "fxUnit_EUR": "1유로",
+    "fxUnit_KRW": "1원"
   },
   "briefingAdmin": {
     "nav": "브리핑 검토",

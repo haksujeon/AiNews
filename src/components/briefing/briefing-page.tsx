@@ -14,6 +14,7 @@ import { formatDate } from "@/lib/news-utils";
 import { isValidEditionDate } from "@/lib/briefing/generate";
 import { getAdjacentEditions, getPublishedBriefing, getPublishedLocales, type PublicBriefing } from "@/lib/briefing/public";
 import { loadCardSpec } from "@/lib/briefing/media-store";
+import { withFxNotes } from "@/lib/fx/briefing";
 import { briefingAlternates, briefingDatePath, briefingJsonLd, formatShortDate, safeJsonLd } from "@/lib/briefing/view";
 import type { BriefingLocale } from "@/lib/briefing/types";
 
@@ -77,8 +78,12 @@ export async function BriefingPageContent({ locale, date }: { locale: string; da
 
   let body: React.ReactNode;
   if (r.kind === "ok") {
-    const b = r.briefing;
-    const [pager, cardSpec] = await Promise.all([getAdjacentEditions(b.locale, b.edition_date), loadCardSpec(b.edition_date, b.locale)]);
+    // 금액 환산 표기는 화면에서만 붙인다 (메타데이터·카드·음성은 원래 금액) — fx/briefing.ts, 아침 메일과 같은 함수
+    const [b, pager, cardSpec] = await Promise.all([
+      withFxNotes(r.briefing),
+      getAdjacentEditions(r.briefing.locale, r.briefing.edition_date),
+      loadCardSpec(r.briefing.edition_date, r.briefing.locale),
+    ]);
     const jsonLd = briefingJsonLd(b, { brand: tm("brand"), title: headlineTitle(b, (v) => tm("briefingTitle", v)) });
     body = (
       <>

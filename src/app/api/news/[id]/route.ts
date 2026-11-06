@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchNewsById } from '@/lib/supabase';
 import { toPublicNewsItem } from '@/lib/news-gist';
+import { withNewsFx } from '@/lib/fx/news';
 import { isLocale } from '@/i18n/routing';
 
 /**
@@ -21,7 +22,7 @@ export async function GET(
     if (!news) return NextResponse.json(null, { status: 404 });
     // is_hidden 은 상세 페이지의 noindex 판단용이라 공개 API 에는 싣지 않는다(예전 응답과 같은 필드 구성).
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { is_hidden, ...item } = toPublicNewsItem(news, locale);
+    const { is_hidden, ...item } = await withNewsFx(toPublicNewsItem(news, locale), locale);
     return NextResponse.json(item);
   } catch {
     return NextResponse.json(null, { status: 500 });

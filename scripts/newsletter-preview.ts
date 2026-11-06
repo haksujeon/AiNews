@@ -19,7 +19,10 @@ async function main() {
   const out = arg("out") ?? ".";
   try {
     for (const [locale, name, email] of [["ko", "홍길동", "subscriber@example.com"], ["zh", "张三", "subscriber2@example.com"]] as const) {
-      const b = await getPublishedBriefing(locale, arg("date"));
+      // 발송과 같은 금액 환산 표기 (newsletter/send.ts 와 같은 withFxNotes)
+      const { withFxNotes } = await import("../src/lib/fx/briefing");
+      const pub = await getPublishedBriefing(locale, arg("date"));
+      const b = pub ? await withFxNotes(pub) : null;
       if (!b) { console.log(locale, "발행본 없음"); continue; }
       const m = renderDailyEmail(b, { name, email, unsubscribeUrl: "https://news.aibaseclub.com/ainews/unsubscribe?t=SAMPLE" });
       writeFileSync(`${out}/mail-${locale}.html`, m.html);

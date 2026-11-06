@@ -13,6 +13,7 @@ import { getPublishedBriefing, type PublicBriefing } from "@/lib/briefing/public
 import { currentEdition } from "@/lib/briefing/sla";
 import { BRIEFING_LOCALES, type BriefingLocale } from "@/lib/briefing/types";
 import { renderDailyEmail } from "./daily-email";
+import { withFxNotes } from "@/lib/fx/briefing";
 import { unsubscribeApiUrl, unsubscribePageUrl } from "./token";
 import { getTransport, type MailTransport } from "./transport";
 
@@ -68,7 +69,11 @@ export async function sendDailyNewsletter(opts: SendOptions = {}): Promise<SendR
 
   for (const s of subs) {
     const locale = asLocale(s.language);
-    if (!briefings.has(locale)) briefings.set(locale, await getPublishedBriefing(locale, edition));
+    // 금액 환산 표기: 사이트 브리핑 페이지와 같은 withFxNotes (fx/briefing.ts, Gate 2)
+    if (!briefings.has(locale)) {
+      const pub = await getPublishedBriefing(locale, edition);
+      briefings.set(locale, pub ? await withFxNotes(pub) : null);
+    }
     const b = briefings.get(locale);
     if (!b) {
       report.results.push({ email: s.email, locale, outcome: "no-edition" });

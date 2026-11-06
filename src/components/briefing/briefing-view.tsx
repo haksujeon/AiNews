@@ -23,6 +23,8 @@ import { StoryProgress } from "./story-progress";
 import { SubscribeBox } from "@/components/newsletter/subscribe-link";
 import { buildGlance } from "@/lib/briefing/glance";
 import type { CardSpec } from "@/lib/briefing/card-spec";
+import { convertAmountText, type FxLocale } from "@/lib/fx/convert";
+import { FxNote } from "@/components/fx/fx-note";
 
 /*
  * 데일리 브리핑 본문 ("Briefing Desk" 시안 §5.1–5.2).
@@ -238,7 +240,9 @@ export function BriefingView({ briefing, pager, cardSpec }: Props) {
   // 한눈에 보기: 목차·숫자로 보는 하루·한 장 요약을 한 블록으로 (안 A, 사용자 결정 2026-11-05)
   const glance = buildGlance(c, cardSpec).map((g) => {
     const st = c.top_stories.find((x) => x.rank === g.rank);
-    return { ...g, sectionLabel: sectionLabel(t, g.section), outlets: st ? outletsOf(st.refs, briefing.articles).join(" · ") : "" };
+    // 큰 숫자가 금액이면 그 언어 통화 환산 값을 작은 줄로 (환율은 withFxNotes 가 붙인 판 날짜 ECB 기준)
+    const fx = g.big && briefing.fx ? convertAmountText(g.big.raw, loc as FxLocale, briefing.fx) : null;
+    return { ...g, sectionLabel: sectionLabel(t, g.section), outlets: st ? outletsOf(st.refs, briefing.articles).join(" · ") : "", fx };
   });
 
   const body = (
@@ -395,6 +399,9 @@ export function BriefingView({ briefing, pager, cardSpec }: Props) {
 
       <p className="border-t border-rule pb-12 pt-5 text-[12.5px] leading-[1.7] text-ink-3">
         {t("footerNote", { outlets: allOutlets.join("·") })}
+        {(briefing.fxApplied || glance.some((g) => g.fx)) && (
+          <FxNote fx={briefing.fx} locale={loc} className="mt-1 block" />
+        )}
       </p>
     </article>
   );

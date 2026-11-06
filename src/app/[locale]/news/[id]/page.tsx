@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { fetchNewsById, fetchRelatedNews } from "@/lib/supabase";
 import { getCategoryLabel, getSourceName, getSummary, getTitle } from "@/lib/news-utils";
 import { toPublicNewsItem } from "@/lib/news-gist";
+import { withNewsFx } from "@/lib/fx/news";
 import { absoluteUrl, languageAlternates } from "@/lib/site";
 import { LOCALE_HTML_LANG, isLocale } from "@/i18n/routing";
 import { clipText } from "@/lib/seo/text";
@@ -95,7 +96,8 @@ export default async function NewsDetailPage({ params }: Props) {
       <main className="flex-1 container mx-auto px-4 py-8">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
         {/* 클라이언트 컴포넌트로는 번역 전문(content_*)을 넘기지 않는다 — RSC 페이로드에 실리지 않게 요지만 (P0-7) */}
-        <NewsDetail news={toPublicNewsItem(news, locale)} relatedNews={relatedNews} />
+        {/* 금액 환산 표기: 팝업·공개 상세 API 와 같은 withNewsFx (fx/news.ts) */}
+        <NewsDetail news={await withNewsFx(toPublicNewsItem(news, locale), locale)} relatedNews={relatedNews} />
       </main>
       <Footer />
     </div>
