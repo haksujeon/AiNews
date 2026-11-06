@@ -101,8 +101,9 @@ export function normalizeKoNames(text: string): string {
   let out = text;
   for (const r of RULES) {
     out = out.replace(r.re, (m: string, par: string | undefined, j: string | undefined, offset: number, whole: string) => {
-      // 이미 바른 표기의 앞부분이면 그대로 ("문샷AI" 의 "문샷")
-      if (whole.startsWith(r.to, offset)) return m;
+      // 이미 바른 표기의 앞부분이면 그대로 ("문샷AI" 의 "문샷"). 정한 표기가 잘못된 표기의 앞부분인 경우("비렌과기" → "비렌")는 고친다
+      const core = m.slice(0, m.length - (par?.length ?? 0) - (j?.length ?? 0));
+      if (whole.startsWith(r.to, offset) && r.to.startsWith(core)) return m;
       // 원래 이름을 일부러 밝힌 자리는 그대로 ("아폴로 고(중국명 뤄보콰이파오)")
       if (/(?:중국명|중국 이름|중국어 이름|현지명|원어명|원래 이름)\s?[:：]?\s?$/.test(whole.slice(Math.max(0, offset - 12), offset))) return m;
       return j ? `${r.to}${par ?? ""}${particleFor(r.to, j)}` : par !== undefined ? `${r.to}${par}` : r.to;

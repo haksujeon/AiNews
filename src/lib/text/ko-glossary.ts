@@ -33,8 +33,8 @@ export interface GlossEntry {
 
 export const KO_GLOSSARY: readonly GlossEntry[] = [
   // ── 회사 (한국 언론 표기)
-  { kind: "company", ko: "유니트리", zh: ["宇树", "宇树科技"], en: "Unitree", fix: ["유수과기", "유수 과학기술", "유수테크", "우수커지"], avoid: ["유수"] },
-  { kind: "company", ko: "센스타임", zh: ["商汤", "商汤科技"], en: "SenseTime", fix: ["상탕"] },
+  { kind: "company", ko: "유니트리", zh: ["宇树", "宇树科技"], en: "Unitree", fix: ["유수과기", "유수 과학기술", "유수테크", "우수커지", "유수커지", "유수트"], avoid: ["유수"] },
+  { kind: "company", ko: "센스타임", zh: ["商汤", "商汤科技"], en: "SenseTime", fix: ["상탕과기", "상탕커지", "상탕"] },
   { kind: "company", ko: "애지봇", zh: ["智元机器人", "智元"], en: "AgiBot", fix: ["지원로봇", "지원 로봇", "즈위안 로봇", "즈위안로봇", "지위안로봇", "지위안 로봇"], avoid: ["지원", "즈위안"], hanSkip: ["智元"], note: "智元 단독은 매체 新智元 과 겹친다" },
   { kind: "company", ko: "갤봇", zh: ["银河通用"], en: "Galbot", fix: ["은하통용", "은하범용", "인허퉁융"] },
   { kind: "company", ko: "유비테크", zh: ["优必选"], en: "UBTech", fix: ["우필선"] },
@@ -50,11 +50,11 @@ export const KO_GLOSSARY: readonly GlossEntry[] = [
   { kind: "company", ko: "캄브리콘", zh: ["寒武纪"], en: "Cambricon", fix: ["한무기"] },
   { kind: "company", ko: "무어스레드", zh: ["摩尔线程"], en: "Moore Threads", fix: ["모어스레드", "마얼셴청", "모얼셴청"] },
   { kind: "company", ko: "메타엑스", zh: ["沐曦"], en: "MetaX", fix: ["목희", "목시"], avoid: ["무시"] },
-  { kind: "company", ko: "비렌", zh: ["壁仞", "壁仞科技"], en: "Biren", fix: ["벽인과기"], avoid: ["비런"] },
+  { kind: "company", ko: "비렌", zh: ["壁仞", "壁仞科技"], en: "Biren", fix: ["벽인과기", "비렌과기"], avoid: ["비런"] },
   { kind: "company", ko: "하이곤", zh: ["海光信息", "海光"], en: "Hygon", fix: ["하이광 정보", "하이광정보", "해광정보"], avoid: ["하이광"] },
   { kind: "company", ko: "쿤룬신", zh: ["昆仑芯"], en: "Kunlunxin", fix: ["곤륜심"] },
   { kind: "company", ko: "SMIC", zh: ["中芯国际", "中芯"], en: "SMIC", fix: ["중신궈지", "중심국제"] },
-  { kind: "company", ko: "창신메모리", zh: ["长鑫"], en: "CXMT" },
+  { kind: "company", ko: "창신메모리", zh: ["长鑫科技", "长鑫"], en: "CXMT", fix: ["장신과기", "장신커지", "창신과기"] },
   { kind: "company", ko: "호라이즌 로보틱스", zh: ["地平线"], en: "Horizon Robotics", fix: ["지평선 로보틱스", "지핑셴"], hanSkip: ["地平线"] },
   { kind: "company", ko: "메이퇀", zh: ["美团"], en: "Meituan", fix: ["메이투안"], avoid: ["미단"] },
   { kind: "company", ko: "콰이쇼우", zh: ["快手"], en: "Kuaishou", fix: ["콰이서우"], avoid: ["쾌수"] },
@@ -98,7 +98,7 @@ export const KO_GLOSSARY: readonly GlossEntry[] = [
   // ── AI 용어 (한국 업계 표준)
   {
     kind: "term", ko: "피지컬 AI", zh: ["具身智能", "物理AI", "物理人工智能"], en: "physical AI",
-    fix: ["구현지능", "구현 지능", "구현형 지능", "구현형 AI", "구현형 인공지능", "체화 지능", "체화지능", "체화 AI", "임바디드 AI", "엠바디드 AI", "임바디드 지능", "신체 지능", "물리 AI"],
+    fix: ["구현지능", "구현 지능", "구체지능", "구체 지능", "구신지능", "구현형 지능", "구현형 AI", "구현형 인공지능", "체화 지능", "체화지능", "체화 AI", "임바디드 AI", "엠바디드 AI", "임바디드 지능", "신체 지능", "물리 AI"],
     note: "具身机器人 '구현형 로봇' → '피지컬 AI 로봇' 은 ko-names.ts 규칙",
   },
   { kind: "term", ko: "AI 에이전트", zh: ["智能体"], en: "AI agent", fix: ["지능체", "스마트 에이전트"], note: "'에이전트' 단독은 그대로 둔다" },
