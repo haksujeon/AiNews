@@ -27,6 +27,7 @@ async function main() {
   const pool = (await import("../src/lib/db")).default;
   const { chat, parseJsonContent } = await import("../src/lib/briefing/llm");
   const { INSIGHT_SYSTEM, INSIGHT_VERSION, cleanInsightItem, flagWeight, insightFlags, insightUserMessage } = await import("../src/lib/insights");
+  const { glossaryPromptBlock } = await import("../src/lib/text/ko-glossary");
   type Flags = ReturnType<typeof insightFlags>;
 
   const apply = process.argv.includes("--apply");
@@ -66,7 +67,9 @@ async function main() {
     const before = flagWeight(r.insight_flags as Flags);
     let next: Record<string, unknown> | null = null;
     try {
-      const res = await chat({ model, system: INSIGHT_SYSTEM, messages: [{ role: "user", content: insightUserMessage(r) }], maxTokens: 3072, timeoutMs: 90_000 }, (u) => (cost += u.costUsd));
+      // n8n 「AI Agent - Insights」와 같은 지시: INSIGHT_SYSTEM + 그 기사 원문에 나온 표기 사전 항목 (ko-glossary.ts)
+      const system = INSIGHT_SYSTEM + glossaryPromptBlock(`${r.title_cn ?? ""} ${r.content_cn ?? ""}`);
+      const res = await chat({ model, system, messages: [{ role: "user", content: insightUserMessage(r) }], maxTokens: 3072, timeoutMs: 90_000 }, (u) => (cost += u.costUsd));
       next = cleanInsightItem(parseJsonContent<Record<string, unknown>>(res.content));
     } catch (e) {
       console.log(r.id, "생성 실패", (e as Error).message.slice(0, 120));

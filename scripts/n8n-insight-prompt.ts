@@ -5,11 +5,13 @@
  *   npx tsx scripts/n8n-insight-prompt.ts > /tmp/.../jsonBody.txt
  *
  * user 메시지는 insightUserMessage() 와 같은 모양이어야 한다(밤 보정과 같은 입력).
+ * 2026-11-06: system 뒤에 그 기사 원문에 나온 표기 사전 항목(ko-glossary.ts glossaryN8nExpr)을 붙인다 — 밤 보정(insight-fix.ts)도 같은 glossaryPromptBlock.
  */
 import { INSIGHT_SYSTEM } from "../src/lib/insights";
+import { glossaryN8nExpr } from "../src/lib/text/ko-glossary";
 
 if (INSIGHT_SYSTEM.includes("}}")) throw new Error("n8n 식 안에서 }} 는 쓸 수 없다");
 const user = `'다음 뉴스를 분석하세요:\\n\\n제목: ' + $json.title_cn + '\\n요약: ' + ($json.summary_cn || $json.summary_kr || '') + '\\n본문: ' + ($json.content_cn ? $json.content_cn.substring(0, 3000) : '')`;
 process.stdout.write(
-  `={{ JSON.stringify({ model: 'anthropic-api-haiku-5-5', messages: [{ role: 'system', content: ${JSON.stringify(INSIGHT_SYSTEM)} }, { role: 'user', content: ${user} }], max_tokens: 3072, thinking: { type: 'disabled' }, num_retries: 2 }) }}`
+  `={{ JSON.stringify({ model: 'anthropic-api-haiku-5-5', messages: [{ role: 'system', content: ${JSON.stringify(INSIGHT_SYSTEM)} + ${glossaryN8nExpr("$json.title_cn + ' ' + ($json.content_cn || '')")} }, { role: 'user', content: ${user} }], max_tokens: 3072, thinking: { type: 'disabled' }, num_retries: 2 }) }}`
 );

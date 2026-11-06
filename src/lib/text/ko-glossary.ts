@@ -148,3 +148,36 @@ export function glossByZh(zh: string): GlossEntry | undefined {
 export function glossEntriesInZh(text: string): GlossEntry[] {
   return KO_GLOSSARY.filter((e) => e.zh.some((z) => text.includes(z)));
 }
+
+// ───────────────────────── 번역 지시에 넣을 사전 구간 (n8n 번역·다듬기·인사이트, scripts/insight-fix.ts)
+
+/** 모델에게 줄 압축 사전: [중국어 표기들, 한국어, 영문, 쓰지 말 것(fix+avoid)] */
+export const GLOSSARY_COMPACT: [string[], string, string, string[]][] = KO_GLOSSARY.map((e) => [e.zh, e.ko, e.en ?? "", [...(e.fix ?? []), ...(e.avoid ?? [])]]);
+
+/**
+ * 원문에 나온 항목만 골라 지시 한 덩어리로 (없으면 ""). n8n 식 안에서는 GLOSSARY_PICK_JS 가 같은 일을 한다 —
+ * tests/text/ko-glossary.test.ts 가 두 결과가 같은지 확인한다 (Gate 2).
+ */
+export function glossaryPromptBlock(text: string, max = 25): string {
+  const hit = GLOSSARY_COMPACT.filter((g) => g[0].some((z) => text.includes(z))).slice(0, max);
+  if (!hit.length) return "";
+  return (
+    "\n\nKOREAN NAME/TERM GLOSSARY for this article. In Korean text write exactly the Korean form (English form in English text); never write the forms after ✗:\n" +
+    hit.map((g) => `- ${g[0].join("/")} = ${g[1]}${g[2] && g[2] !== g[1] ? ` (${g[2]})` : ""}${g[3].length ? ` ✗ ${g[3].join(", ")}` : ""}`).join("\n")
+  );
+}
+
+/** n8n 식 안에서 쓰는 같은 함수 (식 안에 '}}' 가 생기지 않게 중괄호를 붙여 쓰지 않는다). 인자: (G = GLOSSARY_COMPACT, text, max) */
+export const GLOSSARY_PICK_JS = `function (G, text, max) {
+  const hit = G.filter(function (g) { return g[0].some(function (z) { return text.indexOf(z) >= 0; }); }).slice(0, max || 25);
+  if (!hit.length) return '';
+  return '\\n\\nKOREAN NAME/TERM GLOSSARY for this article. In Korean text write exactly the Korean form (English form in English text); never write the forms after \\u2717:\\n' +
+    hit.map(function (g) { return '- ' + g[0].join('/') + ' = ' + g[1] + (g[2] && g[2] !== g[1] ? ' (' + g[2] + ')' : '') + (g[3].length ? ' \\u2717 ' + g[3].join(', ') : ''); }).join('\\n');
+}`;
+
+/** n8n 식 조각: textExpr(예: "$json.title_cn + ' ' + ($json.content_cn || '')")에 나온 항목의 지시 구간 */
+export function glossaryN8nExpr(textExpr: string): string {
+  const expr = `((${GLOSSARY_PICK_JS})(${JSON.stringify(GLOSSARY_COMPACT)}, String(${textExpr})))`;
+  if (expr.includes("}}")) throw new Error("n8n 식 안에서 }} 는 쓸 수 없다");
+  return expr;
+}

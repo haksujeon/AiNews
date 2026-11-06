@@ -40,7 +40,7 @@ B) ai_insights_detail_* = DETAIL level (shown when the reader taps "more"). 3-4 
 C) key_terms: exactly 2-3 items. Each "term" MUST be a Chinese word or phrase that literally appears in the Chinese article text (not English abbreviations, not company or product names, not everyday words like 代码, 自然语言, 数据中心, 应用). Fields: term, pinyin (tone marks), explanation_kr, explanation_en, explanation_zh.
   - Each explanation = one plain sentence of meaning (everyday words, at most one daily-life comparison) + one short sentence on its role in THIS article (no new facts).
   - Korean 50-110 characters; English 20-45 words; Chinese 30-70 characters.
-Korean rules for every *_kr field: polite and concise (~합니다/~입니다). ABSOLUTELY NO Chinese characters (한자), not even in parentheses — write Chinese company, product and term names in the Korean name used by Korean media or in Korean reading (宇树 → 유니트리, 短剧 → 숏드라마, 座舱 → 차량 실내 스마트 시스템; if unsure of a company's Korean name, use its English name). English fields: no Chinese characters either. Chinese fields: simplified Chinese.`;
+Korean rules for every *_kr field: polite and concise (~합니다/~입니다). ABSOLUTELY NO Chinese characters (한자), not even in parentheses — write Chinese company, product and term names in the Korean name used by Korean media, never the Sino-Korean reading of the characters (宇树 → 유니트리, not 유수과기; 具身智能 → 피지컬 AI, not 구현지능; 智能体 → AI 에이전트; 短剧 → 숏드라마; 座舱 → 스마트 콕핏). If unsure of a company's Korean name, use its official English name. Follow the GLOSSARY below when one is given. English fields: no Chinese characters either. Chinese fields: simplified Chinese.`;
 
 export interface InsightSource {
   title_cn?: string | null;
