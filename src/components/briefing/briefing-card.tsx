@@ -1,4 +1,6 @@
 import { useTranslations } from "next-intl";
+import { convertAmountText, type FxLocale, type FxRates } from "@/lib/fx/convert";
+import { FxNote } from "@/components/fx/fx-note";
 import type { PublicBriefing } from "@/lib/briefing/public";
 import { formatDateGroup } from "@/lib/news-utils";
 import { outletsOf } from "@/lib/briefing/view";
@@ -87,7 +89,7 @@ function Figure({ fig, width }: { fig: CardFigure; width: number }) {
   return null;
 }
 
-function StoryCell({ s, spec, briefing, wide }: { s: PublicBriefing["content"]["top_stories"][number]; spec: CardStorySpec | undefined; briefing: PublicBriefing; wide: boolean }) {
+function StoryCell({ s, spec, briefing, wide, fx }: { s: PublicBriefing["content"]["top_stories"][number]; spec: CardStorySpec | undefined; briefing: PublicBriefing; wide: boolean; fx?: FxRates | null }) {
   const t = useTranslations("briefing");
   const outlets = outletsOf(s.refs, briefing.articles).join(" · ");
   const head = (
@@ -103,6 +105,9 @@ function StoryCell({ s, spec, briefing, wide }: { s: PublicBriefing["content"]["
           <b className="text-[36px] font-[800] leading-[1.1] tracking-[-0.03em] text-[#0b6457]">{spec.big.raw}</b>
           <span className="text-[14.5px] text-[#43464d]">{spec.big.label}</span>
         </p>
+      )}
+      {spec?.big && fxText(spec.big.raw, briefing.locale, fx) && (
+        <p className="mt-0.5 text-[15px] font-semibold text-[#43464d]" data-testid="card-fx">{fxText(spec.big.raw, briefing.locale, fx)}</p>
       )}
       {spec?.note && <p className="mt-2 text-[13.5px] leading-[1.5] text-[#43464d]">{spec.note}</p>}
     </div>
@@ -124,7 +129,10 @@ function StoryCell({ s, spec, briefing, wide }: { s: PublicBriefing["content"]["
   );
 }
 
-export function BriefingCard({ briefing, spec }: { briefing: PublicBriefing; spec: CardSpec }) {
+/** 큰 숫자가 금액이면 환산 값 (페이지 한눈에 보기와 같은 convertAmountText) */
+const fxText = (raw: string, locale: string, fx: FxRates | null | undefined) => (fx ? convertAmountText(raw, locale as FxLocale, fx) : null);
+
+export function BriefingCard({ briefing, spec, fx }: { briefing: PublicBriefing; spec: CardSpec; fx?: FxRates | null }) {
   const t = useTranslations("briefing");
   const tm = useTranslations("meta");
   const c = briefing.content;
@@ -150,11 +158,11 @@ export function BriefingCard({ briefing, spec }: { briefing: PublicBriefing; spe
       <p className="mt-2.5 max-w-[940px] text-[17px] leading-[1.6] text-[#43464d]">{c.lede}</p>
 
       <div className="mt-5 border-t-2 border-[#16171a]">
-        {first && <StoryCell s={first} spec={byRank.get(first.rank)} briefing={briefing} wide />}
+        {first && <StoryCell s={first} spec={byRank.get(first.rank)} briefing={briefing} wide fx={fx} />}
         <div className="grid grid-cols-2">
           {rest.map((s, i) => (
             <div key={s.rank} className={i % 2 === 0 ? "border-r border-[#e2e2de] pr-[22px]" : "pl-[22px]"}>
-              <StoryCell s={s} spec={byRank.get(s.rank)} briefing={briefing} wide={false} />
+              <StoryCell s={s} spec={byRank.get(s.rank)} briefing={briefing} wide={false} fx={fx} />
             </div>
           ))}
         </div>
@@ -181,6 +189,9 @@ export function BriefingCard({ briefing, spec }: { briefing: PublicBriefing; spe
         {/* 카드에는 검사(card-spec.ts validate*)를 통과한 숫자만 들어간다 */}
         <span className="whitespace-nowrap">{t("cardChecked")}</span>
       </p>
+      {fx && c.top_stories.some((x) => { const b = byRank.get(x.rank)?.big; return b && fxText(b.raw, briefing.locale, fx); }) && (
+        <FxNote fx={fx} locale={briefing.locale} className="mt-1 block text-[12.5px] text-[#61656e]" />
+      )}
     </div>
   );
 }

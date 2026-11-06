@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { formatDateGroup } from "@/lib/news-utils";
 import type { BigNumber, CardFigure } from "@/lib/briefing/card-spec";
 import type { GlanceItem } from "@/lib/briefing/glance";
+import type { FxRates } from "@/lib/fx/convert";
+import { FxNote } from "@/components/fx/fx-note";
 
 /*
  * 인포그래픽 칸 — 페이지 "한눈에 보기"(데스크톱 칸·휴대폰 줄)와 아침 메일·공유 그림(가로형 PNG)이 같은 부품 (Gate 2).
@@ -223,8 +225,11 @@ export function BriefingInfographic({
   headline,
   moreCount,
   outlets,
+  fx,
 }: {
   items: GlanceCell[];
+  /** 칸에 금액 환산 줄이 있으면 그 환율 (바닥 각주) */
+  fx?: FxRates | null;
   edition_date: string;
   locale: string;
   headline: string;
@@ -262,6 +267,7 @@ export function BriefingInfographic({
         </span>
         <span className="whitespace-nowrap">{t("cardChecked")}</span>
       </p>
+      {fx && <FxNote fx={fx} locale={locale} className="mt-1 block text-[12.5px] text-ink-3" />}
     </div>
   );
 }
