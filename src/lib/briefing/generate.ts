@@ -462,14 +462,19 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
   const dateLabel = period.weekend ? `${period.periodStart}~${period.periodEnd} (토·일 주말 합본)` : date;
 
   const result = await withDateLock(date, async (): Promise<GenerateResult> => {
-    const articles = await loadCandidateArticles(period.periodStart, period.periodEnd);
+    const prev = await latestBriefing(date, "ko");
+    // 제외 기사 (모델 거부 대응): 주지 않으면 같은 날 최신 ko 판의 목록을 이어받는다 — 누락 재생성 등 모든 생성 경로가 같은 후보를 쓴다
+    const inherited = (prev?.validation as { excluded_articles?: unknown } | null)?.excluded_articles;
+    const excluded = [...new Set(opts.excludeArticleIds ?? (Array.isArray(inherited) ? inherited.filter((x): x is string => typeof x === "string") : []))].sort();
+    const excludedSet = new Set(excluded);
+    const articles = (await loadCandidateArticles(period.periodStart, period.periodEnd)).filter((a) => !excludedSet.has(a.id));
     const sel = selectCandidates(articles);
     const mode = editionModeFor(sel.totalGroups);
     // 누락 재생성: uuid → 후보 묶음 짧은 id (대표·전재 형제 어느 쪽이든). 후보 40개 밖이면 넣을 수 없다
     const must = new Set(opts.mustInclude ?? []);
     const mustShort = sel.groups.filter((g) => must.has(g.primary.id) || g.siblings.some((x) => must.has(x.id))).map((g) => g.shortId);
     // 모델·effort(생성·번역)가 바뀌면 같은 입력도 다시 생성한다
-    const inputHash = computeInputHash(sel.groups, `${PROMPT_VERSION}|${TRANSLATE_PROMPT_VERSION}|${mode}|${modelTag(TRANSLATE_MODEL, TRANSLATE_EFFORT)}${mustShort.length ? `|must:${mustShort.join(",")}` : ""}`, modelTag(BRIEFING_MODEL, BRIEFING_EFFORT));
+    const inputHash = computeInputHash(sel.groups, `${PROMPT_VERSION}|${TRANSLATE_PROMPT_VERSION}|${mode}|${modelTag(TRANSLATE_MODEL, TRANSLATE_EFFORT)}${mustShort.length ? `|must:${mustShort.join(",")}` : ""}${excluded.length ? `|excl:${excluded.join(",")}` : ""}`, modelTag(BRIEFING_MODEL, BRIEFING_EFFORT));
     const base = { date, mode, candidateCount: articles.length, inputHash };
     const inputArticleIds = sel.groups.flatMap((g) => [g.primary.id, ...g.siblings.map((s) => s.id)]);
     // 수집 품질: 주간·월간과 같은 결손일 판정 (축소·부분 수집일이 있으면 화면에 데이터 알림)
@@ -490,7 +495,6 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
       return { ...base, outcome: "dry_run", locales: [], totalCostUsd: 0, message: `후보 ${sel.groups.length}개 (묶음 ${sel.totalGroups}, 정치 제외 ${sel.politicalExcluded.length})` };
     }
 
-    const prev = await latestBriefing(date, "ko");
     if (!opts.force && prev && prev.input_hash === inputHash && ["draft", "published", "skipped"].includes(prev.status)) {
       return {
         ...base,
@@ -540,6 +544,7 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
 
     // 누락 재생성 표시 (대체 판으로 떨어져도 남긴다 — 같은 판을 다시 누락 재생성하지 않게)
     if (opts.regenReason) ko.validation.regen_reason = opts.regenReason;
+    if (excluded.length) ko.validation.excluded_articles = excluded;
     const finalReport = ko.validation.final as ValidationReport | undefined;
     const china = finalReport?.stats.chinaCentric ?? 0;
     const finalMode: EditionMode = ko.mode ?? mode;

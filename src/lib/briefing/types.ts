@@ -243,6 +243,12 @@ export interface GenerateOptions {
   mustInclude?: string[];
   /** 다시 생성한 이유 (validation.regen_reason 에 기록 — 같은 판을 또 누락 재생성하지 않는 표시) */
   regenReason?: string;
+  /**
+   * 후보에서 뺄 기사 uuid (2026-11-06: 생성 모델이 특정 기사 때문에 응답을 거부(refusal)한 날 — CLI --exclude).
+   * validation.excluded_articles 에 남고, 주지 않으면 같은 날 최신 ko 판의 목록을 이어받는다
+   * (AI 검토의 누락 재생성도 같은 제외를 따른다). 빈 배열을 주면 제외를 푼다.
+   */
+  excludeArticleIds?: string[];
 }
 
 export interface LocaleOutcome {
