@@ -118,7 +118,7 @@ export const KO_GLOSSARY: readonly GlossEntry[] = [
   // ── 제품
   { kind: "product", ko: "어니봇", zh: ["文心一言"], en: "ERNIE Bot", fix: ["문심일언", "원신이옌"] },
   { kind: "product", ko: "어니", zh: ["文心大模型", "文心"], en: "ERNIE", fix: ["문심 대모델", "문심대모델"], avoid: ["문심"], hanSkip: ["文心"], note: "'문심 5.5' 처럼 숫자 앞의 문심은 ko-names.ts 가 고친다" },
-  { kind: "product", ko: "큐원", zh: ["通义千问", "千问", "通义"], en: "Qwen", fix: ["통의천문", "퉁이첸원", "통이치엔원", "통이천문", "통이첸원", "치엔원"] },
+  { kind: "product", ko: "큐원", zh: ["通义千问", "千问", "通义"], en: "Qwen", fix: ["통의천문", "퉁이첸원", "통이치엔원", "통이천문", "통이첸원", "통이치원", "퉁이치원", "치엔원"] },
   { kind: "product", ko: "클링", zh: ["可灵"], en: "Kling", fix: ["커링"] },
   { kind: "product", ko: "훈위안", zh: ["混元"], en: "Hunyuan", avoid: ["혼원"], note: "'혼원3' 처럼 숫자 앞은 ko-names.ts 가 고친다" },
   { kind: "product", ko: "더우바오", zh: ["豆包"], en: "Doubao", fix: ["두바오"], avoid: ["두포"] },
