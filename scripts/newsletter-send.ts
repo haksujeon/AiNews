@@ -16,8 +16,7 @@ async function main() {
   loadEnvConfig(process.cwd());
   process.env.NEXT_PUBLIC_BASE_PATH ??= "/ainews"; // next.config.ts basePath 와 같은 값 (앱 밖이라 빌드 값이 없다)
   const pool = (await import("../src/lib/db")).default;
-  const { sendDailyNewsletter, buildMail } = await import("../src/lib/newsletter/send");
-  const { getPublishedBriefing } = await import("../src/lib/briefing/public");
+  const { sendDailyNewsletter, buildMail, loadMailEdition } = await import("../src/lib/newsletter/send");
   const { currentEdition } = await import("../src/lib/briefing/sla");
   const { getTransport } = await import("../src/lib/newsletter/transport");
   try {
@@ -25,9 +24,10 @@ async function main() {
     if (testTo) {
       const locale = (arg("locale") ?? "ko") as "ko" | "en" | "zh";
       const date = arg("date") ?? currentEdition(new Date());
-      const b = await getPublishedBriefing(locale, date);
-      if (!b) throw new Error(`${date} ${locale} 발행본 없음`);
-      const m = buildMail(b, { id: "00000000-0000-4000-8000-000000000000", name: arg("name") ?? null, email: testTo, language: locale });
+      // 실제 발송과 같은 판 한 벌 (금액 환산·한눈에 보기 명세 포함)
+      const ed = await loadMailEdition(locale, date);
+      if (!ed) throw new Error(`${date} ${locale} 발행본 없음`);
+      const m = buildMail(ed, { id: "00000000-0000-4000-8000-000000000000", name: arg("name") ?? null, email: testTo, language: locale });
       const tr = getTransport();
       const r = await tr.send({ to: testTo, subject: `[시험] ${m.subject}`, html: m.html, text: m.text, headers: m.headers });
       console.log(`시험 발송 ${testTo} ${locale} ${date} · ${tr.name} · ${r.messageId}`);

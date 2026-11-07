@@ -14,17 +14,16 @@ async function main() {
   loadEnvConfig(process.cwd());
   process.env.NEXT_PUBLIC_BASE_PATH ??= "/ainews"; // next.config.ts basePath 와 같은 값 (앱 밖이라 빌드 값이 없다)
   const pool = (await import("../src/lib/db")).default;
-  const { getPublishedBriefing } = await import("../src/lib/briefing/public");
+  const { loadMailEdition } = await import("../src/lib/newsletter/send");
   const { renderDailyEmail } = await import("../src/lib/newsletter/daily-email");
   const out = arg("out") ?? ".";
   try {
     for (const [locale, name, email] of [["ko", "홍길동", "subscriber@example.com"], ["zh", "张三", "subscriber2@example.com"]] as const) {
-      // 발송과 같은 금액 환산 표기 (newsletter/send.ts 와 같은 withFxNotes)
-      const { withFxNotes } = await import("../src/lib/fx/briefing");
-      const pub = await getPublishedBriefing(locale, arg("date"));
-      const b = pub ? await withFxNotes(pub) : null;
-      if (!b) { console.log(locale, "발행본 없음"); continue; }
-      const m = renderDailyEmail(b, { name, email, unsubscribeUrl: "https://news.aibaseclub.com/ainews/unsubscribe?t=SAMPLE" });
+      // 발송과 같은 판 한 벌 (send.ts loadMailEdition: 금액 환산 + 한눈에 보기 명세)
+      const ed = await loadMailEdition(locale, arg("date"));
+      if (!ed) { console.log(locale, "발행본 없음"); continue; }
+      const b = ed.b;
+      const m = renderDailyEmail(b, { name, email, unsubscribeUrl: "https://news.aibaseclub.com/ainews/unsubscribe?t=SAMPLE", cardSpec: ed.cardSpec });
       writeFileSync(`${out}/mail-${locale}.html`, m.html);
       console.log(locale, b.edition_date, "|", m.subject, "|", m.html.length, "bytes | easy", b.content.top_stories.filter((s) => s.easy_terms?.length).length, "story", b.content.top_stories.filter((s) => s.story_context?.length).length);
     }

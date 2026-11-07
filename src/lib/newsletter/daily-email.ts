@@ -4,11 +4,15 @@
  * - 내용은 사이트 브리핑과 같은 판(getPublishedBriefing → hydrate)을 그대로 쓴다: 숨긴 기사 제외·쉬운 AI 설명·히스토리 분석이
  *   화면과 같은 규칙으로 붙은 상태 (Gate 2). 메일이 따로 요약·번역하지 않는다.
  * - 순수 함수: DB·발송 없음. 메일 클라이언트 호환을 위해 표(table) 배치 + 인라인 스타일만 쓴다 (외부 CSS·스크립트 없음).
+ * - 리드 아래 "한눈에 보기"(2026-11-07 사용자 결정 "반영"): 사이트 브리핑 페이지와 같은 buildGlance·카드 명세(card-spec.json)로 다섯 칸(PC)·다섯 줄(휴대폰).
+ *   사이트 안 A 와 같이 목차·숫자로 보는 하루·한 장 요약 그림을 이 블록 하나로 합쳤다 (Gate 2).
  * - 제목·머리말은 "오늘"이 아니라 판 날짜("11월 3일(화) 중국 AI 브리핑")로 쓴다 — 아침 7시에 받는 것은 전날 소식이다.
  */
 import type { PublicBriefing } from "@/lib/briefing/public";
 import type { BriefingLocale, StoryContext } from "@/lib/briefing/types";
-import { SITE_ORIGIN, absoluteUrl } from "@/lib/site";
+import { absoluteUrl } from "@/lib/site";
+import { buildGlance } from "@/lib/briefing/glance";
+import type { BigNumber, CardFigure, CardSpec } from "@/lib/briefing/card-spec";
 import { convertAmountText, fxFootnoteParts, type FxLocale } from "@/lib/fx/convert";
 import type { Currency } from "@/lib/briefing/quantity";
 
@@ -18,6 +22,8 @@ export interface DailyEmailOptions {
   email: string;
   /** 한 번 눌러 끊는 링크 (구독자별 서명 토큰) */
   unsubscribeUrl: string;
+  /** 카드 그림 명세 (한눈에 보기 큰 숫자·그림). 없으면 판의 숫자로 보는 하루 값으로 채운다 (glance.ts) */
+  cardSpec?: CardSpec | null;
 }
 
 export interface DailyEmail {
@@ -46,14 +52,12 @@ const T = {
     earlier: (d: string, n: number) => `${d}부터 ${n}건 더`,
     storyMore: (n: number) => `지난 흐름 ${n}건 전체와 근거 기사 보기`,
     storyLink: "사이트에서 지난 흐름 보기",
-    toc: "이번 호 주요 기사",
     listen: (m: number) => `▶ ${m}분 듣기 · AI 음성`,
-    cardTitle: "한 장 요약",
-    cardOpen: "크게 보기",
+    glance: "한눈에 보기",
+    glanceCount: (n: number) => `주요 ${n}건`,
     storyNote: "히스토리 분석은 지난 보도를 AI가 날짜순으로 엮은 시범 기능이며, 항목마다 근거 기사가 있습니다.",
     onSite: "자세히 보기",
     original: "원문",
-    numbers: "숫자로 보는 어제",
     sections: "분야별 소식",
     companies: "주목할 기업",
     term: "어제의 용어",
@@ -61,7 +65,6 @@ const T = {
     weekend: {
       coverage: (total: number, cited: number) => `주말(토·일) 공개 기사 ${total}건 중 ${cited}건 정리 · AI 작성`,
       intro: "지난 주말(토·일) 중국 AI 업계에서 있었던 주요 소식을 정리해 드립니다.",
-      numbers: "숫자로 보는 주말",
       term: "주말의 용어",
     },
     cta: "사이트에서 브리핑 전체 보기",
@@ -98,21 +101,18 @@ const T = {
     earlier: (d: string, n: number) => `${d}起还有 ${n} 条`,
     storyMore: (n: number) => `查看全部 ${n} 条过往脉络和来源文章`,
     storyLink: "在网站上查看过往脉络",
-    toc: "本期要闻",
     listen: (m: number) => `▶ 收听 ${m}分钟 · AI 语音`,
-    cardTitle: "一图看懂",
-    cardOpen: "查看大图",
+    glance: "一览",
+    glanceCount: (n: number) => `要闻${n}条`,
     storyNote: "历史分析由 AI 按时间顺序整理过往报道，为试用功能，每一条都有来源文章。",
     onSite: "查看详情",
     original: "原文",
-    numbers: "数字看昨天",
     sections: "分领域动态",
     companies: "值得关注的公司",
     term: "昨日术语",
     weekend: {
       coverage: (total: number, cited: number) => `从周末（周六、周日）${total} 篇公开报道中整理 ${cited} 篇 · AI撰写`,
       intro: "为您整理上周末（周六、周日）中国AI行业的主要动态。",
-      numbers: "数字看周末",
       term: "周末术语",
     },
     cta: "在网站上阅读完整简报",
@@ -148,21 +148,18 @@ const T = {
     earlier: (d: string, n: number) => `${n} more since ${d}`,
     storyMore: (n: number) => `See all ${n} past events and sources`,
     storyLink: "See the background on the site",
-    toc: "In this issue",
     listen: (m: number) => `▶ Listen · ${m} min · AI audio`,
-    cardTitle: "At a glance",
-    cardOpen: "View full size",
+    glance: "At a glance",
+    glanceCount: (n: number) => `Top ${n}`,
     storyNote: "The history analysis is a beta feature: AI arranges past reports by date, and every entry cites a source article.",
     onSite: "Read more",
     original: "Source",
-    numbers: "Yesterday in numbers",
     sections: "By sector",
     companies: "Companies to watch",
     term: "Term of the day",
     weekend: {
       coverage: (total: number, cited: number) => `${cited} of ${total} public articles from the weekend (Sat–Sun) · AI-written`,
       intro: "Here is what happened in China's AI industry over the weekend.",
-      numbers: "The weekend in numbers",
       term: "Term of the weekend",
     },
     cta: "Read the full briefing on the site",
@@ -272,6 +269,42 @@ function historyBlock(t: Tr, ctx: StoryContext[] | undefined, href: string, full
   </td></tr></table></td></tr>`;
 }
 
+/** 분야 색 (사이트 globals.css --sec-* 밝은 테마 값). 메일은 아이콘(SVG)을 못 쓰므로 색 ■ + 분야 이름 */
+const SEC_COLOR: Record<string, string> = { funding: "#2f7d5b", products: "#4a6a8c", models: "#7a5a8c", robotics: "#8a6d3b", industry: "#5f6b73", research: "#8a4f5f", chips: "#3f7480", policy: "#7a6a3f", safety: "#9a5a2f" };
+const GRAY = "#eef1f0";
+function gBig(big: BigNumber, px: number) {
+  const size = big.raw.length > 14 ? Math.round(px * 0.8) : px;
+  if (big.dir) {
+    const up = big.dir === "up";
+    return `<span style="display:inline-block;background:${up ? C.jadeSoft : GRAY};color:${up ? C.jade : C.sub};border-radius:3px;padding:0 4px;font:800 ${size}px/1.2 ${FONT}"><span style="font-size:.6em;vertical-align:.15em">${up ? "▲" : "▼"}</span> ${esc(big.raw)}</span>`;
+  }
+  return `<span style="font:800 ${size}px/1.2 ${FONT};color:${C.jade}">${esc(big.raw)}</span>`;
+}
+function gBar(pct: number, color: string, h: number) {
+  const w = Math.min(100, Math.max(2, Math.round(pct)));
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C.line}"><tr><td width="${w}%" height="${h}" style="background:${color};font-size:0;line-height:0">&nbsp;</td>${w < 100 ? `<td style="background:${GRAY};font-size:0;line-height:0">&nbsp;</td>` : ""}</tr></table>`;
+}
+/** 휴대폰 한 줄: 큰 숫자가 없는 칸의 일정·숫자 목록 (사이트 InfographicRow 와 같은 규칙) */
+function gFigureLine(fig: CardFigure) {
+  if (fig.kind === "timeline") return fig.items.map((x) => x.when).join(" → ");
+  if (fig.kind === "chain") return fig.items.map((x) => x.raw).join(" · ");
+  return "";
+}
+function gFigure(fig: CardFigure) {
+  if (fig.kind === "bars") {
+    const max = Math.max(...fig.items.map((i) => i.value ?? 0)) || 1;
+    return fig.items.map((it, i) => {
+      const on = i === (fig.emphasis ?? 0);
+      return `<div style="padding-top:6px;font:12px/1.4 ${FONT};color:${C.sub}">${esc(it.label)} <b style="color:${on ? C.jade : C.ink}">${esc(it.raw)}</b></div>${gBar(((it.value ?? 0) / max) * 100, on ? C.jade : "#b9c4c1", 7)}`;
+    }).join("");
+  }
+  if (fig.kind === "chain")
+    return fig.items.map((it, i) => `<div style="margin-top:5px;padding-left:7px;border-left:2px solid ${i === fig.emphasis ? C.jade : C.line};font:12px/1.45 ${FONT};color:${C.sub}"><b style="color:${i === fig.emphasis ? C.jade : C.ink}">${esc(it.raw)}</b> ${esc(it.label)}</div>`).join("");
+  if (fig.kind === "timeline")
+    return fig.items.map((it, i) => `<div style="margin-top:5px;padding-left:8px;border-left:2px solid ${i === 0 ? C.jade : "#b9c4c1"};font:12px/1.45 ${FONT};color:${C.sub}"><b style="color:${i === 0 ? C.jade : C.ink}">${esc(it.when)}</b><br>${esc(it.label)}</div>`).join("");
+  return "";
+}
+
 export function renderDailyEmail(b: PublicBriefing, opts: DailyEmailOptions): DailyEmail {
   // 요약형으로 그려 보고, 102KB 잘림에 가까우면 뒤 기사부터 히스토리를 한 줄로 줄인다
   const n = b.content.top_stories.length;
@@ -293,23 +326,29 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   const art = (id: string) => b.articles[id];
   const sectionName = (s: string) => t.section[s] ?? s;
   const hasHistory = c.top_stories.some((s) => s.story_context?.length);
-  // 음성·카드는 승인본만 PublicBriefing 에 붙는다 (media-store.ts). 메일 안에서는 재생되지 않으므로 페이지 #listen 으로 보낸다
+  // 음성은 승인본만 PublicBriefing 에 붙는다 (media-store.ts). 메일 안에서는 재생되지 않으므로 페이지 #listen 으로 보낸다
   const audio = b.media?.audio;
-  const card = b.media?.card;
   const listenRow = audio
     ? `<tr><td class="px" style="padding:14px ${PX}px 0"><a href="${esc(`${briefingUrl}#listen`)}" style="display:inline-block;border:1px solid ${C.line};border-left:3px solid ${C.jade};color:${C.ink};text-decoration:none;font:700 15px/1 ${FONT};padding:13px 18px;border-radius:0 8px 8px 0">${esc(t.listen(Math.max(1, Math.round(audio.duration_sec / 60))))}</a></td></tr>`
     : "";
-  const cardRow = card
-    ? heading(t.cardTitle) +
-      `<tr><td class="px" align="center" style="padding:0 ${PX}px"><a href="${esc(briefingUrl)}" style="text-decoration:none"><img src="${esc(SITE_ORIGIN + card.url)}" width="${card.width > card.height ? MAIL_WIDTH - 2 * PX : Math.min(MAIL_WIDTH - 2 * PX, 520)}" alt="${esc(card.alt_text)}" style="display:block;margin:0 auto;width:100%;max-width:${card.width > card.height ? MAIL_WIDTH - 2 * PX : 520}px;height:auto;border:1px solid ${C.line}"></a><div style="padding-top:8px;font:13px/1.5 ${FONT}">${link(briefingUrl, t.cardOpen + " →")}</div></td></tr>`
-    : "";
-
-  const toc = `<tr><td class="px" style="padding:16px ${PX}px 0"><div style="font:700 12px/1.4 ${FONT};color:${C.faint};padding-bottom:4px">${esc(t.toc)}</div>${c.top_stories
-    .map(
-      (s) =>
-        `<div style="font:14px/1.6 ${FONT};color:${C.ink};padding:3px 0"><span style="color:${C.jade};font-weight:700">${s.rank}</span>&nbsp; ${esc(s.title)}${s.story_context?.length ? ` <span style="color:${C.faint};font-size:12px">· 🕘</span>` : ""}</div>`
-    )
-    .join("")}</td></tr>`;
+  // 한눈에 보기: 사이트 페이지와 같은 buildGlance + 같은 convertAmountText 환산 줄 (Gate 2)
+  const gItems = buildGlance(c, opts.cardSpec).map((g) => ({ ...g, fx: g.big && b.fx ? convertAmountText(g.big.raw, b.locale as FxLocale, b.fx) : null, st: c.top_stories.find((x) => x.rank === g.rank) }));
+  const glanceRow = !gItems.length ? "" : `<tr><td class="px" style="padding:22px ${PX}px 0">
+    <div style="border-bottom:2px solid ${C.ink};padding-bottom:7px;font:700 15px/1.4 ${FONT};color:${C.ink}">${esc(t.glance)} <span style="font-weight:400;font-size:13px;color:${C.faint}">${esc(t.glanceCount(gItems.length))}</span></div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${gItems.map((g, i) => {
+      const href = g.st ? siteArticle(g.st.primary_ref) : briefingUrl;
+      const col = SEC_COLOR[g.section] ?? C.jade;
+      const pad = i === 0 ? "14px 10px 16px 0" : i === gItems.length - 1 ? "14px 0 16px 10px" : "14px 10px 16px";
+      return `<td class="gcell" width="${Math.floor(100 / gItems.length)}%" valign="top" style="vertical-align:top;padding:${pad};${i < gItems.length - 1 ? `border-right:1px solid ${C.line};` : ""}">
+        <div style="font:12px/1.4 ${FONT};color:${C.faint}"><b style="font:800 17px/1 ${FONT};color:${C.ink};vertical-align:-1px">${g.rank}</b>&nbsp; <span style="color:${col};font-weight:700">■ ${esc(sectionName(g.section))}</span></div>
+        <div style="padding-top:6px;font:700 14.5px/1.42 ${FONT}"><a href="${esc(href)}" style="color:${C.ink};text-decoration:none">${esc(g.title)}</a>${g.st?.story_context?.length ? ` <span style="color:${C.faint};font-size:12px;font-weight:400">🕘</span>` : ""}</div>
+        ${g.big ? `<div style="padding-top:10px">${gBig(g.big, 20)}</div>${g.fx ? `<div style="font:600 12.5px/1.4 ${FONT};color:${C.sub}">${esc(g.fx)}</div>` : ""}<div style="padding-top:2px;font:12px/1.45 ${FONT};color:${C.sub}">${esc(g.big.label)}</div>${g.big.meter != null ? `<div style="padding-top:7px">${gBar(g.big.meter, C.jade, 9)}</div>` : ""}` : ""}
+        ${!g.big && g.figure && g.figure.kind !== "bars" ? `<div class="mb" style="display:none;max-height:0;overflow:hidden;font:600 12.5px/1.45 ${FONT};color:${C.jade}">${esc(gFigureLine(g.figure))}</div>` : ""}
+        ${g.figure ? `<div class="dk" style="padding-top:8px">${gFigure(g.figure)}</div>` : ""}
+        ${g.note ? `<div class="dk" style="padding-top:10px;font:12px/1.5 ${FONT};color:${C.faint}">${esc(g.note)}</div>` : ""}
+      </td>`;
+    }).join("")}</tr></table>
+  </td></tr>`;
 
   const stories = c.top_stories
     .map((s, idx) => {
@@ -336,29 +375,6 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
         </table></td></tr></table></td></tr>`;
     })
     .join("");
-
-  // 숫자: PC 두 칸 격자, 휴대폰 한 칸
-  const pairs: (typeof c.key_numbers)[] = [];
-  for (let i = 0; i < c.key_numbers.length; i += 2) pairs.push(c.key_numbers.slice(i, i + 2));
-  // 큰 숫자가 금액이면 환산 값 한 줄 (사이트 한눈에 보기와 같은 convertAmountText)
-  const fxLine = (v: string) => {
-    const x = b.fx ? convertAmountText(v, b.locale as FxLocale, b.fx) : null;
-    return x ? `<div style="font:600 13px/1.4 ${FONT};color:${C.sub}">${esc(x)}</div>` : "";
-  };
-  const numbers = c.key_numbers.length
-    ? heading(t.numbers) +
-      `<tr><td class="px" style="padding:0 ${PX}px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${pairs
-        .map(
-          (r) =>
-            `<tr>${r
-              .map(
-                (k, j) =>
-                  `<td class="col" width="50%" style="vertical-align:top;padding:${j ? "10px 0 14px 10px" : "10px 10px 14px 0"};border-top:2px solid ${C.ink}"><div style="font:800 21px/1.3 ${FONT};color:${C.ink}">${esc(k.value)}</div>${fxLine(k.value)}<div style="padding-top:3px;font:13px/1.5 ${FONT};color:${C.sub}"><a href="${esc(siteArticle(k.ref))}" style="color:${C.sub};text-decoration:none">${esc(k.label)}</a></div></td>`
-              )
-              .join("")}${r.length < 2 ? `<td class="col" width="50%"></td>` : ""}</tr>`
-        )
-        .join("")}</table></td></tr>`
-    : "";
 
   const sections = c.sections.length
     ? heading(t.sections) +
@@ -388,7 +404,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
     : "";
 
   const fxFoot =
-    b.fx && (b.fxApplied || c.key_numbers.some((k) => fxLine(k.value)))
+    b.fx && (b.fxApplied || gItems.some((g) => g.fx))
       ? `<br>${esc(t.fxNote(editionDateLabel(b.locale, b.fx.date), fxFootnoteParts(b.locale as FxLocale, b.fx).map((p) => t.fxRate(p.from, p.rate)).join(" · ")))}`
       : "";
   const total = c.meta.candidate_count;
@@ -405,6 +421,9 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   .col{display:block!important;width:100%!important;padding:0 0 14px!important;border-left:0!important}
   .wrap{border-radius:0!important}
   .outer{padding:0!important}
+  .gcell{display:block!important;width:100%!important;border-right:0!important;border-bottom:1px solid #e3e8e6!important;padding:12px 0!important}
+  .dk{display:none!important}
+  .mb{display:block!important;max-height:none!important;padding-top:6px}
 }
 </style></head>
 <body style="margin:0;padding:0;background:${C.bg}">
@@ -421,14 +440,12 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
     <div style="padding-top:8px;font:15.5px/1.75 ${FONT};color:${C.ink}">${esc(c.lede)}</div>
   </td></tr></table></td></tr>
   ${listenRow}
-  ${toc}
+  ${glanceRow}
   ${heading(t.top)}
   ${stories}
-  ${numbers}
   ${sections}
   ${companies}
   ${term}
-  ${cardRow}
   <tr><td align="center" class="px" style="padding:34px ${PX}px 30px"><a href="${esc(briefingUrl)}" style="display:inline-block;background:${C.jade};color:#fff;text-decoration:none;font:700 15px/1 ${FONT};padding:15px 28px;border-radius:8px">${esc(t.cta)} →</a></td></tr>
 </table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:${MAIL_WIDTH}px"><tr><td class="px" style="padding:18px 24px;font:12px/1.7 ${FONT};color:${C.faint}">

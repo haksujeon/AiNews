@@ -75,3 +75,24 @@ test("토·일 합본(월요일 메일)은 '어제' 대신 주말 문구, 날짜
   const day = renderDailyEmail(briefing([undefined]), opts);
   assert.match(day.html, /어제 중국 AI 업계/);
 });
+
+test("한눈에 보기: 카드 명세의 큰 숫자·증감·그림, 명세 없으면 숫자로 보는 하루 값 — 목차·숫자 칸·한 장 요약 그림은 없음", () => {
+  const b = briefing([undefined, undefined]);
+  b.content.key_numbers = [{ value: "30개", label: "투자자 수", ref: "a1" }] as never;
+  const plain = renderDailyEmail(b, opts);
+  assert.match(plain.html, /한눈에 보기/);
+  assert.match(plain.html, /주요 2건/);
+  assert.match(plain.html, />30개</);
+  assert.doesNotMatch(plain.html, /숫자로 보는 어제|이번 호 주요 기사|한 장 요약|<img/);
+  const spec = {
+    stories: [
+      { rank: 1, big: { raw: "1055억 위안", label: "2차 라운드", dir: "up" }, figure: { kind: "timeline", items: [{ when: "11월 4일", label: "테스트" }, { when: "12월", label: "배포" }] }, note: "메모" },
+      { rank: 2, big: null, figure: { kind: "none" }, note: "" },
+    ],
+  } as never;
+  const withSpec = renderDailyEmail(b, { ...opts, cardSpec: spec });
+  assert.match(withSpec.html, /▲<\/span> 1055억 위안/);
+  assert.match(withSpec.html, /11월 4일 → 12월|12월/);
+  assert.match(withSpec.html, /메모/);
+  assert.match(withSpec.html, /class="gcell"/);
+});

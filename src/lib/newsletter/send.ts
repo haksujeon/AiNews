@@ -14,6 +14,8 @@ import { currentEdition } from "@/lib/briefing/sla";
 import { BRIEFING_LOCALES, type BriefingLocale } from "@/lib/briefing/types";
 import { renderDailyEmail } from "./daily-email";
 import { withFxNotes } from "@/lib/fx/briefing";
+import { loadCardSpec } from "@/lib/briefing/media-store";
+import type { CardSpec } from "@/lib/briefing/card-spec";
 import { unsubscribeApiUrl, unsubscribePageUrl } from "./token";
 import { getTransport, type MailTransport } from "./transport";
 
@@ -44,12 +46,24 @@ interface SubscriberRow {
 
 const asLocale = (l: string | null): BriefingLocale => (BRIEFING_LOCALES as string[]).includes(l ?? "") ? (l as BriefingLocale) : "ko";
 
+/** 메일에 넣을 판 한 벌: 사이트 브리핑 페이지와 같은 금액 환산(withFxNotes) + 한눈에 보기 카드 명세. 실제 발송·시험 발송·미리보기가 같은 함수 (Gate 2) */
+export interface MailEdition {
+  b: PublicBriefing;
+  cardSpec: CardSpec | null;
+}
+export async function loadMailEdition(locale: BriefingLocale, date?: string): Promise<MailEdition | null> {
+  const pub = await getPublishedBriefing(locale, date);
+  if (!pub) return null;
+  const b = await withFxNotes(pub);
+  return { b, cardSpec: await loadCardSpec(b.edition_date, b.locale) };
+}
+
 /** 메일 한 통 (렌더 + 수신 거부 헤더). 실제 발송·테스트 발송이 같은 함수 */
-export function buildMail(b: PublicBriefing, s: SubscriberRow) {
+export function buildMail({ b, cardSpec }: MailEdition, s: SubscriberRow) {
   // 사이트는 /ainews 아래에 있다. 앱 밖(cron 스크립트)에서는 NEXT_PUBLIC_BASE_PATH 가 빌드에 들어가지 않으므로
   // 스크립트가 직접 넣어야 한다 (scripts/newsletter-send.ts). 빠지면 메일의 모든 링크가 404 라서 보내지 않는다.
   if (!BASE_PATH) throw new Error("NEXT_PUBLIC_BASE_PATH 가 비어 있어 메일 링크를 만들 수 없습니다");
-  const m = renderDailyEmail(b, { name: s.name, email: s.email, unsubscribeUrl: unsubscribePageUrl(b.locale, s.id) });
+  const m = renderDailyEmail(b, { name: s.name, email: s.email, unsubscribeUrl: unsubscribePageUrl(b.locale, s.id), cardSpec });
   return {
     ...m,
     headers: { "List-Unsubscribe": `<${unsubscribeApiUrl(s.id)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
@@ -63,23 +77,21 @@ export async function sendDailyNewsletter(opts: SendOptions = {}): Promise<SendR
       WHERE is_active AND ($1::text IS NULL OR lower(email) = lower($1)) ORDER BY created_at`,
     [opts.only ?? null]
   );
-  const briefings = new Map<BriefingLocale, PublicBriefing | null>();
+  const briefings = new Map<BriefingLocale, MailEdition | null>();
   const report: SendReport = { edition, results: [] };
   let transport = opts.transport;
 
   for (const s of subs) {
     const locale = asLocale(s.language);
-    // 금액 환산 표기: 사이트 브리핑 페이지와 같은 withFxNotes (fx/briefing.ts, Gate 2)
-    if (!briefings.has(locale)) {
-      const pub = await getPublishedBriefing(locale, edition);
-      briefings.set(locale, pub ? await withFxNotes(pub) : null);
-    }
-    const b = briefings.get(locale);
-    if (!b) {
+    // 금액 환산·한눈에 보기 명세: 사이트 브리핑 페이지와 같은 것 (loadMailEdition, Gate 2)
+    if (!briefings.has(locale)) briefings.set(locale, await loadMailEdition(locale, edition));
+    const ed = briefings.get(locale);
+    if (!ed) {
       report.results.push({ email: s.email, locale, outcome: "no-edition" });
       continue;
     }
-    const mail = buildMail(b, s);
+    const b = ed.b;
+    const mail = buildMail(ed, s);
     if (opts.dry) {
       report.results.push({ email: s.email, locale, outcome: "dry", subject: mail.subject });
       continue;
