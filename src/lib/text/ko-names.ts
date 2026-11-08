@@ -36,6 +36,10 @@ const LATIN_HEAD = "(?<![A-Za-z0-9@/._-])";
 /** 영문 이름 뒤에 모델·제품·버전이 붙지 않음: 영문·숫자가 바로/띄어/하이픈으로 오면 "DeepSeek-V4"·"MiniMax M3"·"DeepSeek Harness" — 그대로 둔다 */
 const LATIN_TAIL = "(?![A-Za-z0-9]|\\s?[-–_/]\\s?[A-Za-z0-9]|\\.[A-Za-z0-9]|\\s[A-Za-z0-9])";
 /** 영문 이름을 바꿀 항목: 회사·기관 중 정한 표기가 한글이고, 다른 뜻과 겹치지 않는 것(noAlias 제외 — Fourier) */
+/** 영문 이름 규칙이 보는 영문 이름 목록 (일괄 정리 스크립트의 행 거르기도 이 목록을 쓴다, Gate 2) */
+export function latinNameSources(): string[] {
+  return latinPairs().map((p) => p.from);
+}
 const latinPairs = () =>
   KO_GLOSSARY.filter((e) => (e.kind === "company" || e.kind === "org") && e.en && /^[가-힣]/.test(e.ko) && !e.noAlias && e.en !== e.ko).map((e) => ({ from: e.en as string, to: e.ko }));
 

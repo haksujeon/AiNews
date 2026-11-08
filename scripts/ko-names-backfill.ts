@@ -57,7 +57,7 @@ async function main() {
   loadEnvConfig(process.cwd());
   const apply = process.argv.includes("--apply");
   const { default: pool } = await import("../src/lib/db");
-  const { normalizeKoNames, normalizeKeyTermsKo } = await import("../src/lib/text/ko-names");
+  const { normalizeKoNames, normalizeKeyTermsKo, latinNameSources } = await import("../src/lib/text/ko-names");
   const { KO_GLOSSARY, glossByZh } = await import("../src/lib/text/ko-glossary");
   const reportPath = (() => {
     const i = process.argv.indexOf("--report");
@@ -78,9 +78,9 @@ async function main() {
   const dir = join(homedir(), "backups", "ainews");
   mkdirSync(dir, { recursive: true });
   const log = join(dir, `ko-names-backfill-${new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "")}.jsonl`);
-  // 걸러 볼 행: 사전의 고칠 표기 + 문맥 규칙(구현형·체화·문심·혼원) + 쉬운 AI 설명은 사전 용어가 있는 행 전부(이름 고정)
+  // 걸러 볼 행: 사전의 고칠 표기 + 영문 회사 이름(2026-11-09) + 문맥 규칙(구현형·체화·문심·혼원) + 쉬운 AI 설명은 사전 용어가 있는 행 전부(이름 고정)
   const reEsc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, " ?");
-  const hit = [...KO_GLOSSARY.flatMap((e) => e.fix ?? []).map(reEsc), "구현형", "체화 ?로봇", "문심 ?[0-9]", "혼원 ?[0-9]"].join("|");
+  const hit = [...KO_GLOSSARY.flatMap((e) => e.fix ?? []).map(reEsc), ...latinNameSources().map(reEsc), "구현형", "체화 ?로봇", "문심 ?[0-9]", "혼원 ?[0-9]"].join("|");
   const termHit = KO_GLOSSARY.flatMap((e) => e.zh).map(reEsc).join("|");
 
   for (const t of TARGETS) {
