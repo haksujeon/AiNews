@@ -99,3 +99,12 @@ test("겹침·원래 이름 밝힘", () => {
   assert.equal(normalizeKoNames("체화지능(임바디드 AI)의 핵심"), "피지컬 AI의 핵심");
   assert.equal(normalizeKoNames("두바오와 통이천문"), "더우바오와 큐원");
 });
+
+test("영문 회사 이름: 혼자 쓰이면 정한 표기, 모델·제품·버전이 붙거나 원래 이름을 밝힌 괄호면 그대로 (2026-11-08 결정 A)", () => {
+  assert.equal(normalizeKoNames("DeepSeek는 개발자 지원을 준비 중이다."), "딥시크는 개발자 지원을 준비 중이다.");
+  assert.equal(normalizeKoNames("DeepSeek, MiniMax은 경쟁"), "딥시크, 미니맥스는 경쟁");
+  assert.equal(normalizeKoNames("Moonshot AI의 Kimi"), "문샷AI의 Kimi");
+  assert.equal(normalizeKoNames("DeepSeek 앱"), "딥시크 앱");
+  for (const keep of ["DeepSeek-V4 공개", "DeepSeek V4", "DeepSeek Harness가", "MiniMax M3", "Unitree G1", "딥시크(DeepSeek)가", "문샷AI(月之暗面, Moonshot AI)는", "유니트리(宇树, Unitree)가", "deepseek.com", "@DeepSeek", "Qwen3-Max"]) assert.equal(normalizeKoNames(keep), keep);
+  assert.equal(normalizeKoNames(normalizeKoNames("DeepSeek는")), "딥시크는");
+});

@@ -11,12 +11,16 @@
  * - 바꾼 표기 바로 뒤(괄호 설명이 끼어도)의 조사는 새 표기의 받침에 맞춘다: 이↔가 · 은↔는 · 을↔를 · 과↔와 · 으로↔로.
  * - 바꾼 뒤 "피지컬 AI(피지컬 AI)"·"피지컬 AI 피지컬 AI"·"AI AI 에이전트" 처럼 같은 표기가 겹치면 하나로 줄인다.
  * - "중국명 뤄보콰이파오"처럼 원래 이름을 일부러 밝힌 자리는 고치지 않는다.
+ * - 영문 회사 이름(2026-11-08 사용자 결정 "A"): 회사·기관 항목의 en 이 혼자 쓰였을 때만 정한 표기로 ("DeepSeek는" → "딥시크는", "DeepSeek 앱" → "딥시크 앱").
+ *   뒤에 모델·제품·버전이 붙은 이름("DeepSeek-V4"·"Qwen3"·"MiniMax M3"·"DeepSeek Harness")과 "딥시크(DeepSeek)"처럼 원래 이름을 밝힌 괄호는 그대로.
  */
 import { KO_GLOSSARY } from "./ko-glossary";
 
 interface Rule {
   re: RegExp;
   to: string;
+  /** 영문 이름 규칙: "딥시크(DeepSeek)" 처럼 정한 표기 바로 뒤 괄호 안이면 그대로 */
+  latin?: true;
 }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -26,6 +30,14 @@ const HANGUL_ONLY = /^[가-힣]+$/;
 const PARTICLES = "으로|로|이|가|은|는|을|를|과|와";
 /** 짧은 표기 뒤에 와도 되는 것: 조사·복수(들) */
 const TAIL_OK = "(?:들)?(?:은|는|이|가|을|를|의|과|와|도|에서|에게|에|으로|로|만|까지|부터|처럼|보다|이다|이며|이고|이자|라는|이라는)?";
+
+/** 영문 이름 앞: 영문·숫자·주소 기호가 붙어 있으면 다른 낱말·주소의 일부 ("@DeepSeek"·"deepseek.com"·"api.DeepSeek") */
+const LATIN_HEAD = "(?<![A-Za-z0-9@/._-])";
+/** 영문 이름 뒤에 모델·제품·버전이 붙지 않음: 영문·숫자가 바로/띄어/하이픈으로 오면 "DeepSeek-V4"·"MiniMax M3"·"DeepSeek Harness" — 그대로 둔다 */
+const LATIN_TAIL = "(?![A-Za-z0-9]|\\s?[-–_/]\\s?[A-Za-z0-9]|\\.[A-Za-z0-9]|\\s[A-Za-z0-9])";
+/** 영문 이름을 바꿀 항목: 회사·기관 중 정한 표기가 한글이고, 다른 뜻과 겹치지 않는 것(noAlias 제외 — Fourier) */
+const latinPairs = () =>
+  KO_GLOSSARY.filter((e) => (e.kind === "company" || e.kind === "org") && e.en && /^[가-힣]/.test(e.ko) && !e.noAlias && e.en !== e.ko).map((e) => ({ from: e.en as string, to: e.ko }));
 
 /** 사전 밖 규칙 (문맥이 있어야 정할 수 있는 것) */
 const EXTRA: { re: string; to: string }[] = [
@@ -50,6 +62,10 @@ function buildRules(): Rule[] {
     // 조사 붙은 꼴을 먼저(조사를 바꾸려고), 아니면 맨 표기. 짧은 표기는 맨 표기도 낱말 경계에서만
     const tail = p.short ? `(?=${TAIL_OK}(?![가-힣]))` : "";
     rules.push({ re: new RegExp(`${head}${body}(\\([^()]{0,40}\\))?(${PARTICLES})(?![가-힣])|${head}${body}${tail}`, "g"), to: p.to });
+  }
+  for (const p of latinPairs().sort((a, b) => b.from.length - a.from.length)) {
+    const body = pat(p.from);
+    rules.push({ re: new RegExp(`${LATIN_HEAD}${body}(\\([^()]{0,40}\\))?(${PARTICLES})(?![가-힣])|${LATIN_HEAD}${body}${LATIN_TAIL}`, "g"), to: p.to, latin: true });
   }
   return rules;
 }
@@ -106,6 +122,8 @@ export function normalizeKoNames(text: string): string {
       if (whole.startsWith(r.to, offset) && r.to.startsWith(core)) return m;
       // 원래 이름을 일부러 밝힌 자리는 그대로 ("아폴로 고(중국명 뤄보콰이파오)")
       if (/(?:중국명|중국 이름|중국어 이름|현지명|원어명|원래 이름)\s?[:：]?\s?$/.test(whole.slice(Math.max(0, offset - 12), offset))) return m;
+      // 정한 표기 뒤 괄호 안 영문 이름은 원래 이름을 밝힌 것 ("딥시크(DeepSeek)"·"문샷AI(月之暗面, Moonshot AI)") — 그대로
+      if (r.latin && new RegExp(`${pat(r.to)}\\s?\\([^()]{0,40}$`).test(whole.slice(Math.max(0, offset - r.to.length - 42), offset))) return m;
       return j ? `${r.to}${par ?? ""}${particleFor(r.to, j)}` : par !== undefined ? `${r.to}${par}` : r.to;
     });
   }
