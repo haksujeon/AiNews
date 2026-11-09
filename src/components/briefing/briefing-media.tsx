@@ -18,6 +18,8 @@ import { chapterAt, chapterStart, formatClock, type BriefingAudio, type Briefing
 interface StoryLabel {
   rank: number;
   title: string;
+  /** 보이는 번호 (묶은 판의 해외 기사는 "해외 1"). 없으면 rank */
+  label?: string;
 }
 
 interface AudioCtx {
@@ -248,7 +250,7 @@ function useChapterLabel() {
   if (!c) return t("listenSub", { count: a.stories.length });
   if (c.rank === null) return c.t === 0 ? t("listenIntro") : t("listenOutro");
   const s = a.stories.find((x) => x.rank === c.rank);
-  return s ? `${c.rank}. ${s.title}` : t("listenStory", { rank: c.rank });
+  return s ? `${s.label ?? c.rank}. ${s.title}` : t("listenStory", { rank: c.rank });
 }
 
 function PlayIcon({ playing, className }: { playing: boolean; className?: string }) {

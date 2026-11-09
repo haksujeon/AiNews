@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
  * 머리의 목차를 없앤 대신, 기사를 읽는 동안 지금 몇 번 기사인지와 다른 기사로 가는 길을 준다.
  * 누르면 그 기사로 이동만 한다 (음성 재생 없음).
  */
-export function StoryProgress({ stories }: { stories: { rank: number; title: string }[] }) {
+/** label = 보이는 번호 (묶은 판의 해외 기사는 "해외 1", briefing-view storyNoLabel). 없으면 rank */
+export function StoryProgress({ stories }: { stories: { rank: number; title: string; label?: string }[] }) {
   const t = useTranslations("briefing");
   const [current, setCurrent] = useState<number | null>(null);
 
@@ -47,7 +48,7 @@ export function StoryProgress({ stories }: { stories: { rank: number; title: str
                   on ? "font-[650] text-ink" : "text-ink-3 hover:text-ink"
                 )}
               >
-                <span className={cn("w-4 shrink-0 font-bold", on ? "text-jade" : "")}>{s.rank}</span>
+                <span className={cn("min-w-4 shrink-0 whitespace-nowrap font-bold", on ? "text-jade" : "")}>{s.label ?? s.rank}</span>
                 <span className="min-w-0">{s.title}</span>
               </a>
             </li>

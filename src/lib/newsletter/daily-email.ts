@@ -6,6 +6,8 @@
  * - 순수 함수: DB·발송 없음. 메일 클라이언트 호환을 위해 표(table) 배치 + 인라인 스타일만 쓴다 (외부 CSS·스크립트 없음).
  * - 리드 아래 "한눈에 보기"(2026-11-07 사용자 결정 "반영"): 사이트 브리핑 페이지와 같은 buildGlance·카드 명세(card-spec.json)로 다섯 칸(PC)·다섯 줄(휴대폰).
  *   사이트 안 A 와 같이 목차·숫자로 보는 하루·한 장 요약 그림을 이 블록 하나로 합쳤다 (Gate 2).
+ * - 주요 기사 묶음(2026-11-09 사용자 결정 "반영"): 묶은 판은 중국 묶음만 본문으로 싣고, 해외 묶음(최대 3건)은 제목만 보여 주며
+ *   사이트(브리핑 페이지 #intl)로 보낸다. 묶음·번호는 사이트와 같은 story-groups.ts (Gate 2). 예전 판은 그대로 전부 싣는다.
  * - 제목·머리말은 "오늘"이 아니라 판 날짜("11월 3일(화) 중국 AI 브리핑")로 쓴다 — 아침 7시에 받는 것은 전날 소식이다.
  */
 import type { PublicBriefing } from "@/lib/briefing/public";
@@ -15,6 +17,7 @@ import { buildGlance } from "@/lib/briefing/glance";
 import type { BigNumber, CardFigure, CardSpec } from "@/lib/briefing/card-spec";
 import { convertAmountText, fxFootnoteParts, type FxLocale } from "@/lib/fx/convert";
 import type { Currency } from "@/lib/briefing/quantity";
+import { INTL_ANCHOR, displayNo, mailStories } from "@/lib/briefing/story-groups";
 
 export interface DailyEmailOptions {
   /** 받는 사람 이름 (없으면 인사 생략) */
@@ -55,6 +58,10 @@ const T = {
     listen: (m: number) => `▶ ${m}분 듣기 · AI 음성`,
     glance: "한눈에 보기",
     glanceCount: (n: number) => `주요 ${n}건`,
+    intlTitle: "해외 주요 기사",
+    intlCount: (n: number) => `${n}건 · 사이트에서 보기`,
+    intlNo: (n: number) => `해외 ${n}`,
+    intlMore: "해외 기사 자세히 보기",
     storyNote: "히스토리 분석은 지난 보도를 AI가 날짜순으로 엮은 시범 기능이며, 항목마다 근거 기사가 있습니다.",
     onSite: "자세히 보기",
     original: "원문",
@@ -104,6 +111,10 @@ const T = {
     listen: (m: number) => `▶ 收听 ${m}分钟 · AI 语音`,
     glance: "一览",
     glanceCount: (n: number) => `要闻${n}条`,
+    intlTitle: "海外要闻",
+    intlCount: (n: number) => `${n}条 · 在网站上查看`,
+    intlNo: (n: number) => `海外${n}`,
+    intlMore: "查看海外要闻详情",
     storyNote: "历史分析由 AI 按时间顺序整理过往报道，为试用功能，每一条都有来源文章。",
     onSite: "查看详情",
     original: "原文",
@@ -151,6 +162,10 @@ const T = {
     listen: (m: number) => `▶ Listen · ${m} min · AI audio`,
     glance: "At a glance",
     glanceCount: (n: number) => `Top ${n}`,
+    intlTitle: "Global top stories",
+    intlCount: (n: number) => `${n} · on the site`,
+    intlNo: (n: number) => `Global ${n}`,
+    intlMore: "Read the global stories",
     storyNote: "The history analysis is a beta feature: AI arranges past reports by date, and every entry cites a source article.",
     onSite: "Read more",
     original: "Source",
@@ -307,7 +322,7 @@ function gFigure(fig: CardFigure) {
 
 export function renderDailyEmail(b: PublicBriefing, opts: DailyEmailOptions): DailyEmail {
   // 요약형으로 그려 보고, 102KB 잘림에 가까우면 뒤 기사부터 히스토리를 한 줄로 줄인다
-  const n = b.content.top_stories.length;
+  const n = mailStories(b.content.top_stories).main.length;
   let mail = renderWith(b, opts, n);
   for (let fullUpTo = n - 1; fullUpTo >= 0 && Buffer.byteLength(mail.html) > MAIL_SIZE_LIMIT; fullUpTo--) mail = renderWith(b, opts, fullUpTo);
   return mail;
@@ -325,14 +340,17 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   const siteArticle = (id: string) => absoluteUrl(b.locale, `/news/${id}`);
   const art = (id: string) => b.articles[id];
   const sectionName = (s: string) => t.section[s] ?? s;
-  const hasHistory = c.top_stories.some((s) => s.story_context?.length);
+  // 묶은 판은 중국 묶음만 본문 (해외 묶음은 아래 제목 상자), 예전 판은 전부
+  const { main: mainStories, intl: intlStories } = mailStories(c.top_stories);
+  const hasHistory = mainStories.some((s) => s.story_context?.length);
   // 음성은 승인본만 PublicBriefing 에 붙는다 (media-store.ts). 메일 안에서는 재생되지 않으므로 페이지 #listen 으로 보낸다
   const audio = b.media?.audio;
   const listenRow = audio
     ? `<tr><td class="px" style="padding:14px ${PX}px 0"><a href="${esc(`${briefingUrl}#listen`)}" style="display:inline-block;border:1px solid ${C.line};border-left:3px solid ${C.jade};color:${C.ink};text-decoration:none;font:700 15px/1 ${FONT};padding:13px 18px;border-radius:0 8px 8px 0">${esc(t.listen(Math.max(1, Math.round(audio.duration_sec / 60))))}</a></td></tr>`
     : "";
   // 한눈에 보기: 사이트 페이지와 같은 buildGlance + 같은 convertAmountText 환산 줄 (Gate 2)
-  const gItems = buildGlance(c, opts.cardSpec).map((g) => ({ ...g, fx: g.big && b.fx ? convertAmountText(g.big.raw, b.locale as FxLocale, b.fx) : null, st: c.top_stories.find((x) => x.rank === g.rank) }));
+  // 카드 명세는 판 전체(8건) 기준이라 전체로 만든 뒤 해외 칸을 뺀다 (glance.ts 의 길이 검사를 지키려고)
+  const gItems = buildGlance(c, opts.cardSpec).filter((g) => g.group !== "intl").map((g) => ({ ...g, fx: g.big && b.fx ? convertAmountText(g.big.raw, b.locale as FxLocale, b.fx) : null, st: c.top_stories.find((x) => x.rank === g.rank) }));
   const glanceRow = !gItems.length ? "" : `<tr><td class="px" style="padding:22px ${PX}px 0">
     <div style="border-bottom:2px solid ${C.ink};padding-bottom:7px;font:700 15px/1.4 ${FONT};color:${C.ink}">${esc(t.glance)} <span style="font-weight:400;font-size:13px;color:${C.faint}">${esc(t.glanceCount(gItems.length))}</span></div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${gItems.map((g, i) => {
@@ -340,7 +358,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
       const col = SEC_COLOR[g.section] ?? C.jade;
       const pad = i === 0 ? "14px 10px 16px 0" : i === gItems.length - 1 ? "14px 0 16px 10px" : "14px 10px 16px";
       return `<td class="gcell" width="${Math.floor(100 / gItems.length)}%" valign="top" style="vertical-align:top;padding:${pad};${i < gItems.length - 1 ? `border-right:1px solid ${C.line};` : ""}">
-        <div style="font:12px/1.4 ${FONT};color:${C.faint}"><b style="font:800 17px/1 ${FONT};color:${C.ink};vertical-align:-1px">${g.rank}</b>&nbsp; <span style="color:${col};font-weight:700">■ ${esc(sectionName(g.section))}</span></div>
+        <div style="font:12px/1.4 ${FONT};color:${C.faint}"><b style="font:800 17px/1 ${FONT};color:${C.ink};vertical-align:-1px">${g.no}</b>&nbsp; <span style="color:${col};font-weight:700">■ ${esc(sectionName(g.section))}</span></div>
         <div style="padding-top:6px;font:700 14.5px/1.42 ${FONT}"><a href="${esc(href)}" style="color:${C.ink};text-decoration:none">${esc(g.title)}</a>${g.st?.story_context?.length ? ` <span style="color:${C.faint};font-size:12px;font-weight:400">🕘</span>` : ""}</div>
         ${g.big ? `<div style="padding-top:10px">${gBig(g.big, 20)}</div>${g.fx ? `<div style="font:600 12.5px/1.4 ${FONT};color:${C.sub}">${esc(g.fx)}</div>` : ""}<div style="padding-top:2px;font:12px/1.45 ${FONT};color:${C.sub}">${esc(g.big.label)}</div>${g.big.meter != null ? `<div style="padding-top:7px">${gBar(g.big.meter, C.jade, 9)}</div>` : ""}` : ""}
         ${!g.big && g.figure && g.figure.kind !== "bars" ? `<div class="mb" style="display:none;max-height:0;overflow:hidden;font:600 12.5px/1.45 ${FONT};color:${C.jade}">${esc(gFigureLine(g.figure))}</div>` : ""}
@@ -350,7 +368,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
     }).join("")}</tr></table>
   </td></tr>`;
 
-  const stories = c.top_stories
+  const stories = mainStories
     .map((s, idx) => {
       const a = art(s.primary_ref);
       const easy = (s.easy_terms ?? []).slice(0, 2);
@@ -365,7 +383,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
         .join(`<span style="color:${C.line}">&nbsp;&nbsp;|&nbsp;&nbsp;</span>`);
       return `<tr><td class="px" style="padding:0 ${PX}px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${C.line}"><tr><td style="padding:24px 0">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-          <tr><td style="font:600 12px/1.4 ${FONT};color:${C.faint}"><span style="display:inline-block;background:${C.jade};color:#fff;border-radius:10px;padding:1px 8px;margin-right:6px">${s.rank}</span>${esc(sectionName(s.section))} · ${esc(s.subject)}</td></tr>
+          <tr><td style="font:600 12px/1.4 ${FONT};color:${C.faint}"><span style="display:inline-block;background:${C.jade};color:#fff;border-radius:10px;padding:1px 8px;margin-right:6px">${displayNo(s, c.top_stories)}</span>${esc(sectionName(s.section))} · ${esc(s.subject)}</td></tr>
           <tr><td style="padding:8px 0 0;font:700 20px/1.42 ${FONT};color:${C.ink}"><a href="${esc(siteArticle(s.primary_ref))}" style="color:${C.ink};text-decoration:none">${esc(s.title)}</a></td></tr>
           <tr><td style="padding:8px 0 0;font:15.5px/1.75 ${FONT};color:${C.ink}">${esc(s.what)}</td></tr>
           <tr><td style="padding:12px 0 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.jadeSoft};border-left:3px solid ${C.jade};border-radius:0 8px 8px 0"><tr><td style="padding:11px 15px;font:14.5px/1.7 ${FONT};color:${C.ink}"><b style="color:${C.jade}">${esc(t.why)}</b><br>${esc(s.why)}</td></tr></table></td></tr>
@@ -375,6 +393,20 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
         </table></td></tr></table></td></tr>`;
     })
     .join("");
+
+  // 해외 묶음: 제목만 + 사이트 바로가기 (본문은 사이트에서)
+  const intlBox = intlStories.length
+    ? `<tr><td class="px" style="padding:6px ${PX}px 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C.line};border-radius:10px"><tr><td style="padding:16px 18px">
+    <div style="font:700 15px/1.4 ${FONT};color:${C.ink}">${esc(t.intlTitle)} <span style="font-weight:400;font-size:13px;color:${C.faint}">${esc(t.intlCount(intlStories.length))}</span></div>
+    ${intlStories
+      .map(
+        (s) =>
+          `<div style="padding-top:9px;font:14.5px/1.55 ${FONT}"><b style="color:${C.jade}">${esc(t.intlNo(displayNo(s, c.top_stories)))}</b>&nbsp; <span style="color:${C.faint};font-size:12.5px">${esc(sectionName(s.section))}</span>&nbsp; <a href="${esc(siteArticle(s.primary_ref))}" style="color:${C.ink};text-decoration:none">${esc(s.title)}</a></div>`
+      )
+      .join("")}
+    <div style="padding-top:14px">${link(`${briefingUrl}#${INTL_ANCHOR}`, `${t.intlMore} →`)}</div>
+  </td></tr></table></td></tr>`
+    : "";
 
   const sections = c.sections.length
     ? heading(t.sections) +
@@ -443,6 +475,7 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
   ${glanceRow}
   ${heading(t.top)}
   ${stories}
+  ${intlBox}
   ${sections}
   ${companies}
   ${term}
@@ -464,14 +497,17 @@ function renderWith(b: PublicBriefing, opts: DailyEmailOptions, fullUpTo: number
     c.lede,
     ...(audio ? [`${t.listen(Math.max(1, Math.round(audio.duration_sec / 60)))}: ${briefingUrl}#listen`] : []),
     "",
-    ...c.top_stories.flatMap((s) => [
-      `${s.rank}. ${s.title}`,
+    ...mainStories.flatMap((s) => [
+      `${displayNo(s, c.top_stories)}. ${s.title}`,
       s.what,
       `${t.why}: ${s.why}`,
       ...(s.story_context ?? []).map((x) => `${t.lens[x.lens] ?? x.lens}: ${x.title} — ${x.now}`),
       siteArticle(s.primary_ref),
       "",
     ]),
+    ...(intlStories.length
+      ? [`${t.intlTitle} (${t.intlCount(intlStories.length)})`, ...intlStories.map((s) => `${t.intlNo(displayNo(s, c.top_stories))}. ${s.title} ${siteArticle(s.primary_ref)}`), `${t.intlMore}: ${briefingUrl}#${INTL_ANCHOR}`, ""]
+      : []),
     `${t.cta}: ${briefingUrl}`,
     "",
     `${t.unsub}: ${opts.unsubscribeUrl}`,

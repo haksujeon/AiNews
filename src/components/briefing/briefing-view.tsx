@@ -25,6 +25,7 @@ import { buildGlance } from "@/lib/briefing/glance";
 import type { CardSpec } from "@/lib/briefing/card-spec";
 import { convertAmountText, type FxLocale } from "@/lib/fx/convert";
 import { FxNote } from "@/components/fx/fx-note";
+import { INTL_ANCHOR, displayNo, storyGroups } from "@/lib/briefing/story-groups";
 
 /*
  * 데일리 브리핑 본문 ("Briefing Desk" 시안 §5.1–5.2).
@@ -48,6 +49,25 @@ type Translator = ReturnType<typeof useTranslations<"briefing">>;
 export function sectionLabel(t: Translator, code: string): string {
   const key = `section_${code}`;
   return t.has(key as never) ? t(key as never) : code;
+}
+
+/**
+ * 보이는 번호 글자: 묶은 판은 중국 "1"~"5" · 해외 "해외 1"~"해외 3", 예전 판은 rank (story-groups.ts displayNo).
+ * 읽는 위치·음성 재생 줄처럼 묶음 이름 없이 번호만 보이는 곳이 쓴다 (Gate 2)
+ */
+export function storyNoLabel(t: Translator, story: Pick<TopStory, "rank" | "group">, all: readonly Pick<TopStory, "rank" | "group">[]): string {
+  const no = displayNo(story, all);
+  return story.group === "intl" && all.every((x) => x.group) ? t("intlNo", { no }) : String(no);
+}
+
+/** 주요 기사 묶음 머리 ("중국 주요 기사 5건" · "해외 주요 기사 3건"). 해외 묶음에는 바로가기(#intl) — 메일 "해외 기사 자세히 보기"가 여기로 온다 */
+export function StoryGroupHeading({ group, count, as: Tag = "h3", className }: { group: "cn" | "intl"; count: number; as?: "h3" | "p"; className?: string }) {
+  const t = useTranslations("briefing");
+  return (
+    <Tag id={group === "intl" ? INTL_ANCHOR : undefined} className={cn("scroll-mt-20 text-[14px] font-bold text-jade", className)} data-testid={`story-group-${group}`}>
+      {t(group === "cn" ? "topStoriesCn" : "topStoriesIntl")} <span className="font-normal text-ink-3">{t("groupCount", { count })}</span>
+    </Tag>
+  );
 }
 
 /** 근거 기사 링크 줄. 데일리·주간 리포트가 같은 부품을 쓴다 (Gate 2) */
@@ -164,7 +184,7 @@ export function TopStoryItem({
       }
     >
       <span aria-hidden="true" className={cn("font-[760] text-ink", compact ? "text-[20px] sm:text-[24px]" : "text-[22px] sm:text-[30px]", "leading-none")}>
-        {s.rank}
+        {displayNo(s, briefing.content.top_stories)}
       </span>
       <div className="min-w-0">
         <p className={cn("flex flex-wrap gap-x-3 text-[13px] text-ink-3", compact ? "mb-1" : "mb-1.5")}>
@@ -283,11 +303,17 @@ export function BriefingView({ briefing, pager, cardSpec }: Props) {
             {t("topStories")}
             <span className="text-[13px] font-normal text-ink-3">{t("byImportance")}</span>
           </h2>
-          <ol>
-            {c.top_stories.map((s) => (
-              <TopStoryItem key={s.rank} story={s} briefing={briefing} />
-            ))}
-          </ol>
+          {/* 묶은 판(2026-11-09~)은 중국 묶음 · 해외 묶음, 예전 판은 한 목록 */}
+          {storyGroups(c.top_stories).map((g) => (
+            <div key={g.group ?? "all"}>
+              {g.group && <StoryGroupHeading group={g.group} count={g.stories.length} className="pt-5" />}
+              <ol>
+                {g.stories.map((s) => (
+                  <TopStoryItem key={s.rank} story={s} briefing={briefing} titleTag={g.group ? "h4" : "h3"} />
+                ))}
+              </ol>
+            </div>
+          ))}
 
           {c.sections.length > 0 && (
             <section>
@@ -317,7 +343,7 @@ export function BriefingView({ briefing, pager, cardSpec }: Props) {
         {/* ── 오른쪽 칸: 읽는 위치(데스크톱, 따라 내려옴) · 용어 · 편집 노트 · 주요 기사에 없는 기업. 휴대폰은 본문 아래 ── */}
         <aside className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:self-start lg:overflow-y-auto lg:[scrollbar-width:thin]">
           <div className="hidden lg:block">
-            <StoryProgress stories={c.top_stories.map((s) => ({ rank: s.rank, title: s.title }))} />
+            <StoryProgress stories={c.top_stories.map((s) => ({ rank: s.rank, title: s.title, label: storyNoLabel(t, s, c.top_stories) }))} />
           </div>
 
           {term && (
@@ -408,7 +434,7 @@ export function BriefingView({ briefing, pager, cardSpec }: Props) {
   if (!media.audio) return body;
   // 재생기는 판에 하나 — 듣기 막대·목차 시각·"이 부분 듣기"·아래 재생 막대가 같은 재생기를 움직인다 (Gate 2)
   return (
-    <BriefingAudioProvider audio={media.audio} stories={c.top_stories.map((s) => ({ rank: s.rank, title: s.title }))}>
+    <BriefingAudioProvider audio={media.audio} stories={c.top_stories.map((s) => ({ rank: s.rank, title: s.title, label: storyNoLabel(t, s, c.top_stories) }))}>
       {body}
     </BriefingAudioProvider>
   );

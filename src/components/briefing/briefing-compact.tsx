@@ -4,7 +4,8 @@ import { formatDateGroup } from "@/lib/news-utils";
 import type { PublicBriefing } from "@/lib/briefing/public";
 import { formatShortDate } from "@/lib/briefing/view";
 import { LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
-import { AiLabel, BriefingCoverage, DataNotice, Sources, TopStoryItem } from "./briefing-view";
+import { AiLabel, BriefingCoverage, DataNotice, Sources, StoryGroupHeading, TopStoryItem } from "./briefing-view";
+import { storyGroups } from "@/lib/briefing/story-groups";
 import { BriefingDateLink } from "./briefing-date-link";
 import { ListenLink } from "./briefing-media";
 
@@ -58,11 +59,17 @@ export function BriefingCompact({ briefing }: { briefing: PublicBriefing }) {
             {t("topStories")}
             <span className="text-[13px] font-normal text-ink-3">{t("byImportance")}</span>
           </h3>
-          <ol>
-            {c.top_stories.map((s) => (
-              <TopStoryItem key={s.rank} story={s} briefing={briefing} variant="compact" titleTag="h4" />
-            ))}
-          </ol>
+          {/* 묶은 판(2026-11-09~)은 중국 묶음 · 해외 묶음 — 브리핑 페이지와 같은 머리 부품 */}
+          {storyGroups(c.top_stories).map((g) => (
+            <div key={g.group ?? "all"}>
+              {g.group && <StoryGroupHeading group={g.group} count={g.stories.length} as="p" className="pt-4" />}
+              <ol>
+                {g.stories.map((s) => (
+                  <TopStoryItem key={s.rank} story={s} briefing={briefing} variant="compact" titleTag="h4" />
+                ))}
+              </ol>
+            </div>
+          ))}
         </section>
       )}
 

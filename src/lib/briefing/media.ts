@@ -6,6 +6,7 @@
  */
 import { BASE_PATH } from "@/lib/api-path";
 import type { BriefingLocale } from "./types";
+import { displayNo, isGrouped } from "./story-groups";
 
 export type MediaKind = "audio" | "card";
 export type MediaStatus = "review" | "approved" | "rejected";
@@ -136,11 +137,16 @@ export function chapterStart(chapters: MediaChapter[], rank: number): number | n
  * heading 은 호출자가 그 언어로 넘긴다 (예: "11월 4일 판 한 장 요약"). numbersLabel 도 마찬가지 (예: "숫자")
  */
 export function cardAltText(
-  content: { headline: string; top_stories: { rank: number; title: string }[]; key_numbers: { value: string; label: string }[] },
+  content: { headline: string; top_stories: { rank: number; title: string; group?: "cn" | "intl" }[]; key_numbers: { value: string; label: string }[] },
   heading: string,
-  numbersLabel: string
+  numbersLabel: string,
+  /** 묶은 판의 해외 기사 번호 글자 (예: n => `해외 ${n}`). 카드에 보이는 번호와 같게 (story-groups.ts displayNo) */
+  intlLabel: (n: number) => string = (n) => String(n)
 ): string {
-  const stories = content.top_stories.map((s) => `${s.rank}. ${s.title}`).join(" ");
+  const grouped = isGrouped(content.top_stories);
+  const stories = content.top_stories
+    .map((s) => `${grouped && s.group === "intl" ? intlLabel(displayNo(s, content.top_stories)) : displayNo(s, content.top_stories)}. ${s.title}`)
+    .join(" ");
   const nums = content.key_numbers.map((k) => `${k.value} ${k.label}`).join(", ");
   return [`${heading}: ${content.headline}.`, stories, nums ? `${numbersLabel}: ${nums}.` : ""].filter(Boolean).join(" ");
 }

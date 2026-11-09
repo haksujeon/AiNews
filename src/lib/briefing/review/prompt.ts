@@ -11,7 +11,8 @@ import type { Segment } from "./types";
 import type { Hint } from "./hints";
 import type { GenLog } from "./evidence";
 
-export const REVIEW_PROMPT_VERSION = "review-v6.2-2026-11-02";
+// v6.3 (2026-11-09): 데일리 주요 기사 = 중국 묶음(최대 5) + 해외 묶음(최대 3) — 해외 묶음이 찼으면 다른 해외 이야기는 중요 누락이 아니다
+export const REVIEW_PROMPT_VERSION = "review-v6.3-2026-11-09";
 
 export function buildReviewSystemPrompt(editionType: EditionType, withTranslations: boolean): string {
   const periodic = isPeriodic(editionType);
@@ -50,7 +51,12 @@ export function buildReviewSystemPrompt(editionType: EditionType, withTranslatio
    - "a":"replace" 는 근거 인용(e)에 있는 사실만으로 고친 문장(t)일 때만. 새 사실·숫자·이름·최상급을 더하지 마십시오. 원문 문장의 나머지 표현은 최대한 유지합니다.
    - 근거로 고칠 수 없거나 misattributed 면 "a":"delete".
    - e 는 근거 기사 본문에서 **한 글자도 바꾸지 않고 복사한** 인용(80자 이내)이어야 합니다. 바꿔 쓰거나 번역하면 수정안이 버려집니다.
-6. 누락(omissions): 아래 누락 후보 C1.. 중, 이 판 어디에도 (다른 표현으로라도) 실리지 않았고 그 기간에 꼭 다뤄야 할 큰 이야기면 important:true. 이미 다른 기사로 다뤘거나 작은 이야기면 important:false.
+6. 누락(omissions): 아래 누락 후보 C1.. 중, 이 판 어디에도 (다른 표현으로라도) 실리지 않았고 그 기간에 꼭 다뤄야 할 큰 이야기면 important:true. 이미 다른 기사로 다뤘거나 작은 이야기면 important:false.${
+    periodic
+      ? ""
+      : `
+   - 데일리 판의 주요 기사는 중국 묶음(중국 기업·기관 주체, 최대 5건)과 해외 묶음(최대 3건)입니다. 해외 묶음이 이미 3건이면 빠진 해외 이야기(중국 밖 기업·기관이 주체)는 important:false 입니다. 해외 묶음이 3건보다 적을 때만 큰 해외 이야기의 누락을 important:true 로 봅니다. 중국 이야기의 누락은 그대로 판단합니다.`
+  }
 7. 구조(structure): 같은 사건을 두 번 서술, 광고·행사·칼럼·순위표를 주요 기사로, 수집 결손 알림이 필요한데 없음, 한자·길이 문제 등 (각 문자열 하나, 없으면 빈 배열).${
     withTranslations
       ? `

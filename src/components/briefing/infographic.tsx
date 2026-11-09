@@ -149,7 +149,7 @@ export function InfographicCell({ item }: { item: GlanceCell }) {
   return (
     <>
       <span className="flex flex-wrap items-center gap-x-2 text-[12px] text-ink-3">
-        <span className="text-[17px] font-[800] leading-none text-ink">{item.rank}</span>
+        <span className="text-[17px] font-[800] leading-none text-ink">{item.no}</span>
         <SectionTag code={item.section} label={item.sectionLabel} />
         {item.outlets && <span>{item.outlets}</span>}
       </span>
@@ -183,7 +183,7 @@ export function InfographicRow({ item }: { item: GlanceCell }) {
     <>
       <span className="min-w-0">
         <span className="flex items-center gap-1.5 text-[11.5px]">
-          <b className="text-[13px] text-ink">{item.rank}</b>
+          <b className="text-[13px] text-ink">{item.no}</b>
           <SectionTag code={item.section} label={item.sectionLabel} />
         </span>
         <span className="mt-0.5 block text-[14px] font-[650] leading-[1.4] text-ink [text-wrap:pretty]">{item.title}</span>
@@ -212,6 +212,24 @@ export function InfographicRow({ item }: { item: GlanceCell }) {
       </span>
     </>
   );
+}
+
+/** 묶음 이름 줄 ("중국 5건" · "해외 3건") — 페이지 한눈에 보기·가로형 그림·세로형 카드가 같은 부품 (Gate 2) */
+export function GroupLabel({ group, count, className }: { group: "cn" | "intl"; count: number; className?: string }) {
+  const t = useTranslations("briefing");
+  return (
+    <p className={cn("text-[12.5px] font-bold tracking-[0.02em] text-jade", className)} data-testid={`group-${group}`}>
+      {t(group === "cn" ? "groupCn" : "groupIntl")} <span className="font-normal text-ink-3">{t("groupCount", { count })}</span>
+    </p>
+  );
+}
+
+/** 칸 묶음: 묶은 판이면 [중국, 해외](빈 묶음 제외), 예전 판이면 [전체] — 칸 열 수는 가장 큰 묶음 (해외 칸도 중국 칸과 같은 폭) */
+export function glanceGroups(items: GlanceCell[]): { group: "cn" | "intl" | null; items: GlanceCell[]; cols: number }[] {
+  if (!items.length || items.some((i) => !i.group)) return [{ group: null, items, cols: items.length }];
+  const groups = (["cn", "intl"] as const).map((g) => ({ group: g, items: items.filter((i) => i.group === g) })).filter((x) => x.items.length);
+  const cols = Math.max(...groups.map((g) => g.items.length));
+  return groups.map((g) => ({ ...g, cols }));
 }
 
 /**
@@ -253,13 +271,19 @@ export function BriefingInfographic({
         </span>
       </div>
       <h1 className="mt-5 text-[38px] font-[800] leading-[1.25] tracking-[-0.03em]">{headline}</h1>
-      <ol className="mt-6 grid border-t-2 border-rule-strong" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
-        {items.map((it) => (
-          <li key={it.rank} className="flex min-w-0 flex-col border-r border-rule px-5 py-5 first:pl-0 last:border-r-0 last:pr-0">
-            <InfographicCell item={it} />
-          </li>
-        ))}
-      </ol>
+      {/* 묶은 판(중국 5 · 해외 3)은 두 줄, 예전 판은 한 줄 */}
+      {glanceGroups(items).map((g) => (
+        <div key={g.group ?? "all"}>
+          {g.group && <GroupLabel group={g.group} count={g.items.length} className="mt-5 text-[15px]" />}
+          <ol className={cn("grid border-t-2 border-rule-strong", g.group ? "mt-2" : "mt-6")} style={{ gridTemplateColumns: `repeat(${g.cols}, minmax(0, 1fr))` }}>
+            {g.items.map((it, i) => (
+              <li key={it.rank} className={cn("flex min-w-0 flex-col border-rule px-5 py-5 first:pl-0", i < g.items.length - 1 ? "border-r" : g.items.length === g.cols ? "pr-0" : "border-r")}>
+                <InfographicCell item={it} />
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
       <p className="mt-4 flex justify-between gap-5 border-t border-rule-strong pt-2.5 text-[13px] text-ink-3">
         <span>
           <b className="text-ink">{t("sources")}</b> {outlets.join("·")} · {t("aiLabel")}

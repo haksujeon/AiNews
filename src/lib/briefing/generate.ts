@@ -30,7 +30,8 @@ import type {
 import { BRIEFING_EFFORT, BRIEFING_MODEL, LlmError, TRANSLATE_EFFORT, TRANSLATE_MODEL, chat, modelTag, parseJsonContent } from "./llm";
 import { PROMPT_VERSION, TRANSLATE_PROMPT_VERSION, buildRepairPrompt, buildSystemPrompt, buildTargetedRepairPrompt, buildUserPrompt } from "./prompt";
 import { computeInputHash, editionModeFor, selectCandidates } from "./select";
-import { isChinaCandidate } from "./rules";
+import { isChinaCandidate, isChinaSubject } from "./rules";
+import { arrangeTopStories, copyGroups } from "./story-groups";
 import {
   HEADLINE_MAX,
   LIMITS,
@@ -177,7 +178,7 @@ export function repairHints(c: BriefingContent, r: ValidationReport, groups: Can
       .slice(0, 6)
       .map((g) => `${g.shortId}(${g.primary.title_kr.slice(0, 30)})`);
     out.push(
-      `중국 중심 규칙 미달 — 상위 5건 중 3건 이상이 중국 주체(근거 기사 region CN)여야 합니다. 같은 사건을 두 칸에 나눈 해외 이야기는 하나로 합치고, 중국 주체 후보를 올리십시오: ${cands.join(", ")}`
+      `중국 중심 규칙 미달 — 중국 묶음(1~5위)에 중국 주체(근거 기사 region CN) 이야기가 3건 이상이어야 합니다. 같은 사건을 두 칸에 나눈 해외 이야기는 하나로 합치고, 중국 주체 후보를 올리십시오: ${cands.join(", ")}`
     );
   }
   for (const f of r.fatal.filter((x) => x.rule === "han_in_ko"))
@@ -271,13 +272,16 @@ export async function generateKo(
   const trimmedByRound: Record<string, string[]> = {};
 
   // 결정적 정리: 괄호 병기 한자 삭제 + 한자 사전 치환 + 넘친 끝 문장(·절) 삭제 + 같은 사건 항목 병합
+  // 묶음 정리 (2026-11-09): 중국 묶음(최대 5) 앞, 해외 묶음(최대 3) 뒤 — 헤드라인·중국 중심 검사가 정리된 순서를 본다
+  const isCn = (s: BriefingContent["top_stories"][number]) => isChinaSubject(s, s.refs.map((r) => ctx.docs?.get(r) ?? []));
   const prepare = (c: BriefingContent, round: string) => {
     const g = glossKoHan(stripParentheticalHan(c));
     const f = fitSentenceLengths(g.content);
     const m = mergeDuplicateItems(f.content, ctx);
+    const a = arrangeTopStories(m.content, isCn);
     trimmedByRound[round] = f.trimmed;
-    edits.push(...[...g.edits, ...f.edits, ...m.edits].map((e) => ({ ...e, round })));
-    return m.content;
+    edits.push(...[...g.edits, ...f.edits, ...m.edits, ...a.edits].map((e) => ({ ...e, round })));
+    return a.content;
   };
   cost.check();
   const first = await chat({ system, messages: [{ role: "user", content: user }], model: BRIEFING_MODEL, maxTokens: 8000, effort: BRIEFING_EFFORT }, track);
@@ -583,7 +587,9 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
         const u = sumUsage(tr.usages);
         const ok = Boolean(tr.content);
         // failed 여도 마지막 번역본은 남긴다 (발행 불가 상태라 공개되지 않음)
-        const shown = tr.content ?? tr.candidate;
+        // 묶음(group)은 번역 모델을 거치지 않고 ko 판에서 순서 그대로 이어받는다
+        const shownRaw = tr.content ?? tr.candidate;
+        const shown = shownRaw ? copyGroups(shownRaw, ko.content) : null;
         const st = shown ? toStored(shown, sel.groups, target, meta) : null;
         const error = ok ? null : tr.error ?? `번역 재검증 실패 (${tr.problems.length}건)`;
         const row = await insertBriefing({

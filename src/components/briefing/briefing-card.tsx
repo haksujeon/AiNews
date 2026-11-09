@@ -6,6 +6,8 @@ import { formatDateGroup } from "@/lib/news-utils";
 import { outletsOf } from "@/lib/briefing/view";
 import type { CardFigure, CardSpec, CardStorySpec } from "@/lib/briefing/card-spec";
 import { sectionLabel } from "./briefing-view";
+import { GroupLabel } from "./infographic";
+import { displayNo, mailStories } from "@/lib/briefing/story-groups";
 
 /*
  * "한 장 요약" 카드 (1080px 폭, 높이는 내용대로). Playwright 가 [data-testid=briefing-card] 를 2배로 찍어 PNG 로 만든다.
@@ -15,6 +17,7 @@ import { sectionLabel } from "./briefing-view";
  */
 
 const W = 452; // 반 칸 그림 폭
+const W_NARROW = 290; // 해외 묶음 세 칸 그림 폭
 
 function Bars({ fig, width }: { fig: Extract<CardFigure, { kind: "bars" }>; width: number }) {
   const labelW = 118;
@@ -89,20 +92,21 @@ function Figure({ fig, width }: { fig: CardFigure; width: number }) {
   return null;
 }
 
-function StoryCell({ s, spec, briefing, wide, fx }: { s: PublicBriefing["content"]["top_stories"][number]; spec: CardStorySpec | undefined; briefing: PublicBriefing; wide: boolean; fx?: FxRates | null }) {
+/** narrow = 해외 묶음 세 칸 (칸이 좁아 큰 숫자·그림을 한 단계 작게) */
+function StoryCell({ s, spec, briefing, wide, narrow = false, fx }: { s: PublicBriefing["content"]["top_stories"][number]; spec: CardStorySpec | undefined; briefing: PublicBriefing; wide: boolean; narrow?: boolean; fx?: FxRates | null }) {
   const t = useTranslations("briefing");
   const outlets = outletsOf(s.refs, briefing.articles).join(" · ");
   const head = (
     <div className="min-w-0">
       <p className="flex items-baseline gap-2.5 text-[13px] text-[#61656e]">
-        <span className="text-[22px] font-[800] leading-none text-[#16171a]">{s.rank}</span>
+        <span className="text-[22px] font-[800] leading-none text-[#16171a]">{displayNo(s, briefing.content.top_stories)}</span>
         <span className="font-bold text-[#0b6457]">{sectionLabel(t, s.section)}</span>
         <span>{outlets}</span>
       </p>
-      <h3 className="mt-1.5 text-[19.5px] font-[750] leading-[1.35] tracking-[-0.02em] text-[#16171a]">{s.title}</h3>
+      <h3 className={`mt-1.5 ${narrow ? "text-[17px]" : "text-[19.5px]"} font-[750] leading-[1.35] tracking-[-0.02em] text-[#16171a]`}>{s.title}</h3>
       {spec?.big && (
         <p className="mt-2.5 flex flex-wrap items-baseline gap-x-2.5">
-          <b className="text-[36px] font-[800] leading-[1.1] tracking-[-0.03em] text-[#0b6457]">{spec.big.raw}</b>
+          <b className={`${narrow ? "text-[29px]" : "text-[36px]"} font-[800] leading-[1.1] tracking-[-0.03em] text-[#0b6457]`}>{spec.big.raw}</b>
           <span className="text-[14.5px] text-[#43464d]">{spec.big.label}</span>
         </p>
       )}
@@ -124,7 +128,7 @@ function StoryCell({ s, spec, briefing, wide, fx }: { s: PublicBriefing["content
   return (
     <div className="flex h-full min-w-0 flex-col gap-3 border-b border-[#e2e2de] py-5" data-rank={s.rank}>
       {head}
-      {fig && <Figure fig={fig} width={W} />}
+      {fig && <Figure fig={fig} width={narrow ? W_NARROW : W} />}
     </div>
   );
 }
@@ -137,7 +141,10 @@ export function BriefingCard({ briefing, spec, fx }: { briefing: PublicBriefing;
   const tm = useTranslations("meta");
   const c = briefing.content;
   const byRank = new Map(spec.stories.map((s) => [s.rank, s]));
-  const [first, ...rest] = c.top_stories;
+  // 묶은 판(2026-11-09~): 중국 묶음(1위 넓게 + 두 칸) 아래 해외 묶음 세 칸. 예전 판은 그대로 (mailStories: 예전 판은 main = 전부)
+  const { main, intl } = mailStories(c.top_stories);
+  const grouped = intl.length > 0 || c.top_stories.every((x) => x.group);
+  const [first, ...rest] = main;
   const more = c.sections.flatMap((sec) => sec.items.map((it) => ({ section: sec.section, text: it.text }))).slice(0, 6);
   const outlets = outletsOf(Object.keys(briefing.articles), briefing.articles);
   return (
@@ -157,7 +164,8 @@ export function BriefingCard({ briefing, spec, fx }: { briefing: PublicBriefing;
       <h1 className="mt-5 text-[40px] font-[800] leading-[1.25] tracking-[-0.03em]">{c.headline}</h1>
       <p className="mt-2.5 max-w-[940px] text-[17px] leading-[1.6] text-[#43464d]">{c.lede}</p>
 
-      <div className="mt-5 border-t-2 border-[#16171a]">
+      {grouped && <GroupLabel group="cn" count={main.length} className="mt-5 text-[16px]" />}
+      <div className={`${grouped ? "mt-2" : "mt-5"} border-t-2 border-[#16171a]`}>
         {first && <StoryCell s={first} spec={byRank.get(first.rank)} briefing={briefing} wide fx={fx} />}
         <div className="grid grid-cols-2">
           {rest.map((s, i) => (
@@ -167,6 +175,19 @@ export function BriefingCard({ briefing, spec, fx }: { briefing: PublicBriefing;
           ))}
         </div>
       </div>
+
+      {intl.length > 0 && (
+        <>
+          <GroupLabel group="intl" count={intl.length} className="mt-6 text-[16px]" />
+          <div className="mt-2 grid grid-cols-3 border-t-2 border-[#16171a]">
+            {intl.map((s, i) => (
+              <div key={s.rank} className={`min-w-0 ${i < 2 ? "border-r border-[#e2e2de] pr-[18px]" : ""} ${i > 0 ? "pl-[18px]" : ""}`}>
+                <StoryCell s={s} spec={byRank.get(s.rank)} briefing={briefing} wide={false} narrow fx={fx} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {more.length > 0 && (
         <section className="mt-5">

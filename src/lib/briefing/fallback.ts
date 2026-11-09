@@ -12,6 +12,7 @@ import type { BriefingContent, CandidateGroup, TopStory, ValidationReport } from
 import { HEADLINE_MAX, dropFatalItems, itemOf, validateKo, type ValidationContext } from "./validate";
 import { isChinaCandidate, isChinaSubject } from "./rules";
 import { findEntities } from "./entities";
+import { GROUP_SLOTS, arrangeTopStories } from "./story-groups";
 
 const md = (d: string) => `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일`;
 
@@ -60,9 +61,10 @@ export function shortFallback(
   // 헤드라인·리드·중국 중심(판 전체) 치명은 대체 문장으로 갈음하므로 삭제 대상에서 뺀다
   const droppable = report.fatal.filter((f) => !["headline", "lede", "top_stories"].includes(itemOf(f.path)));
   let c = dropFatalItems(content, droppable).content;
-  // 짧은 판은 중국 중심 규칙을 보지 않으므로 중국 주체 기사를 앞으로 (같은 무리 안에서는 원래 순서) — 헤드라인 = 1위 기사
+  // 짧은 판은 중국 중심 규칙을 보지 않으므로 중국 주체 기사를 앞으로 (같은 무리 안에서는 원래 순서) — 헤드라인 = 1위 기사.
+  // 생성과 같은 묶음 정리(중국 최대 5 · 해외 최대 3, story-groups.ts)
   const cn = (s: BriefingContent["top_stories"][number]) => isChinaSubject(s, s.refs.map((r) => ctx.docs?.get(r) ?? []));
-  c = { ...c, top_stories: [...c.top_stories.filter(cn), ...c.top_stories.filter((s) => !cn(s))].map((s, i) => ({ ...s, rank: i + 1 })) };
+  c = arrangeTopStories(c, cn).content;
   for (let pass = 0; pass < 2; pass++) {
     if (c.top_stories.length < minTop) return null;
     const lede = fallbackLede(c);
@@ -80,9 +82,13 @@ const SECTION_OF: Record<string, string> = { "ai-tech": "models", "ai-product": 
  * 제목만 판: 후보 상위 기사(중국 주체 후보 먼저, 점수 순) 제목 + 매체. LLM 문장 없음.
  * top_stories 의 title = 기사 한국어 제목, what = "매체: …" (링크는 refs → 화면이 원문 링크를 붙인다).
  */
-export function headlinesEdition(groups: CandidateGroup[], editionDate: string, max = 8): BriefingContent {
-  const ordered = [...groups].sort((a, b) => Number(isChinaCandidate(b.primary)) - Number(isChinaCandidate(a.primary)) || b.score - a.score);
-  const picked = ordered.slice(0, max);
+export function headlinesEdition(groups: CandidateGroup[], editionDate: string): BriefingContent {
+  // 중국 후보 최대 5 + 해외 후보 최대 3 (점수 순) — 생성 판과 같은 묶음 (story-groups.ts)
+  const byScore = [...groups].sort((a, b) => b.score - a.score);
+  const picked = [
+    ...byScore.filter((g) => isChinaCandidate(g.primary)).slice(0, GROUP_SLOTS.cn),
+    ...byScore.filter((g) => !isChinaCandidate(g.primary)).slice(0, GROUP_SLOTS.intl),
+  ];
   const top: TopStory[] = picked.map((g, i) => ({
     rank: i + 1,
     section: SECTION_OF[g.primary.category] ?? "industry",
@@ -93,6 +99,7 @@ export function headlinesEdition(groups: CandidateGroup[], editionDate: string, 
     why: "",
     refs: [g.shortId],
     primary_ref: g.shortId,
+    group: isChinaCandidate(g.primary) ? "cn" : "intl",
   }));
   return {
     headline: `${md(editionDate)} 중국 AI 주요 기사`,

@@ -90,6 +90,11 @@ export interface TopStory<Ref = string> {
   refs: Ref[];
   primary_ref: Ref;
   /**
+   * 묶음 (2026-11-09~): 중국 묶음 "cn"(최대 5건) · 해외 묶음 "intl"(최대 3건). 생성 정리(story-groups.ts arrangeTopStories)가
+   * isChinaSubject 로 정한다. 예전 판에는 없다 — 그때는 한 목록으로 보인다.
+   */
+  group?: "cn" | "intl";
+  /**
    * "쉬운 AI 설명" (easy-terms.ts). 생성·검증·저장 content 에는 없다 — 화면에 보낼 때(public.ts hydrate)만
    * briefing_easy_terms 에서 붙인다. 판 검증이 top_stories 를 알려진 필드로만 다시 만들므로 모델이 넣을 수 없다.
    */

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { PublicBriefing } from "@/lib/briefing/public";
 import { outletsOf } from "@/lib/briefing/view";
 import { Sources, StoryMore, sectionLabel } from "@/components/briefing/briefing-view";
+import { displayNo, isGrouped } from "@/lib/briefing/story-groups";
 
 /**
  * "오늘" 홈 브리핑 히어로의 주요 기사 — 줄을 누르면 그 자리에서 what·"왜 중요한가"·근거 기사가 펼쳐진다 (페이지 이동 없음).
@@ -18,13 +19,23 @@ export function TodayStories({ briefing }: { briefing: PublicBriefing }) {
   const t = useTranslations("briefing");
   const [open, setOpen] = useState(0);
   const stories = briefing.content.top_stories;
+  // 묶은 판(2026-11-09~): 중국 묶음 · 해외 묶음 머리 줄을 넣고 번호는 묶음마다 1부터 (브리핑 페이지와 같은 displayNo)
+  const grouped = isGrouped(stories);
   return (
     <ol className="border-t border-white/15" data-testid="today-stories">
       {stories.map((s, i) => {
         const expanded = open === i;
         const outlets = outletsOf(s.refs, briefing.articles).length;
         const panelId = `today-story-${s.rank}`;
-        return (
+        const head =
+          grouped && (i === 0 || stories[i - 1].group !== s.group) ? (
+            <li key={`g-${s.group}`} aria-hidden="true" className="pb-1 pt-3 text-[12.5px] font-semibold text-jade-bright" data-testid={`today-group-${s.group}`}>
+              {t(s.group === "cn" ? "topStoriesCn" : "topStoriesIntl")}{" "}
+              <span className="font-normal text-white/60">{t("groupCount", { count: stories.filter((x) => x.group === s.group).length })}</span>
+            </li>
+          ) : null;
+        return [
+          head,
           <li key={s.rank} className="border-b border-white/15">
             <button
               type="button"
@@ -34,7 +45,7 @@ export function TodayStories({ briefing }: { briefing: PublicBriefing }) {
               className="flex min-h-[52px] w-full items-center gap-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-jade-bright sm:gap-4"
             >
               <span aria-hidden="true" className="w-6 shrink-0 font-mono text-sm text-jade-bright">
-                {String(s.rank).padStart(2, "0")}
+                {String(displayNo(s, stories)).padStart(2, "0")}
               </span>
               <span className="hidden shrink-0 rounded-[3px] border border-white/20 px-1.5 text-[11px] leading-5 text-white/70 sm:inline">
                 {sectionLabel(t, s.section)}
@@ -64,8 +75,8 @@ export function TodayStories({ briefing }: { briefing: PublicBriefing }) {
               {/* 쉬운 AI 설명 · 히스토리를 나란히 — 브리핑 페이지·팝업과 같은 부품 (Gate 2) */}
               <StoryMore story={s} locale={briefing.locale} tone="dark" className="mt-3" />
             </div>
-          </li>
-        );
+          </li>,
+        ];
       })}
     </ol>
   );

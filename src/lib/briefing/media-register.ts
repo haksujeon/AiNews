@@ -46,6 +46,8 @@ const CARD_HEADING: Record<BriefingLocale, (d: string) => string> = {
   en: (d) => `${d} at a glance`,
 };
 const NUMBERS_LABEL: Record<BriefingLocale, string> = { ko: "숫자", zh: "数字", en: "Numbers" };
+/** 묶은 판(중국 5 · 해외 3)의 해외 기사 번호 — 사이트 briefing.intlNo 와 같은 문구 */
+const INTL_LABEL: Record<BriefingLocale, (n: number) => string> = { ko: (n) => `해외 ${n}`, zh: (n) => `海外${n}`, en: (n) => `Global ${n}` };
 
 export async function registerMedia(input: RegisterInput): Promise<RegisterResult> {
   const { date, locale, kind, file, source } = input;
@@ -85,7 +87,7 @@ export async function registerMedia(input: RegisterInput): Promise<RegisterResul
     const meta = await sharp(abs).metadata();
     width = meta.width ?? null;
     height = meta.height ?? null;
-    alt = cardAltText(content, CARD_HEADING[locale](formatShortDate(date, locale)), NUMBERS_LABEL[locale]);
+    alt = cardAltText(content, CARD_HEADING[locale](formatShortDate(date, locale)), NUMBERS_LABEL[locale], INTL_LABEL[locale]);
   }
 
   await pool.query(
