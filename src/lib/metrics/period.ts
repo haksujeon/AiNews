@@ -1106,13 +1106,13 @@ export interface PeriodEventSummary {
 }
 
 /**
- * 1단계: 전재 묶기(news-rank 의 rankStories, 데일리·홈과 같은 함수)를 기간 전체에 적용 (정치 기사 제외).
+ * 1단계: 전재 묶기(news-rank 의 rankStories, 데일리·홈과 같은 함수 — 사건 합치기는 2단계가 하므로 eventCoverage: false)를 기간 전체에 적용 (정치 기사 제외).
  * 2단계: groupPeriodStories (같은 실체 + 같은 제품 토큰/제목 유사 + ±2일).
  * stories 정렬: 매체 수 → 점수 (LLM 후보 순서).
  */
 export function crossSourceStories(arts: PeriodArticle[]): { stories: PeriodStory[]; events: PeriodEventSummary[] } {
   const kept = arts.filter((a) => !isPolitical(asCandidate(a)));
-  const stories: PeriodStory[] = rankStories(kept).map((st) => {
+  const stories: PeriodStory[] = rankStories(kept, { eventCoverage: false }).map((st) => {
     const members = [st.primary, ...st.siblings];
     return {
       ids: members.map((m) => m.id),

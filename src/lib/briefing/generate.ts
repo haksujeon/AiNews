@@ -61,6 +61,7 @@ import {
   latestBriefing,
   loadCandidateArticles,
   previousEditionSummary,
+  recentTopStories,
   withDateLock,
   type PreviousEdition,
 } from "./repository";
@@ -468,7 +469,9 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
     const excluded = [...new Set(opts.excludeArticleIds ?? (Array.isArray(inherited) ? inherited.filter((x): x is string => typeof x === "string") : []))].sort();
     const excludedSet = new Set(excluded);
     const articles = (await loadCandidateArticles(period.periodStart, period.periodEnd)).filter((a) => !excludedSet.has(a.id));
-    const sel = selectCandidates(articles);
+    // P4: 최근 3개 발행 판의 주요 기사 (후보 줄에 "최근 판에 실림" 표시)
+    const recent = await recentTopStories(period.periodStart);
+    const sel = selectCandidates(articles, undefined, { recent });
     const mode = editionModeFor(sel.totalGroups);
     // 누락 재생성: uuid → 후보 묶음 짧은 id (대표·전재 형제 어느 쪽이든). 후보 40개 밖이면 넣을 수 없다
     const must = new Set(opts.mustInclude ?? []);

@@ -25,7 +25,8 @@ import { cvoConflict, rankIssues, uncitedDirectionConflicts, validateWeekly, nor
 import { buildStoryPool, moneyRowProblem } from "../../src/lib/briefing/periodic/prompt";
 import { numericValues, checkTranslation } from "../../src/lib/briefing/translate";
 import { reducedDaysFrom, type SourceDayCount } from "../../src/lib/metrics/period";
-import { rankStories, type RankableArticle } from "../../src/lib/news-rank";
+import { independentOutlets, rankStories, recentRepeatOf, recentStoryOf, type RankableArticle } from "../../src/lib/news-rank";
+import { splitQuota } from "../../src/lib/briefing/select";
 import type { CandidateArticle } from "../../src/lib/briefing/types";
 
 interface Case {
@@ -291,7 +292,7 @@ test("데이터 알림: 축소 수집 판정은 매체별 실제 건수 — 04-1
   assert.equal(reducedDaysFrom(complete, ["2026-10-17"]).has("2026-10-17"), false);
 });
 
-test("선정 가중: 사건 단위 매체 수는 사건의 대표 묶음에만 가산, 한 매체 해외 논문은 감점", () => {
+test("선정 가중 (2026-11-09 P3·P5): 같은 사건은 한 이야기로 합치고, 한 매체 해외 논문은 감점, 금액은 거래 제목에만", () => {
   const a = (id: string, title_kr: string, src: string, title_cn: string, cat = "ai-tech"): RankableArticle => ({ id, source_name: src, category: cat, title_kr, title_cn, summary_kr: "" });
   const day = [
     a("s1", "Anthropic, S-1 투자설명서 공개", "36Kr", "Anthropic公开招股书S-1"),
@@ -299,13 +300,46 @@ test("선정 가중: 사건 단위 매체 수는 사건의 대표 묶음에만 �
     a("s3", "Anthropic S-1, 첫 영업이익", "Synced", "Anthropic S-1首次盈利"),
     a("p1", "MS 연구팀, 진단 에이전트 논문 공개", "36Kr", "微软研究团队发布诊断论文"),
     a("c1", "딥시크, 신규 라운드 1000억 위안", "36Kr", "DeepSeek新一轮融资1000亿"),
+    a("x1", "엔비디아 시가총액 3,000억 달러 증발", "Huxiu", "英伟达市值蒸发3000亿美元"),
   ];
   const st = rankStories(day);
   const ant = st.filter((x) => ["s1", "s2", "s3"].includes(x.primary.id));
-  assert.equal(ant.filter((x) => x.scoreDetail.cross_coverage > 0).length, 1);
+  assert.equal(ant.length, 1, "같은 사건 세 묶음이 한 이야기로");
+  assert.equal(ant[0].siblings.length, 2);
   assert.equal(ant[0].eventSources.length, 3);
+  // s1·s2 는 같은 글(전재)이라 s2 매체는 0.5 (P2) → 독립 매체 2.5
+  assert.equal(ant[0].scoreDetail.coverage, 4 * Math.log2(1 + 2.5));
   assert.equal(st.find((x) => x.primary.id === "p1")!.scoreDetail.foreign_paper, -1.5);
-  assert.equal(st.find((x) => x.primary.id === "c1")!.scoreDetail.cn_deal, 0.5);
+  // 1000억 위안 ≈ 141억 달러 → 100억 달러 이상 +1.5 (투자 제목)
+  assert.equal(st.find((x) => x.primary.id === "c1")!.scoreDetail.amount, 1.5);
+  // 거래가 아닌 금액(시가총액 증발)은 가산하지 않는다
+  assert.equal(st.find((x) => x.primary.id === "x1")!.scoreDetail.amount, 0);
+});
+
+test("P2: 같은 글을 옮겨 실은 매체는 0.5 로 센다", () => {
+  const a = (id: string, src: string, title_cn: string): RankableArticle => ({ id, source_name: src, category: "ai-tech", title_kr: id, title_cn, summary_kr: "가".repeat(src === "Qbitai" ? 50 : 10) });
+  assert.equal(independentOutlets([[a("r1", "Qbitai", "同一篇文章标题"), a("r2", "Huxiu", "同一篇文章标题")]]), 1.5);
+  assert.equal(independentOutlets([[a("r1", "Qbitai", "甲")], [a("r3", "Huxiu", "乙")]]), 2);
+});
+
+test("P1: 후보 = 중국 (max−해외 몫) + 해외 몫, 모자라면 다른 쪽으로 채우고 점수 순 유지", () => {
+  const xs = Array.from({ length: 50 }, (_, i) => ({ i, cn: i % 5 !== 0 }));
+  const pick = splitQuota(xs, (x) => x.cn, 40, 12);
+  assert.equal(pick.length, 40);
+  assert.equal(pick.filter((x) => !x.cn).length, 10, "해외가 10개뿐이면 10개 전부");
+  assert.deepEqual(pick.map((x) => x.i), [...pick.map((x) => x.i)].sort((a, b) => a - b));
+  const many = Array.from({ length: 60 }, (_, i) => ({ i, cn: i >= 30 }));
+  const p2 = splitQuota(many, (x) => x.cn, 40, 12);
+  assert.equal(p2.filter((x) => !x.cn).length, 12);
+  assert.equal(p2.filter((x) => x.cn).length, 28);
+});
+
+test("P4: 최근 판에 실린 같은 회사 같은 이야기면 표시, 다른 회사·오래된 판은 표시 안 함", () => {
+  const a = (id: string, title_kr: string, title_cn: string, news_date: string): RankableArticle => ({ id, source_name: "36Kr", category: "ai-biz", title_kr, title_cn, summary_kr: "", news_date });
+  const recent = [recentStoryOf("11-04 판: 딥시크 2차 투자 유치", "딥시크, 두 번째 투자 유치 규모 1055억 위안", [a("o1", "딥시크 두 번째 투자 유치 1055억 위안", "DeepSeek第二轮融资1055亿", "2026-11-04")])];
+  assert.equal(recentRepeatOf([a("n1", "딥시크 두 번째 투자 유치, 텐센트 주도", "DeepSeek第二轮融资腾讯领投", "2026-11-05")], recent), "11-04 판: 딥시크 2차 투자 유치");
+  assert.equal(recentRepeatOf([a("n2", "알리바바 큐원 새 모델 공개", "阿里千问发布新模型", "2026-11-05")], recent), null);
+  assert.equal(recentRepeatOf([a("n3", "딥시크 두 번째 투자 유치, 텐센트 주도", "DeepSeek第二轮融资腾讯领投", "2026-11-12")], recent), null);
 });
 
 test("여러 문장 필드 길이: 넘친 끝 문장만 통째로 뺀다 (10-28 what 175/160 — 감사 수정안 '마지막 문장 삭제'), 한 문장은 그대로", () => {

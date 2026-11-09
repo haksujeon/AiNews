@@ -4,15 +4,18 @@
  *  1. 입력: 그날(베이징 news_date) PUBLIC_NEWS_WHERE 를 통과한 ai-* 기사 (DB 조회는 repository.ts)
  *  2. 정치 기사 제외 (재분류 오류로 ai-biz 에 들어온 정치·외교 기사)
  *  3. 전재 묶기: title_cn 이 같거나 한자 바이그램 Jaccard ≥ 0.6 이면 같은 글
- *  4. 묶음별 점수 → 상위 40개, 점수 순으로 A01.. 짧은 id
- *  (3·4 는 홈 목록과 공유하는 src/lib/news-rank.ts 의 rankStories)
+ *  4. 같은 사건 합치기 → 이야기별 점수 (3·4 는 홈 목록과 공유하는 src/lib/news-rank.ts 의 rankStories)
+ *  5. 후보 40개 = 중국 후보 28 + 해외 후보 12 (P1, 2026-11-09 — 판이 중국 5 · 해외 3 이므로 해외 후보도 일정 수 보장).
+ *     한쪽이 모자라면 다른 쪽으로 채운다. 고른 40개는 점수 순으로 A01.. 짧은 id
+ *  6. 최근 3개 판 주요 기사와 같은 이야기면 recent 표시 (P4 — 점수는 깎지 않는다, 프롬프트에 보여 줌)
  *
  * 이 파일은 DB 를 import 하지 않는다 (단위 테스트가 DATABASE_URL 없이 돈다).
  */
 import { createHash } from "node:crypto";
 import type { CandidateArticle, CandidateGroup, EditionMode } from "./types";
 import { findEntities } from "./entities";
-import { rankStories, sameEvent } from "../news-rank";
+import { rankStories, recentRepeatOf, sameEvent, type RecentStory } from "../news-rank";
+import { isChinaCandidate } from "./rules";
 
 // 묶기·점수 공식은 홈 목록 "주요 4건"과 공유한다 (src/lib/news-rank.ts). 여기서 다시 쓰지 말 것.
 // 같은 사건 판정(sameEvent)도 news-rank.ts 로 옮겼다 — 데일리·홈 점수(사건 단위 매체 수)와 주간·월간 2단계 묶기가 같은 함수.
@@ -30,6 +33,8 @@ export {
 } from "../news-rank";
 
 export const MAX_CANDIDATES = 40;
+/** P1: 후보 40개 중 해외 후보 몫 (나머지 28 = 중국 후보) */
+export const OVERSEAS_CANDIDATES = 12;
 
 const POLITICS_RE = /총리|대통령|트럼프|외교부|국회|의회|선거|중의원|참의원|백악관|首相|总统|特朗普|外交部|白宫|议会|选举/;
 
@@ -47,7 +52,21 @@ export interface SelectionResult {
   politicalExcluded: string[]; // uuid
 }
 
-export function selectCandidates(articles: CandidateArticle[], max = MAX_CANDIDATES): SelectionResult {
+/** P1: 점수 순 이야기 → 중국 후보 (max − overseas) + 해외 후보 overseas. 한쪽이 모자라면 다른 쪽으로 채우고, 고른 것은 점수 순 그대로 */
+export function splitQuota<T>(ranked: T[], isCn: (x: T) => boolean, max: number, overseas: number): T[] {
+  const cn = ranked.filter(isCn);
+  const os = ranked.filter((x) => !isCn(x));
+  const nOs = Math.min(os.length, Math.max(overseas, max - cn.length));
+  const nCn = Math.min(cn.length, max - nOs);
+  const pick = new Set<T>([...cn.slice(0, nCn), ...os.slice(0, nOs)]);
+  return ranked.filter((x) => pick.has(x));
+}
+
+export function selectCandidates(
+  articles: CandidateArticle[],
+  max = MAX_CANDIDATES,
+  opts: { recent?: readonly RecentStory[] } = {}
+): SelectionResult {
   const politicalExcluded = articles.filter(isPolitical).map((a) => a.id);
   const kept = articles.filter((a) => !politicalExcluded.includes(a.id));
   // 브리핑 후보는 cited 없이 점수 순 (rankStories 의 정렬 = 점수 내림차순 → 대표 id)
@@ -63,7 +82,12 @@ export function selectCandidates(articles: CandidateArticle[], max = MAX_CANDIDA
         scoreDetail: st.scoreDetail,
       }) satisfies CandidateGroup
   );
-  const groups = raw.slice(0, max).map((g, i) => ({ ...g, shortId: `A${String(i + 1).padStart(2, "0")}` }));
+  const overseas = Math.round((OVERSEAS_CANDIDATES * max) / MAX_CANDIDATES);
+  const recent = opts.recent ?? [];
+  const groups = splitQuota(raw, (g) => isChinaCandidate(g.primary), max, overseas).map((g, i) => {
+    const rep = recentRepeatOf([g.primary, ...g.siblings], recent);
+    return { ...g, shortId: `A${String(i + 1).padStart(2, "0")}`, ...(rep ? { recent: rep } : {}) };
+  });
   return { groups, totalGroups: raw.length, publicArticleCount: articles.length, politicalExcluded };
 }
 
@@ -84,10 +108,12 @@ export function computeInputHash(groups: CandidateGroup[], promptVersion: string
       .update([a.title_kr, a.title_cn, a.summary_kr, a.ai_insights_kr, a.category].join("\u0001"))
       .digest("hex")
       .slice(0, 16);
-  const rows = groups
+  const rows: string[] = groups
     .flatMap((g) => [g.primary, ...g.siblings])
     .map((a) => `${a.id}:${fp(a)}`)
     .sort();
+  // P4 최근 판 표시도 프롬프트 입력이다
+  rows.push(...groups.filter((g) => g.recent).map((g) => `recent:${g.primary.id}:${g.recent}`));
   return createHash("sha256")
     .update(JSON.stringify({ promptVersion, model, rows }))
     .digest("hex");

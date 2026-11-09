@@ -1,5 +1,5 @@
 {
- "totalGroups": 65,
+ "totalGroups": 59,
  "political": [
   "b8789b32-fde5-4299-8405-0e87235e3f10",
   "918f7ebe-7230-4357-80af-39f775133208"
@@ -8,104 +8,42 @@
   {
    "shortId": "A01",
    "primary": "d215abbf-e223-4882-b6f1-b39f8fa85178",
-   "siblings": [],
-   "sources": [
-    "36Kr"
+   "siblings": [
+    "d2c564c0-c02f-4af9-b478-7cc9fabb5584",
+    "3f1953a2-5934-4301-9342-2274c5cb5ac7",
+    "4884a57f-456f-4f6e-b705-30ffedc2f352",
+    "67279035-ff53-45f7-ae02-74d62718323b",
+    "4d432de2-d718-46e6-baec-5db4995a7074",
+    "7a564500-eb92-49c2-937d-c3ac61eccfe9"
    ],
-   "score": 12.188,
+   "sources": [
+    "36Kr",
+    "Synced",
+    "Huxiu",
+    "XinZhiYuan"
+   ],
+   "score": 12.888,
    "scoreDetail": {
-    "coverage": 4,
-    "source": 0.8,
+    "coverage": 9.287712379549449,
+    "source": 1,
     "category": 1,
     "company": 0.6,
     "number": 0.5,
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 5.288
+    "amount": 0,
+    "event_type": 0.5
    }
   },
   {
    "shortId": "A02",
-   "primary": "7e5a209c-8668-4b27-bfc2-51a093a4aa25",
-   "siblings": [
-    "63f96969-980d-4acd-a56d-92544f929d26"
-   ],
-   "sources": [
-    "Huxiu",
-    "36Kr"
-   ],
-   "score": 8.94,
-   "scoreDetail": {
-    "coverage": 6.339850002884624,
-    "source": 0.8,
-    "category": 0.8,
-    "company": 1,
-    "number": 0,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A03",
-   "primary": "d41fdcbf-7730-46b0-8ab9-2e23d1737a78",
-   "siblings": [
-    "8b6998e8-d348-4ad4-96d5-63e15e2cabac"
-   ],
-   "sources": [
-    "Huxiu",
-    "36Kr"
-   ],
-   "score": 8.74,
-   "scoreDetail": {
-    "coverage": 6.339850002884624,
-    "source": 0.8,
-    "category": 1,
-    "company": 0.6,
-    "number": 0,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A04",
-   "primary": "22842adc-6d44-4834-99cc-fa1aea2e0676",
-   "siblings": [
-    "00e3a282-2764-4f13-af69-09b0ca9eb750"
-   ],
-   "sources": [
-    "Huxiu",
-    "36Kr"
-   ],
-   "score": 8.54,
-   "scoreDetail": {
-    "coverage": 6.339850002884624,
-    "source": 0.8,
-    "category": 0.8,
-    "company": 0.6,
-    "number": 0,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A05",
    "primary": "b0686258-69e1-43a4-b88e-fa1eabd481f6",
    "siblings": [],
    "sources": [
     "Qbitai"
    ],
-   "score": 7.5,
+   "score": 8,
    "scoreDetail": {
     "coverage": 4,
     "source": 1,
@@ -115,12 +53,168 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0.5
+   }
+  },
+  {
+   "shortId": "A03",
+   "primary": "7e5a209c-8668-4b27-bfc2-51a093a4aa25",
+   "siblings": [
+    "63f96969-980d-4acd-a56d-92544f929d26"
+   ],
+   "sources": [
+    "Huxiu",
+    "36Kr"
+   ],
+   "score": 7.888,
+   "scoreDetail": {
+    "coverage": 5.28771237954945,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 1,
+    "number": 0,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 0,
+    "event_type": 0
+   }
+  },
+  {
+   "shortId": "A04",
+   "primary": "afeef382-a96e-476b-b487-835986449f89",
+   "siblings": [],
+   "sources": [
+    "Qbitai"
+   ],
+   "score": 7.8,
+   "scoreDetail": {
+    "coverage": 4,
+    "source": 1,
+    "category": 0.8,
+    "company": 0.5,
+    "number": 0.5,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 0.5,
+    "event_type": 0.5
+   }
+  },
+  {
+   "shortId": "A05",
+   "primary": "d41fdcbf-7730-46b0-8ab9-2e23d1737a78",
+   "siblings": [
+    "8b6998e8-d348-4ad4-96d5-63e15e2cabac"
+   ],
+   "sources": [
+    "Huxiu",
+    "36Kr"
+   ],
+   "score": 7.688,
+   "scoreDetail": {
+    "coverage": 5.28771237954945,
+    "source": 0.8,
+    "category": 1,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
    "shortId": "A06",
+   "primary": "2c610ba1-ebec-4b35-9918-eb3d091783d2",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 7.6,
+   "scoreDetail": {
+    "coverage": 4,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 0,
+    "event_type": 0.5
+   }
+  },
+  {
+   "shortId": "A07",
+   "primary": "b1a74e3f-45bc-4934-a2c3-2e3a79822c71",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 7.6,
+   "scoreDetail": {
+    "coverage": 4,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 1,
+    "number": 0.5,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 0,
+    "event_type": 0.5
+   }
+  },
+  {
+   "shortId": "A08",
+   "primary": "b852a37c-b39c-46bb-96b2-57ee3c1bbbce",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 7.6,
+   "scoreDetail": {
+    "coverage": 4,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 0,
+    "number": 0.5,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 1,
+    "event_type": 0.5
+   }
+  },
+  {
+   "shortId": "A09",
+   "primary": "22842adc-6d44-4834-99cc-fa1aea2e0676",
+   "siblings": [
+    "00e3a282-2764-4f13-af69-09b0ca9eb750"
+   ],
+   "sources": [
+    "Huxiu",
+    "36Kr"
+   ],
+   "score": 7.488,
+   "scoreDetail": {
+    "coverage": 5.28771237954945,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 0,
+    "event_type": 0
+   }
+  },
+  {
+   "shortId": "A10",
    "primary": "9c8d8c65-83cb-4c9e-abc1-0d04b709d8f5",
    "siblings": [],
    "sources": [
@@ -136,12 +230,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A07",
+   "shortId": "A11",
    "primary": "fd119d97-8a0c-43d1-a271-33a8d1d8aa80",
    "siblings": [],
    "sources": [
@@ -157,33 +251,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A08",
-   "primary": "2c610ba1-ebec-4b35-9918-eb3d091783d2",
-   "siblings": [],
-   "sources": [
-    "36Kr"
-   ],
-   "score": 7.1,
-   "scoreDetail": {
-    "coverage": 4,
-    "source": 0.8,
-    "category": 0.8,
-    "company": 1,
-    "number": 0.5,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A09",
+   "shortId": "A12",
    "primary": "52f92762-e22c-43b8-a00d-4a2ec94442a8",
    "siblings": [],
    "sources": [
@@ -199,12 +272,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A10",
+   "shortId": "A13",
    "primary": "7ea3a37d-b2be-4977-bb6c-2fdb77cf5855",
    "siblings": [],
    "sources": [
@@ -220,33 +293,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A11",
-   "primary": "b1a74e3f-45bc-4934-a2c3-2e3a79822c71",
-   "siblings": [],
-   "sources": [
-    "36Kr"
-   ],
-   "score": 7.1,
-   "scoreDetail": {
-    "coverage": 4,
-    "source": 0.8,
-    "category": 0.8,
-    "company": 1,
-    "number": 0.5,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A12",
+   "shortId": "A14",
    "primary": "0134efd0-7717-441e-8764-200268a31a88",
    "siblings": [],
    "sources": [
@@ -262,12 +314,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A13",
+   "shortId": "A15",
    "primary": "86d6b9b8-07a4-4c2e-a1bb-f5de88cc84a8",
    "siblings": [],
    "sources": [
@@ -283,12 +335,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A14",
+   "shortId": "A16",
    "primary": "cf9e32f5-21e7-4c2c-b1b2-39f0e4a0d614",
    "siblings": [],
    "sources": [
@@ -304,12 +356,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A15",
+   "shortId": "A17",
    "primary": "188a07cf-11f7-44e4-a66e-63c243bcba36",
    "siblings": [],
    "sources": [
@@ -325,12 +377,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A16",
+   "shortId": "A18",
    "primary": "22603099-470c-4d9e-b7cf-61bcc550ddd9",
    "siblings": [],
    "sources": [
@@ -346,12 +398,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A17",
+   "shortId": "A19",
    "primary": "68a9d9e5-17d8-4247-86b9-bad792f71fdf",
    "siblings": [],
    "sources": [
@@ -367,12 +419,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A18",
+   "shortId": "A20",
    "primary": "700fed7c-590f-4a70-9221-dd5b8b6e09ff",
    "siblings": [],
    "sources": [
@@ -388,12 +440,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A19",
+   "shortId": "A21",
    "primary": "9a682334-5dbe-4875-a510-eff9c39f1472",
    "siblings": [],
    "sources": [
@@ -409,12 +461,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A20",
+   "shortId": "A22",
    "primary": "eb31cb4d-df83-45a3-a9a0-c1715ba9eb4b",
    "siblings": [],
    "sources": [
@@ -430,12 +482,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A21",
+   "shortId": "A23",
    "primary": "390a6f19-aae0-4ca8-af0e-7636deffb403",
    "siblings": [],
    "sources": [
@@ -451,50 +503,8 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A22",
-   "primary": "afeef382-a96e-476b-b487-835986449f89",
-   "siblings": [],
-   "sources": [
-    "Qbitai"
-   ],
-   "score": 6.8,
-   "scoreDetail": {
-    "coverage": 4,
-    "source": 1,
-    "category": 0.8,
-    "company": 0.5,
-    "number": 0.5,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A23",
-   "primary": "3f1953a2-5934-4301-9342-2274c5cb5ac7",
-   "siblings": [],
-   "sources": [
-    "36Kr"
-   ],
-   "score": 6.7,
-   "scoreDetail": {
-    "coverage": 4,
-    "source": 0.8,
-    "category": 0.8,
-    "company": 0.6,
-    "number": 0.5,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
@@ -514,33 +524,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
    "shortId": "A25",
-   "primary": "67279035-ff53-45f7-ae02-74d62718323b",
-   "siblings": [],
-   "sources": [
-    "Huxiu"
-   ],
-   "score": 6.7,
-   "scoreDetail": {
-    "coverage": 4,
-    "source": 0.6,
-    "category": 1,
-    "company": 0.6,
-    "number": 0.5,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A26",
    "primary": "3bcdbbf9-2eb5-4baf-aa17-7eb730ad697d",
    "siblings": [],
    "sources": [
@@ -556,54 +545,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A27",
-   "primary": "4d432de2-d718-46e6-baec-5db4995a7074",
-   "siblings": [],
-   "sources": [
-    "XinZhiYuan"
-   ],
-   "score": 6.6,
-   "scoreDetail": {
-    "coverage": 4,
-    "source": 1,
-    "category": 1,
-    "company": 0.6,
-    "number": 0,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A28",
-   "primary": "7a564500-eb92-49c2-937d-c3ac61eccfe9",
-   "siblings": [],
-   "sources": [
-    "XinZhiYuan"
-   ],
-   "score": 6.6,
-   "scoreDetail": {
-    "coverage": 4,
-    "source": 1,
-    "category": 1,
-    "company": 0.6,
-    "number": 0,
-    "event": 0,
-    "column": 0,
-    "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
-   }
-  },
-  {
-   "shortId": "A29",
+   "shortId": "A26",
    "primary": "8d50c6e8-fe01-4f36-bfe5-afbf8956599c",
    "siblings": [],
    "sources": [
@@ -619,12 +566,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A30",
+   "shortId": "A27",
    "primary": "b7c0693c-3f82-470c-beec-4141a7d6f296",
    "siblings": [],
    "sources": [
@@ -640,12 +587,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A31",
+   "shortId": "A28",
    "primary": "d1de1954-3701-468a-b20b-684f14721b07",
    "siblings": [],
    "sources": [
@@ -661,33 +608,33 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A32",
-   "primary": "d2c564c0-c02f-4af9-b478-7cc9fabb5584",
+   "shortId": "A29",
+   "primary": "8bfcf938-c18f-4b74-b1b0-49052b60abdb",
    "siblings": [],
    "sources": [
     "Synced"
    ],
-   "score": 6.6,
+   "score": 6.5,
    "scoreDetail": {
     "coverage": 4,
     "source": 1,
     "category": 1,
-    "company": 0.6,
+    "company": 0,
     "number": 0,
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0.5
    }
   },
   {
-   "shortId": "A33",
+   "shortId": "A30",
    "primary": "d98073fa-e189-4fbb-a934-3baf2d2c8a2f",
    "siblings": [],
    "sources": [
@@ -703,12 +650,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A34",
+   "shortId": "A31",
    "primary": "2070e7de-d224-4d88-8628-01d8c1a912ff",
    "siblings": [],
    "sources": [
@@ -724,12 +671,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A35",
+   "shortId": "A32",
    "primary": "21bccac7-193d-43ca-aeb4-effb085338c2",
    "siblings": [],
    "sources": [
@@ -745,12 +692,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A36",
+   "shortId": "A33",
    "primary": "bad5c966-6c95-4dc4-90b7-bc74082ef9c1",
    "siblings": [],
    "sources": [
@@ -766,12 +713,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A37",
+   "shortId": "A34",
    "primary": "03dfebc8-fd05-42ce-a154-874e24d2e67b",
    "siblings": [],
    "sources": [
@@ -787,12 +734,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A38",
+   "shortId": "A35",
    "primary": "755507a6-6ac0-4334-8859-50d9df62a20e",
    "siblings": [],
    "sources": [
@@ -808,12 +755,12 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A39",
+   "shortId": "A36",
    "primary": "ac48d16d-4916-4124-8c48-c7f0e3b1e7da",
    "siblings": [],
    "sources": [
@@ -829,13 +776,13 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
    }
   },
   {
-   "shortId": "A40",
-   "primary": "4884a57f-456f-4f6e-b705-30ffedc2f352",
+   "shortId": "A37",
+   "primary": "53c06df3-47ea-42fa-817e-0781303454ad",
    "siblings": [],
    "sources": [
     "Huxiu"
@@ -850,8 +797,71 @@
     "event": 0,
     "column": 0,
     "foreign_paper": 0,
-    "cn_deal": 0,
-    "cross_coverage": 0
+    "amount": 0,
+    "event_type": 0
+   }
+  },
+  {
+   "shortId": "A38",
+   "primary": "ef465eea-98e2-4e7a-9b21-a4b0b20e5816",
+   "siblings": [],
+   "sources": [
+    "Huxiu"
+   ],
+   "score": 6.2,
+   "scoreDetail": {
+    "coverage": 4,
+    "source": 0.6,
+    "category": 1,
+    "company": 0.6,
+    "number": 0,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 0,
+    "event_type": 0
+   }
+  },
+  {
+   "shortId": "A39",
+   "primary": "012419d9-a4b3-4409-99ff-3b5b701e8556",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 6.1,
+   "scoreDetail": {
+    "coverage": 4,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 0,
+    "number": 0.5,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 0,
+    "event_type": 0
+   }
+  },
+  {
+   "shortId": "A40",
+   "primary": "29930bd2-c925-42f2-b95d-874f41a64746",
+   "siblings": [],
+   "sources": [
+    "36Kr"
+   ],
+   "score": 6.1,
+   "scoreDetail": {
+    "coverage": 4,
+    "source": 0.8,
+    "category": 0.8,
+    "company": 0,
+    "number": 0.5,
+    "event": 0,
+    "column": 0,
+    "foreign_paper": 0,
+    "amount": 0,
+    "event_type": 0
    }
   }
  ]

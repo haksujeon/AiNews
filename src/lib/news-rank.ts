@@ -6,14 +6,22 @@
  *  2. 묶음 점수 = 매체 수(coverage) + 매체 권위 + 카테고리 가중 + 기업 등급 + 구체 숫자
  *                 − 행사·모집 감점 − 칼럼·인터뷰 감점
  *                 − 한 매체만 다룬 해외 연구 논문 감점 + 중국 주요 기업의 큰 금액 가산 (2026-11-02 편집 QA 권고 15)
- *     + 사건 단위 매체 수(cross_coverage): 제목이 다른 같은 사건 묶음(sameEvent — 주간·월간 2단계 묶기와 같은 함수)의
- *       매체를 합쳐 coverage 를 다시 계산한 차이. Anthropic S-1 처럼 10여 건이 제목마다 갈라져도 사건 크기가 점수에 들어간다.
+ *     (예전 cross_coverage — 같은 사건 묶음의 매체를 합친 가산 — 은 2026-11-09 P3 "같은 사건 합치기"로 바뀌었다: 아래)
  *  3. 정렬: (홈 목록만) 발행된 브리핑의 주요 기사 순위 → 점수 내림차순 → 대표 기사 id (결정적)
+ *
+ * 2026-11-09 개선 (비교표 P2·P3·P5, 사용자 결정 "반영"):
+ *  - P3 같은 사건 합치기: sameEvent 로 같은 사건인 전재 묶음을 한 이야기로 합친다 (후보 40칸을 같은 사건이 여러 칸 차지하지 않게).
+ *    합친 이야기의 매체 수가 곧 사건 단위 매체 수라 cross_coverage 가산은 없어졌다.
+ *  - P2 옮겨 실은 매체: 전재 묶음마다 대표 기사 매체 1, 같은 글을 옮겨 실은 매체 0.5 (매체별 최대값의 합)로 coverage 를 센다.
+ *  - P5 사건의 무게: 큰 금액(달러 환산 1억 +0.5 · 10억 +1 · 100억 +1.5)은 투자·매출·인수·상장 제목에만,
+ *    발표·출시·공개·실적 같은 사건 제목 +0.5, 표기 사전의 회사·기관이 나오면 기업 등급 최소 0.5. (cn_deal 은 amount 로 바뀌었다)
+ *  - P4 최근 판 겹침: 점수는 깎지 않고 recentRepeatOf 로 "최근 3개 판에 실린 같은 회사 이야기" 표시만 (프롬프트에 보여 준다).
  *
  * 이 파일은 DB 도 node:crypto 도 import 하지 않는다 (단위 테스트가 DATABASE_URL 없이 돈다).
  * 서버 코드에서만 부른다.
  */
 import { ENTITIES, LATIN_STOP, findEntities, maxEntityTier } from "./briefing/entities";
+import { KO_GLOSSARY } from "./text/ko-glossary";
 
 /** 순위 계산에 필요한 최소 필드. NewsItem 과 CandidateArticle 이 모두 만족한다. */
 export interface RankableArticle {
@@ -54,8 +62,38 @@ const NUMBER_RE = /\d[\d,.]*\s?(?:%|억|만|위안|달러|명|개|배|MW|GW|B\b)
 /** 연구·논문·벤치마크 기사 (한 매체만 다룬 해외 연구는 감점) */
 const RESEARCH_RE = /논문|연구진|연구팀|arXiv|프리프린트|论文|研究团队|研究人员/;
 const CHINA_PLACE_RE = /중국|中国|国产|국산|베이징|상하이|선전|항저우|北京|上海|深圳|杭州|칭화|清华|베이징대|北大/;
-/** 큰 금액: 10억 위안·1억 달러 이상 (억 단위 금액) */
-const BIG_AMOUNT_RE = /\d[\d,.]*\s?(?:조|억)\s?(?:\d[\d,.]*\s?만\s?)?(?:위안|달러)|\d+(?:\.\d+)?\s?(?:万亿|亿)(?:元|美元|人民币)?/;
+/** P5: 거래·실적 제목 (금액 가산은 이런 제목에만 — 분석 글의 "3,000억 증발" 같은 금액은 빼려고) */
+const DEAL_RE = /투자|라운드|펀딩|융자|融资|매출|营收|인수|收购|상장|IPO|베팅|규모/;
+/** P5: 사건 제목 (대표 기사 제목에 있으면 +0.5) */
+const EVENT_TYPE_RE = /출시|공개|발표|오픈소스|가중치|상장|IPO|실적|매출|투자 유치|라운드|인수|정책|규정|국무원|공업정보화부|发布|推出|开源|上市|财报|融资|收购|政策|印发/;
+/** 위안 → 달러 (금액 등급 판정용 고정 환율 — 등급 경계만 보므로 일별 환율을 쓰지 않는다) */
+const USD_PER_CNY = 1 / 7.1;
+const AMOUNT_RE = /(\d[\d,.]*)\s?(조|억)\s?(?:(\d[\d,.]*)\s?만\s?)?(위안|달러)|(\d+(?:\.\d+)?)\s?(万亿|亿)(美元|元|人民币)?/g;
+/** 제목 속 가장 큰 금액 (달러 환산) */
+export function maxAmountUsd(text: string): number {
+  let best = 0;
+  for (const m of text.matchAll(AMOUNT_RE)) {
+    let v: number;
+    let usdUnit: boolean;
+    if (m[1]) {
+      v = parseFloat(m[1].replace(/,/g, "")) * (m[2] === "조" ? 1e12 : 1e8);
+      usdUnit = m[4] === "달러";
+    } else {
+      v = parseFloat(m[5]) * (m[6] === "万亿" ? 1e12 : 1e8);
+      usdUnit = m[7] === "美元";
+    }
+    const usd = usdUnit ? v : v * USD_PER_CNY;
+    if (Number.isFinite(usd) && usd > best) best = usd;
+  }
+  return best;
+}
+export const amountScore = (usd: number) => (usd >= 1e10 ? 1.5 : usd >= 1e9 ? 1 : usd >= 1e8 ? 0.5 : 0);
+/** 표기 사전(ko-glossary)의 회사·기관 이름 (실체 이름표에 없는 회사도 기업 점수 최소 0.5) */
+const GLOSS_COMPANY_NAMES = KO_GLOSSARY.filter((e) => e.kind === "company" || e.kind === "org")
+  .flatMap((e) => [e.ko, ...(e.zh ?? []), ...(e.en ? [e.en] : [])])
+  .filter((x): x is string => typeof x === "string" && x.length >= 2);
+const hasGlossCompany = (t: string) => GLOSS_COMPANY_NAMES.some((n) => t.includes(n));
+
 /** 매체 수 가중 (2026-11-02: 3 → 4, 여러 매체가 다룬 사건을 더 앞으로) */
 export const COVERAGE_WEIGHT = 4;
 export const coverageScore = (sources: number) => COVERAGE_WEIGHT * Math.log2(1 + sources);
@@ -99,25 +137,34 @@ export function dedupeReposts<T extends RankableArticle>(articles: T[], threshol
   return [...groups.values()];
 }
 
-/** 묶음 점수. detail 은 관리자 화면·디버그용 항목별 점수 */
-export function scoreGroup(members: RankableArticle[]): { score: number; detail: Record<string, number> } {
+/**
+ * 이야기 점수. detail 은 관리자 화면·디버그용 항목별 점수.
+ * opts.independent: 독립 매체 수(P2 — 옮겨 실은 매체 0.5). 없으면 매체 수 그대로.
+ * opts.leadTitle: 대표 기사 제목 (사건 제목 가산). 없으면 첫 기사 제목.
+ */
+export function scoreGroup(
+  members: RankableArticle[],
+  opts: { independent?: number; leadTitle?: string } = {}
+): { score: number; detail: Record<string, number> } {
   const sources = new Set(members.map((m) => m.source_name));
   const text = members.map((m) => `${s(m.title_kr)} ${s(m.title_cn)} ${s(m.summary_kr)}`).join(" ");
   const titles = members.map((m) => `${s(m.title_kr)} ${s(m.title_cn)}`).join(" ");
   const ents = findEntities(text);
   const chinese = ents.some((e) => e.chinese) || CHINA_PLACE_RE.test(text);
+  const leadTitle = opts.leadTitle ?? `${s(members[0]?.title_kr)} ${s(members[0]?.title_cn)}`;
   const detail: Record<string, number> = {
-    coverage: coverageScore(sources.size),
+    coverage: coverageScore(opts.independent ?? sources.size),
     source: Math.max(...members.map((m) => SOURCE_WEIGHT[s(m.source_name)] ?? 0.5)),
     category: Math.max(...members.map((m) => CATEGORY_WEIGHT[s(m.category)] ?? 0.5)),
-    company: maxEntityTier(text),
+    company: maxEntityTier(text) || (hasGlossCompany(titles) ? 0.5 : 0),
     number: NUMBER_RE.test(text) ? 0.5 : 0,
     event: EVENT_RE.test(titles) ? -1 : 0,
     column: COLUMN_RE.test(titles) ? -0.5 : 0,
     // 한 매체만 다룬 해외 연구 논문 (10-27 MAI-DxO, 10-28 Meta World-T³ 가 중국 대형 사건보다 위에 왔다)
     foreign_paper: sources.size === 1 && !chinese && RESEARCH_RE.test(titles) ? -1.5 : 0,
-    // 중국 주요 기업(등급 1) + 제목에 큰 금액 (딥시크 1000억 위안 라운드 등)
-    cn_deal: findEntities(titles).some((e) => e.chinese && e.tier >= 1) && BIG_AMOUNT_RE.test(titles) ? 0.5 : 0,
+    // P5 (2026-11-09): 큰 금액은 투자·매출·인수·상장 제목에만 (예전 cn_deal 대신)
+    amount: DEAL_RE.test(titles) ? amountScore(maxAmountUsd(titles)) : 0,
+    event_type: EVENT_TYPE_RE.test(leadTitle) ? 0.5 : 0,
   };
   const score = Object.values(detail).reduce((sum, v) => sum + v, 0);
   return { score: Math.round(score * 1000) / 1000, detail };
@@ -150,7 +197,7 @@ export interface RankedStory<T extends RankableArticle> {
 export interface RankOptions {
   /** 기사 id → 브리핑 주요 기사 순위(1부터). 묶음 안 기사 중 가장 높은 순위를 쓴다. */
   cited?: ReadonlyMap<string, number>;
-  /** 사건 단위 매체 수 가산 (기본 true). 기간 지표(한 달 치 묶음)는 2단계 사건 묶기를 따로 하므로 false */
+  /** 같은 사건 합치기 (기본 true, P3). 기간 지표(한 달 치 묶음)는 2단계 사건 묶기를 따로 하므로 false */
   eventCoverage?: boolean;
 }
 
@@ -194,59 +241,65 @@ export function sameEvent(a: EventLike, b: EventLike): boolean {
   return jaccard(bigrams(a.title_kr), bigrams(b.title_kr)) >= EVENT_TITLE_JACCARD;
 }
 
-/** 묶음별 사건 (union-find, sameEvent). 반환: 묶음 index → 사건 전체 매체, 사건 대표 묶음 여부(점수가 가장 높은 묶음) */
-function eventSourcesOf(groups: { members: RankableArticle[]; sources: string[]; base: number }[]): { sources: string[]; lead: boolean }[] {
-  const feats: EventLike[] = groups.map((g) => {
-    const p = g.members[0];
-    const days = [...new Set(g.members.map((m) => s(m.news_date ?? m.day) || "1970-01-01"))];
-    return {
-      title_kr: s(p.title_kr),
-      title_cn: s(p.title_cn),
-      days,
-      entities: findEntities(g.members.map((m) => `${s(m.title_kr)} ${s(m.title_cn)}`).join(" ")).map((e) => e.key),
-    };
-  });
+/** 전재 묶음의 사건 판정 입력 (실체·날짜·대표 제목) */
+function eventFeat(members: RankableArticle[]): EventLike {
+  const p = members[0];
+  return {
+    title_kr: s(p.title_kr),
+    title_cn: s(p.title_cn),
+    days: [...new Set(members.map((m) => s(m.news_date ?? m.day) || "1970-01-01"))],
+    entities: findEntities(members.map((m) => `${s(m.title_kr)} ${s(m.title_cn)}`).join(" ")).map((e) => e.key),
+  };
+}
+
+/** 전재 묶음 → 같은 사건끼리 (union-find, sameEvent). 반환: 사건마다 묶음 index 목록 */
+function eventClusters(groups: { members: RankableArticle[] }[]): number[][] {
+  const feats = groups.map((g) => eventFeat(g.members));
   const parent = groups.map((_, i) => i);
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
   for (let i = 0; i < groups.length; i++) {
     if (!feats[i].entities.length) continue;
     for (let j = i + 1; j < groups.length; j++) if (feats[j].entities.length && sameEvent(feats[i], feats[j])) parent[find(j)] = find(i);
   }
-  const byRoot = new Map<number, Set<string>>();
-  const leadOf = new Map<number, number>();
-  groups.forEach((g, i) => {
+  const byRoot = new Map<number, number[]>();
+  groups.forEach((_, i) => {
     const r = find(i);
-    if (!byRoot.has(r)) byRoot.set(r, new Set());
-    g.sources.forEach((x) => byRoot.get(r)!.add(x));
-    const cur = leadOf.get(r);
-    if (cur === undefined || g.base > groups[cur].base || (g.base === groups[cur].base && g.members[0].id < groups[cur].members[0].id)) leadOf.set(r, i);
+    if (!byRoot.has(r)) byRoot.set(r, []);
+    byRoot.get(r)!.push(i);
   });
-  return groups.map((_, i) => ({ sources: [...byRoot.get(find(i))!], lead: leadOf.get(find(i)) === i }));
+  return [...byRoot.values()];
+}
+
+/** P2: 독립 매체 수 — 전재 묶음마다 대표 기사 매체 1, 옮겨 실은 매체 0.5 (매체별 최대값의 합) */
+export function independentOutlets(repostGroups: RankableArticle[][]): number {
+  const w = new Map<string, number>();
+  for (const g of repostGroups) {
+    const prim = pickPrimary(g);
+    for (const m of g) {
+      const src = s(m.source_name);
+      if (!src) continue;
+      w.set(src, Math.max(w.get(src) ?? 0, m.id === prim.id ? 1 : 0.5));
+    }
+  }
+  return [...w.values()].reduce((a, b) => a + b, 0);
 }
 
 /**
  * 묶기 + 점수 + 정렬. 같은 입력이면 언제나 같은 순서 (결정적).
- * cited 가 있으면 브리핑에 실린 묶음이 먼저 (편집 검토를 거친 판단이므로), 그다음 점수 순.
+ * 1단계 전재 묶기 → 2단계 같은 사건 합치기(P3, eventCoverage 가 false 면 하지 않음) → 이야기 점수(P2 독립 매체 수·P5).
+ * cited 가 있으면 브리핑에 실린 이야기가 먼저 (편집 검토를 거친 판단이므로), 그다음 점수 순.
  */
 export function rankStories<T extends RankableArticle>(articles: T[], opts: RankOptions = {}): RankedStory<T>[] {
   const cited = opts.cited;
-  const groups = dedupeReposts(articles).map((members) => ({
-    members,
-    sources: [...new Set(members.map((m) => m.source_name).filter((x): x is string => !!x))],
-    scored: scoreGroup(members),
-  }));
-  const ev =
-    opts.eventCoverage === false
-      ? groups.map((g) => ({ sources: g.sources, lead: true }))
-      : eventSourcesOf(groups.map((g) => ({ members: g.members, sources: g.sources, base: g.scored.score })));
-  const evSources = ev.map((e) => e.sources);
-  const stories = groups.map(({ members, sources, scored }, gi) => {
-    const primary = pickPrimary(members);
-    const base = scored;
-    // 사건 단위 매체 수 가산은 사건의 대표 묶음(점수 최고)에만 — 같은 사건 묶음이 상위를 다 차지하지 않게
-    const cross = ev[gi].lead ? Math.max(0, coverageScore(evSources[gi].length) - coverageScore(sources.length)) : 0;
-    const detail = { ...base.detail, cross_coverage: Math.round(cross * 1000) / 1000 };
-    const score = Math.round((base.score + cross) * 1000) / 1000;
+  const groups = dedupeReposts(articles).map((members) => ({ members, base: scoreGroup(members).score }));
+  const clusters = opts.eventCoverage === false ? groups.map((_, i) => [i]) : eventClusters(groups);
+  const stories = clusters.map((idx) => {
+    // 사건의 대표 묶음 = 점수가 가장 높은 전재 묶음 (같으면 첫 기사 id)
+    const gs = idx.map((i) => groups[i]).sort((a, b) => b.base - a.base || a.members[0].id.localeCompare(b.members[0].id));
+    const members = gs.flatMap((g) => g.members);
+    const primary = pickPrimary(gs[0].members);
+    const sources = [...new Set(members.map((m) => m.source_name).filter((x): x is string => !!x))];
+    const scored = scoreGroup(members, { independent: independentOutlets(gs.map((g) => g.members)), leadTitle: `${s(primary.title_kr)} ${s(primary.title_cn)}` });
     let citedRank: number | null = null;
     if (cited) {
       for (const m of members) {
@@ -258,10 +311,10 @@ export function rankStories<T extends RankableArticle>(articles: T[], opts: Rank
       primary,
       siblings: members.filter((m) => m.id !== primary.id),
       sources,
-      score,
-      scoreDetail: detail,
+      score: scored.score,
+      scoreDetail: scored.detail,
       citedRank,
-      eventSources: evSources[gi],
+      eventSources: sources,
     } satisfies RankedStory<T>;
   });
   stories.sort(
@@ -271,6 +324,52 @@ export function rankStories<T extends RankableArticle>(articles: T[], opts: Rank
       a.primary.id.localeCompare(b.primary.id)
   );
   return stories;
+}
+
+// ───────────────────────── P4 최근 판 겹침 (점수에 넣지 않고 표시만)
+
+/** 최근 판에 실린 주요 기사 하나 (제목들·실체·날짜) */
+export interface RecentStory {
+  /** 표시 문구 (예: "11-04 판: 딥시크, 두 번째 투자 유치 규모 1055억 위안") */
+  label: string;
+  titles: string[];
+  title_cn: string;
+  days: string[];
+  entities: string[];
+}
+/** 최근 판 겹침 기준: 같은 실체 + 4일 안 + (같은 영문 제품 토큰 또는 제목 쌍 바이그램 Jaccard ≥ 0.3) */
+export const RECENT_MAX_DAY_GAP = 4;
+export const RECENT_TITLE_JACCARD = 0.3;
+
+/** 근거 기사 묶음 → 최근 판 겹침 판정 입력 (기사 제목들 + 브리핑 제목) */
+export function recentStoryOf(label: string, title: string, members: RankableArticle[]): RecentStory {
+  const f = eventFeat(members.length ? members : [{ id: "", source_name: null, category: null, title_cn: "", title_kr: title, summary_kr: null }]);
+  return {
+    label,
+    titles: [title, ...members.map((m) => s(m.title_kr))].filter(Boolean),
+    title_cn: f.title_cn,
+    days: f.days,
+    entities: findEntities([title, ...members.map((m) => `${s(m.title_kr)} ${s(m.title_cn)}`)].join(" ")).map((e) => e.key),
+  };
+}
+
+/** 후보 이야기(대표 + 형제)가 최근 판 주요 기사와 같은 이야기면 그 표시 문구, 아니면 null */
+export function recentRepeatOf(members: RankableArticle[], recent: readonly RecentStory[]): string | null {
+  if (!recent.length || !members.length) return null;
+  const f = eventFeat(members);
+  const titles = members.map((m) => s(m.title_kr)).filter(Boolean);
+  const tokA = productTokens([...titles, f.title_cn].join(" "));
+  for (const r of recent) {
+    if (!f.entities.some((e) => r.entities.includes(e))) continue;
+    const gap = Math.min(...f.days.flatMap((x) => r.days.map((y) => Math.abs(dayNum(x) - dayNum(y)))));
+    if (!(gap <= RECENT_MAX_DAY_GAP)) continue;
+    const tokB = productTokens([...r.titles, r.title_cn].join(" "));
+    if ([...tokA].some((t) => tokB.has(t))) return r.label;
+    let best = 0;
+    for (const x of titles) for (const y of r.titles) best = Math.max(best, jaccard(bigrams(x), bigrams(y)));
+    if (best >= RECENT_TITLE_JACCARD) return r.label;
+  }
+  return null;
 }
 
 export const DAY_TOP_COUNT = 4;

@@ -11,6 +11,7 @@ import pool from "@/lib/db";
 import { PUBLIC_NEWS_WHERE } from "@/lib/news-query";
 import { scopeCategorySql } from "@/lib/categories";
 import { SOURCE_ARTICLE_COLUMNS } from "./columns";
+import { recentStoryOf, type RankableArticle, type RecentStory } from "@/lib/news-rank";
 import type { BriefingLocale, BriefingStatus, CandidateArticle, EditionMode } from "./types";
 
 /** 판 유형. 데일리·주간·월간이 같은 테이블·상태 기계·관리자 화면을 쓴다 (Gate 2) */
@@ -138,6 +139,39 @@ export async function previousEditionSummary(date: string): Promise<PreviousEdit
   );
   const r = rows[0] as { date: string; headline: string | null; titles: string[] } | undefined;
   return r && r.headline ? { date: r.date, headline: r.headline, titles: (r.titles ?? []).filter(Boolean) } : null;
+}
+
+/**
+ * P4 (2026-11-09): 최근 3개 발행 판(ko 데일리)의 주요 기사 — 후보 줄의 "최근 판에 실림" 표시용 (점수에는 넣지 않는다).
+ * 근거 기사 제목·날짜·실체로 같은 이야기를 판정한다 (news-rank recentRepeatOf).
+ */
+export async function recentTopStories(date: string, editions = 3): Promise<RecentStory[]> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (edition_date) to_char(edition_date, 'MM-DD') AS d, content->'top_stories' AS tops
+       FROM daily_briefings
+      WHERE edition_type = 'daily' AND locale = 'ko' AND status = 'published' AND edition_date < $1::date
+      ORDER BY edition_date DESC, version DESC
+      LIMIT $2`,
+    [date, editions]
+  );
+  const stories = rows.flatMap((r: { d: string; tops: unknown }) =>
+    (Array.isArray(r.tops) ? r.tops : [])
+      .filter((t): t is { title: string; refs?: unknown; primary_ref?: unknown } => !!t && typeof t === "object" && typeof (t as { title?: unknown }).title === "string")
+      .map((t) => ({ d: r.d, title: t.title, ids: [t.primary_ref, ...(Array.isArray(t.refs) ? t.refs : [])].filter((x): x is string => typeof x === "string") }))
+  );
+  const ids = [...new Set(stories.flatMap((x) => x.ids))];
+  const arts = ids.length
+    ? (
+        await pool.query(
+          `SELECT id::text AS id, source_name, category, COALESCE(title_cn, '') AS title_cn, COALESCE(title_kr, '') AS title_kr, NULL AS summary_kr,
+                  to_char((news_date AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS news_date
+             FROM ai_news_ex WHERE id = ANY($1)`,
+          [ids]
+        )
+      ).rows
+    : [];
+  const byId = new Map<string, RankableArticle>(arts.map((a: RankableArticle) => [a.id, a]));
+  return stories.map((x) => recentStoryOf(`${x.d} 판: ${x.title}`, x.title, x.ids.map((i) => byId.get(i)).filter((a): a is RankableArticle => !!a)));
 }
 
 export interface NewBriefing {

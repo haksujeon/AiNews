@@ -75,6 +75,8 @@ export interface CandidateGroup {
   eventSources?: string[];
   score: number;
   scoreDetail: Record<string, number>;
+  /** P4: 최근 3개 판 주요 기사와 같은 이야기면 그 표시 (예: "11-04 판: …"). 점수에는 넣지 않는다 */
+  recent?: string;
 }
 
 export interface TopStory<Ref = string> {
