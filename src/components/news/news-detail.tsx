@@ -59,8 +59,9 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
 
   return (
     <article className="mx-auto max-w-6xl">
+      {/* "목록으로" = 뉴스 목록 (QA B-07: 홈으로 가고 있었다) */}
       <Link
-        href="/"
+        href="/news"
         className="mb-8 inline-flex items-center gap-1.5 rounded-sm text-[13px] text-ink-3 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />

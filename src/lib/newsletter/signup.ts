@@ -8,44 +8,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import pool from "@/lib/db";
 import { CONSENT_VERSION } from "@/lib/trust/config";
 
-export const SIGNUP_LANGS = ["ko", "zh", "en"] as const;
-export type SignupLang = (typeof SIGNUP_LANGS)[number];
+export * from "./signup-rules";
+import { SIGNUP_LANGS, type SignupInput, type SignupLang } from "./signup-rules";
 
 /** 확인 메일 링크 유효 시간 — 지나면 확인 대기 정보도 지운다 */
 export const CONFIRM_TTL_HOURS = 48;
-
-export interface SignupInput {
-  organization: string;
-  name: string;
-  jobTitle: string | null;
-  email: string;
-  language: SignupLang;
-  source: string | null;
-}
-
-export type SignupFieldError = "organization" | "name" | "jobTitle" | "email" | "language" | "consent" | "age";
-
-const EMAIL_RE = /^[^\s@<>()[\]\\,;:"]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
-const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim().slice(0, max) : "");
-
-/** 신청서 검사 (순수). 틀린 칸 목록을 돌려준다 */
-export function parseSignup(body: Record<string, unknown>): { ok: true; input: SignupInput } | { ok: false; fields: SignupFieldError[] } {
-  const fields: SignupFieldError[] = [];
-  const organization = clean(body.organization, 100);
-  const name = clean(body.name, 60);
-  const jobTitle = clean(body.jobTitle, 60) || null;
-  const email = clean(body.email, 254).toLowerCase();
-  const language = (SIGNUP_LANGS as readonly string[]).includes(String(body.language)) ? (body.language as SignupLang) : null;
-  const source = clean(body.source, 40).replace(/[^a-z0-9-_]/gi, "") || null;
-  if (!organization) fields.push("organization");
-  if (!name) fields.push("name");
-  if (!EMAIL_RE.test(email)) fields.push("email");
-  if (!language) fields.push("language");
-  if (body.consent !== true) fields.push("consent");
-  if (body.age14 !== true) fields.push("age");
-  if (fields.length) return { ok: false, fields };
-  return { ok: true, input: { organization, name, jobTitle, email, language: language!, source } };
-}
 
 /** 봇 걸러내기 (순수): 사람 눈에 안 보이는 칸이 채워졌거나, 화면을 연 지 3초 안에 제출하면 봇으로 본다 */
 export function looksLikeBot(body: Record<string, unknown>, now = Date.now()): boolean {

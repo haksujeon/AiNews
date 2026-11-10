@@ -31,7 +31,8 @@ export async function TodayLive({ batch, locale }: { batch: LatestBatch; locale:
         </span>
         <ul className="flex min-w-0 gap-7 overflow-hidden whitespace-nowrap" aria-label={t("latestLabel")}>
           {batch.items.map((it, i) => (
-            <li key={it.id} className={i > 0 ? "hidden md:block" : "min-w-0 truncate"}>
+            // 첫 제목이 늘 가장 넓게(최소 12rem) 보이고, 나머지는 넓은 화면에서만 칸을 나눠 말줄임 (QA E-03: 768·1024px 에서 첫 제목이 0px 로 사라졌다)
+            <li key={it.id} className={i > 0 ? "hidden min-w-0 max-w-[22rem] truncate xl:block" : "min-w-[12rem] flex-1 truncate"}>
               <Link href={`/news/${it.id}`} className="rounded-sm text-white/90 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade-bright">
                 {getTitle(it, locale)}
               </Link>

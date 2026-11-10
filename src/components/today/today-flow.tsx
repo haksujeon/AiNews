@@ -53,7 +53,8 @@ export function TodayFlow({ flow }: { flow: DayFlow }) {
         <span className="font-mono text-[13px] text-ink-3">{t("flowMeta", { date: formatDateGroup(flow.day, locale), total: nf.format(flow.total) })}</span>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      {/* grid-cols-1 + min-w-0: 열 정의가 없으면 차트 캔버스 기본 폭(300px)이 칸을 밀어 320px 화면에서 가로로 넘쳤다 (QA E-02) */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 [&>*]:min-w-0">
         {/* 지역 */}
         <div className="rounded-md border border-rule bg-background p-5">
           <h3 className="mb-3 font-mono text-xs font-semibold text-ink-3">{t("regionTitle")}</h3>

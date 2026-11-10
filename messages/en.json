@@ -218,8 +218,9 @@
   },
   "notFound": {
     "title": "Page not found",
-    "description": "The article may have been removed, or the address is incorrect.",
-    "backHome": "Back to news"
+    "description": "The article or briefing may not exist, or the address is incorrect.",
+    "backHome": "Back to news",
+    "backBriefing": "See briefings"
   },
   "list": {
     "noResults": "No results found",

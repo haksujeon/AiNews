@@ -218,8 +218,9 @@
   },
   "notFound": {
     "title": "页面不存在",
-    "description": "该文章可能已被删除，或链接地址有误。",
-    "backHome": "返回新闻列表"
+    "description": "您要找的文章或简报可能不存在，或链接地址有误。",
+    "backHome": "返回新闻列表",
+    "backBriefing": "查看简报"
   },
   "list": {
     "noResults": "没有搜索结果",

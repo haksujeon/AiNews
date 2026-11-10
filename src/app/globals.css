@@ -213,6 +213,14 @@
   }
   html {
     color-scheme: light;
+    /* 휴대폰 하단 탭(h-16 + 안전 영역)에 키보드로 옮긴 칸이 가리지 않게 (QA E-04).
+       위쪽은 각 앵커의 scroll-mt-20 이 맡는다 — 여기 scroll-padding-top 을 더하면 둘이 더해져 기사 바로가기가 내려간다 */
+    scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width: 768px) {
+    html {
+      scroll-padding-bottom: 0;
+    }
   }
   html.dark {
     color-scheme: dark;

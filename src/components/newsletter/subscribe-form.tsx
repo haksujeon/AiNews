@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { apiUrl } from "@/lib/api-path";
 import { cn } from "@/lib/utils";
+import { parseSignup } from "@/lib/newsletter/signup-rules";
 
 type Lang = "ko" | "zh" | "en";
 const LANGS: { code: Lang; label: string }[] = [
@@ -42,6 +43,17 @@ export function SubscribeForm({ defaultLang, source }: { defaultLang: Lang; sour
       source,
       t0,
     };
+    // 서버와 같은 검사(parseSignup)를 먼저 — 틀리면 보내지 않고 첫 틀린 칸으로 초점 (QA C-14·C-16)
+    const pre = parseSignup(body);
+    if (!pre.ok) {
+      setBad(pre.fields);
+      setError(t("fixFields"));
+      setState("error");
+      const first = pre.fields[0];
+      const el = e.currentTarget.querySelector<HTMLElement>(first === "age" ? '[name="age14"]' : `[name="${first}"]`);
+      el?.focus();
+      return;
+    }
     setState("busy");
     setBad([]);
     try {
@@ -58,7 +70,8 @@ export function SubscribeForm({ defaultLang, source }: { defaultLang: Lang; sour
       const data = await res.json().catch(() => ({}));
       const fields = Array.isArray(data?.error?.fields) ? (data.error.fields as string[]) : [];
       setBad(fields);
-      setError(fields.length ? t("fixFields") : typeof data.error === "string" ? data.error : data.error?.message ?? t("failed"));
+      // 서버 문구(한국어 고정) 대신 화면 언어 문구 (QA C-15)
+      setError(fields.length ? t("fixFields") : t("failed"));
       setState("error");
     } catch {
       setError(t("failed"));
@@ -149,7 +162,7 @@ export function SubscribeForm({ defaultLang, source }: { defaultLang: Lang; sour
 
       <div className="grid gap-3 border-t border-rule pt-4">
         <label className="flex cursor-pointer items-start gap-3 text-[14px] leading-[1.6] text-ink-2">
-          <input type="checkbox" name="consent" className="mt-1 h-[18px] w-[18px] shrink-0 accent-[var(--jade)]" aria-invalid={bad.includes("consent") || undefined} />
+          <input type="checkbox" name="consent" className="mt-1 h-[18px] w-[18px] shrink-0 accent-[var(--jade)]" aria-invalid={bad.includes("consent") || undefined} aria-describedby={bad.includes("consent") ? "consent-err" : undefined} />
           <span>
             <b className="text-ink">{t("consentRequired")}</b> {t("consentText")}{" "}
             <Link href="/privacy" className="text-jade underline underline-offset-4" target="_blank">
@@ -159,7 +172,7 @@ export function SubscribeForm({ defaultLang, source }: { defaultLang: Lang; sour
         </label>
         {errText("consent", "errConsent")}
         <label className="flex cursor-pointer items-start gap-3 text-[14px] leading-[1.6] text-ink-2">
-          <input type="checkbox" name="age14" className="mt-1 h-[18px] w-[18px] shrink-0 accent-[var(--jade)]" aria-invalid={bad.includes("age") || undefined} />
+          <input type="checkbox" name="age14" className="mt-1 h-[18px] w-[18px] shrink-0 accent-[var(--jade)]" aria-invalid={bad.includes("age") || undefined} aria-describedby={bad.includes("age") ? "age-err" : undefined} />
           <span>{t("age14")}</span>
         </label>
         {errText("age", "errAge")}

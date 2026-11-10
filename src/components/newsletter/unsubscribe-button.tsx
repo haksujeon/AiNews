@@ -19,8 +19,8 @@ export function UnsubscribeButton({ token }: { token: string }) {
         body: JSON.stringify({ t: token }),
       });
       if (res.ok) return setState("done");
-      const data = await res.json().catch(() => ({}));
-      setError(typeof data.error === "string" ? data.error : data.error?.message ?? t("failed"));
+      // 서버 문구(한국어 고정) 대신 화면 언어 문구 (QA C-15): 링크 문제(400·410)와 그 밖의 실패를 나눈다
+      setError(res.status === 400 || res.status === 410 ? t("invalid") : t("failed"));
       setState("error");
     } catch {
       setError(t("failed"));
