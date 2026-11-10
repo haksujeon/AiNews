@@ -30,6 +30,7 @@ interface Field {
   metrics?: string[];
   whole: boolean;
   context?: string;
+  optional?: boolean;
 }
 
 function dailyFields(c: Json): Field[] {
@@ -77,6 +78,9 @@ function periodicFields(c: Json): Field[] {
     const base = { refs: strs(b.refs), metrics: strs(b.metrics), itemPtr: ["big_picture", i] as Ptr, context: `큰 흐름 ${i + 1}` };
     out.push({ ...base, path: `big_picture[${i}].title`, ptr: ["big_picture", i, "title"], text: str(b.title), whole: true });
     out.push({ ...base, path: `big_picture[${i}].text`, ptr: ["big_picture", i, "text"], text: str(b.text), whole: false });
+    // 주간 v7 쉽게 풀어보기 — 검토 대상, 지워도 흐름은 남는다
+    out.push({ ...base, path: `big_picture[${i}].easy`, ptr: ["big_picture", i, "easy"], text: str(b.easy), whole: false, optional: true, context: `큰 흐름 ${i + 1} · 쉽게 말하면` });
+    out.push({ ...base, path: `big_picture[${i}].why`, ptr: ["big_picture", i, "why"], text: str(b.why), whole: false, optional: true, context: `큰 흐름 ${i + 1} · 왜 중요할까` });
   });
   arr(c.movers).forEach((m, i) =>
     out.push({
@@ -123,6 +127,7 @@ export function segmentContent(content: unknown, editionType: EditionType): Segm
       out.push({
         sid: `S${String(out.length + 1).padStart(2, "0")}`,
         path: f.path, index, text, refs: f.refs, metrics: f.metrics, whole: f.whole, context: f.context, ptr: f.ptr, itemPtr: f.itemPtr,
+        ...(f.optional ? { optional: true } : {}),
       });
     });
   }
@@ -232,6 +237,10 @@ export function applySegmentEdits(
   // 빈 필드 → 항목 삭제 또는 대체
   const drops: Ptr[] = [];
   for (const seg of emptied) {
+    if (seg.optional) {
+      setAt(c, seg.ptr, "");
+      continue;
+    }
     if (seg.itemPtr) {
       if (!drops.some((d) => ptrKey(d) === ptrKey(seg.itemPtr!))) drops.push(seg.itemPtr);
       continue;

@@ -36,6 +36,8 @@ export interface Segment {
   ptr: (string | number)[];
   /** 필드가 비면 통째로 빼는 항목 위치. null = 뺄 수 없는 필드 (headline·lede·dek) */
   itemPtr: (string | number)[] | null;
+  /** 비어도 되는 보조 칸 (주간 큰 흐름의 쉽게 말하면·왜 중요할까) — 문장을 다 지우면 그 칸만 비우고 항목은 남긴다 */
+  optional?: boolean;
 }
 
 export interface ReviewClaim {

@@ -12,6 +12,7 @@ import { BriefingTabs, periodicPath } from "@/components/briefing/briefing-tabs"
 import { absoluteUrl, publishedLanguageAlternates } from "@/lib/site";
 import { beijingDate, isoWeekRange, monthRange } from "@/lib/metrics/period";
 import { getPublishedPeriodic, getPublishedPeriodicLocales, type PublicPeriodic } from "@/lib/briefing/periodic/public";
+import { withPeriodicFx } from "@/lib/fx/briefing";
 import type { PeriodicKind } from "@/lib/briefing/periodic/types";
 import { BRIEFING_PATH, safeJsonLd } from "@/lib/briefing/view";
 import { organizationLd } from "@/lib/seo/jsonld";
@@ -43,7 +44,7 @@ const resolve = cache(async function resolve(kind: PeriodicKind, locale: string,
   if (!isLocale(locale)) return { kind: "not_found" };
   if (key !== undefined && !isPublicPeriod(kind, key)) return { kind: "not_found" };
   const report = await getPublishedPeriodic(kind, locale, key);
-  if (report) return { kind: "ok", report };
+  if (report) return { kind: "ok", report: await withPeriodicFx(report) };
   const other = await getPublishedPeriodicLocales(kind, key);
   if (other && other.locales.length) return { kind: "locale_missing", key: other.key, locales: other.locales };
   return key ? { kind: "not_found" } : { kind: "empty" };

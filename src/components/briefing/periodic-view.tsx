@@ -12,6 +12,13 @@ import { BriefingDateLink } from "./briefing-date-link";
 import { periodicPath } from "./briefing-tabs";
 import { ChartFigure, DataTable } from "./charts/chart-figure";
 import { StoryContextBox } from "./story-context";
+import { EasyBox } from "@/components/easy/easy-box";
+import { BriefingGlance } from "./briefing-glance";
+import { ShareButton } from "./briefing-media";
+import { SubscribeBox } from "@/components/newsletter/subscribe-link";
+import { FxNote } from "@/components/fx/fx-note";
+import { buildPeriodicGlance } from "@/lib/briefing/periodic/glance";
+import { convertAmountText, type FxLocale } from "@/lib/fx/convert";
 import { BarsTick, DailyColumns, Dumbbell, SmallMultiples, type DayBar } from "./charts/charts";
 
 /*
@@ -78,6 +85,7 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
   const t = useTranslations("weekly");
   const tmo = useTranslations("monthly");
   const tb = useTranslations("briefing");
+  const td = useTranslations("detail");
   const monthly = report.edition_type === "monthly";
   /** 월간이면 "monthly" 이름공간에 있는 문구를 먼저 쓴다 (주간과 다른 문구만 둔다) */
   const tp = (k: string, v?: Vals): string => (monthly && tmo.has(k as never) ? tmo(k as never, v as never) : t(k as never, v as never));
@@ -112,7 +120,7 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
   const minutes = Math.max(
     1,
     Math.round(
-      [c.headline, c.dek, ...c.big_picture.flatMap((b) => [b.title, b.text]), ...arc.map((a) => a.text), ...c.movers.map((x) => x.text), c.money?.text ?? "", c.china_lens?.text ?? ""].join("")
+      [c.headline, c.dek, ...c.big_picture.flatMap((b) => [b.title, b.text, b.easy ?? "", b.why ?? ""]), ...arc.map((a) => a.text), ...c.movers.map((x) => x.text), c.money?.text ?? "", c.china_lens?.text ?? ""].join("")
         .length / 500
     ) + (monthly ? 5 : 3)
   );
@@ -167,6 +175,13 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
       }))
     : [];
   const weekAxis = weeks.map((w) => ({ label: w.key, reduced: w.coverage === "reduced" }));
+  // 한눈에 보기 (데일리와 같은 부품) — 큰 흐름마다 한 칸, 큰 숫자는 그 흐름이 인용한 지표 값 그대로
+  const glance = buildPeriodicGlance(c, facts).map((g) => ({
+    ...g,
+    sectionLabel: "",
+    // 큰 숫자가 금액이면 그 언어 통화 환산 값을 작은 줄로 (데일리 한눈에 보기와 같은 convertAmountText)
+    fx: g.big && report.fx ? convertAmountText(g.big.raw, loc as FxLocale, report.fx) : null,
+  }));
 
   return (
     <article lang={htmlLang} data-testid="weekly" data-edition-type={report.edition_type} className="@container">
@@ -265,6 +280,13 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
         </div>
       )}
 
+      <BriefingGlance
+        items={glance}
+        countLabel={t("bigPictureCount", { count: c.big_picture.length })}
+        actions={<ShareButton title={c.headline} />}
+        className="mt-6"
+      />
+
       <div className="grid gap-6 pb-8 @min-[1024px]:grid-cols-[minmax(0,1fr)_300px] @min-[1024px]:gap-12">
         <div className="min-w-0">
           {/* ── 큰 흐름 ── */}
@@ -272,13 +294,22 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
             <SectionHead id="wk-bp" title={tp("bigPicture")} sub={t("bigPictureCount", { count: c.big_picture.length })} />
             <ol>
               {c.big_picture.map((b, i) => (
-                <li key={i} className="grid grid-cols-[30px_minmax(0,1fr)] gap-2 border-b border-rule py-5 @min-[640px]:grid-cols-[44px_minmax(0,1fr)]">
+                <li key={i} id={`story-${i + 1}`} className="grid scroll-mt-20 grid-cols-[30px_minmax(0,1fr)] gap-2 border-b border-rule py-5 @min-[640px]:grid-cols-[44px_minmax(0,1fr)]">
                   <span aria-hidden="true" className="text-[22px] font-[760] leading-none text-ink @min-[640px]:text-[30px]">
                     {i + 1}
                   </span>
                   <div className="min-w-0">
                     <h3 className="text-[20px] font-bold leading-[1.38] tracking-[-0.02em] text-ink @min-[640px]:text-[22px]">{b.title}</h3>
                     <p className="mt-2 max-w-[40rem] text-base leading-[1.8] text-ink-2 @min-[640px]:text-[17px]">{b.text}</p>
+                    {/* 쉽게 풀어보기 (주간 v7) — 기사 상세와 같은 상자 */}
+                    <EasyBox
+                      easy={b.easy}
+                      why={b.why}
+                      size="sm"
+                      headingTag="h4"
+                      className="mt-3 max-w-[40rem]"
+                      labels={{ title: td("easyTitle"), saying: td("easySaying"), why: td("easyWhy") }}
+                    />
                     <Chips keys={b.metrics} facts={facts} label={t("metricChips")} />
                     <Sources refs={b.refs} briefing={report} className="mt-2" />
                     <StoryContextBox contexts={b.story_context} className="mt-3" />
@@ -872,7 +903,12 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
         </aside>
       </div>
 
-      <p className="border-t border-rule pb-12 pt-5 text-[12.5px] leading-[1.7] text-ink-3">{t("footer", { count: outlets.length, outlets: outlets.join("·") })}</p>
+      {/* 구독 신청 — 데일리 브리핑 맨 아래와 같은 상자 */}
+      <SubscribeBox source="weekly" className="mb-6" />
+      <p className="border-t border-rule pb-12 pt-5 text-[12.5px] leading-[1.7] text-ink-3">
+        {t("footer", { count: outlets.length, outlets: outlets.join("·") })}
+        {(report.fxApplied || glance.some((g) => g.fx)) && <FxNote fx={report.fx} locale={loc} className="mt-1 block" />}
+      </p>
     </article>
   );
 }

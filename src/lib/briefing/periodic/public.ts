@@ -12,6 +12,7 @@ import { isoWeekOf, isoWeekRange, monthRange, type PeriodMetrics } from "@/lib/m
 import { loadBriefingRefs, type BriefingArticleRef } from "../public";
 import { attachStoryContext, loadStoryContext } from "../story-context";
 import type { BriefingLocale } from "../types";
+import type { FxRates } from "@/lib/fx/convert";
 import type { PeriodicKind, StoredPeriodicContent } from "./types";
 
 export interface WeeklyDailyCell {
@@ -51,6 +52,9 @@ export interface PublicPeriodic {
   dailies: WeeklyDailyCell[];
   /** 월간: 주별 주간 리포트 (주간이면 빈 배열) */
   weeklies: MonthlyWeekCell[];
+  /** 금액 환산 환율 (fx/briefing.ts withPeriodicFx 가 붙인다 — 화면만). 없으면 환산 표기 없음 */
+  fx?: FxRates | null;
+  fxApplied?: boolean;
   /** 스냅숏(돈 표·여러 매체 이야기)의 기사 중 지금도 공개인 것 — 숨긴 기사 행은 화면에서 뺀다 */
   snapshot_visible_ids: string[];
 }

@@ -7,6 +7,7 @@ import type { NewsItem } from "@/lib/supabase";
 import type { PublicNewsItem } from "@/lib/news-gist";
 import type { FxRates } from "@/lib/fx/convert";
 import { FxNote } from "@/components/fx/fx-note";
+import { EasyBox } from "@/components/easy/easy-box";
 import { cn } from "@/lib/utils";
 import {
   formatDate,
@@ -109,20 +110,15 @@ export function ArticleBody({
             <p className="text-[17px] font-medium leading-[1.75] text-ink sm:text-[19px]">{summary}</p>
           </section>
         )}
-        <section id="insights" className="scroll-mt-20 border-l-[3px] border-jade bg-jade-weak px-5 py-4 sm:px-6 sm:py-5">
-          <Heading className="mb-3 text-[13px] font-bold text-jade">{t("easyTitle")}</Heading>
-          <div className="space-y-4">
-            <div>
-              <p className="mb-1 text-xs font-semibold text-ink-2">{t("easySaying")}</p>
-              <p className="text-[16px] leading-[1.8] text-ink">{easy.easy}</p>
-            </div>
-            <div>
-              <p className="mb-1 text-xs font-semibold text-ink-2">{t("easyWhy")}</p>
-              <p className="text-[16px] leading-[1.8] text-ink">{easy.why}</p>
-            </div>
-          </div>
+        <EasyBox
+          id="insights"
+          easy={easy.easy}
+          why={easy.why}
+          headingTag={Heading}
+          labels={{ title: t("easyTitle"), saying: t("easySaying"), why: t("easyWhy") }}
+        >
           {aiInsightsDetail && <InsightDetail text={aiInsightsDetail} showLabel={t("deeperShow")} hideLabel={t("deeperHide")} />}
-        </section>
+        </EasyBox>
         <p className="text-xs leading-relaxed text-ink-3">{t("easyDisclosure")}</p>
         {news.fx && <FxNote fx={news.fx} locale={locale} className="block text-xs leading-relaxed text-ink-3" />}
         {news.source_url && <ReadAtSource news={news} />}

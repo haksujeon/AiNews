@@ -8,6 +8,7 @@ import { reviewThatProduced, reviewsOf } from "@/lib/briefing/review/store";
 import { genLogOf } from "@/lib/briefing/review/evidence";
 import { BriefingView } from "@/components/briefing/briefing-view";
 import { PeriodicView } from "@/components/briefing/periodic-view";
+import { withPeriodicFx } from "@/lib/fx/briefing";
 import { getBriefingRow, translationsOf } from "@/lib/briefing/admin";
 import { getBriefingForReview } from "@/lib/briefing/public";
 import { loadCardSpec } from "@/lib/briefing/media-store";
@@ -49,7 +50,7 @@ export default async function AdminBriefingDetailPage({ params }: { params: Prom
   const monthly = row.edition_type === "monthly";
   const [preview, weeklyPreview, translations, aiReviews, producedBy] = await Promise.all([
     weekly ? null : getBriefingForReview(id),
-    weekly ? getPeriodicForReview(id) : null,
+    weekly ? getPeriodicForReview(id).then((w) => (w ? withPeriodicFx(w) : w)) : null,
     row.locale === "ko" && !weekly ? translationsOf(id) : [],
     row.locale === "ko" ? reviewsOf(id).catch(() => []) : [],
     row.locale === "ko" ? reviewThatProduced(id).catch(() => null) : null,

@@ -8,6 +8,7 @@
  * 환율 = 판 날짜(그날 이하 가장 최근 영업일)의 ECB 기준.
  */
 import type { PublicBriefing } from "../briefing/public";
+import type { PublicPeriodic } from "../briefing/periodic/public";
 import { annotateMoney, convertAmountText, type FxLocale } from "./convert";
 import { loadFxRates } from "./store";
 
@@ -34,4 +35,26 @@ export async function withFxNotes(b: PublicBriefing): Promise<PublicBriefing> {
   // 바뀐 곳이 있거나 큰 숫자 칸에 환산할 금액이 있을 때만 각주를 단다
   const applied = JSON.stringify(c) !== JSON.stringify(b.content) || c.key_numbers.some((k) => convertAmountText(k.value, loc, rates));
   return { ...b, content: c, fx: rates, fxApplied: applied };
+}
+
+/**
+ * 주간·월간 리포트에도 같은 환산 (2026-11-10 사용자 결정: 주간·월간도 데일리 개선 반영). 공개 페이지·관리자 미리보기가 이 함수를 부른다.
+ * 붙이는 곳: dek, 큰 흐름 사실 문장, 움직인 기업, 돈의 흐름, 중국 렌즈, 다음 주 볼 것. 쉽게 풀어보기(숫자 없음)·제목은 붙이지 않는다.
+ * 환율 = 기간 마지막 날(그날 이하 가장 최근 영업일)의 ECB 기준.
+ */
+export async function withPeriodicFx(w: PublicPeriodic): Promise<PublicPeriodic> {
+  const rates = await loadFxRates(w.period_end);
+  if (!rates) return { ...w, fx: null };
+  const loc = w.locale as FxLocale;
+  const a = (s: string) => (s ? annotateMoney(s, loc, rates) : s);
+  const c = structuredClone(w.content);
+  c.dek = a(c.dek);
+  c.big_picture = c.big_picture.map((b) => ({ ...b, text: a(b.text) }));
+  c.movers = c.movers.map((m) => ({ ...m, text: a(m.text) }));
+  if (c.money) c.money = { ...c.money, text: a(c.money.text) };
+  if (c.china_lens) c.china_lens = { ...c.china_lens, text: a(c.china_lens.text) };
+  c.watch_next = c.watch_next.map((x) => ({ ...x, text: a(x.text) }));
+  c.month_arc = (c.month_arc ?? []).map((x) => ({ ...x, text: a(x.text) }));
+  const applied = JSON.stringify(c) !== JSON.stringify(w.content);
+  return { ...w, content: c, fx: rates, fxApplied: applied };
 }

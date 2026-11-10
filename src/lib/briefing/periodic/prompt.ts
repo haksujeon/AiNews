@@ -17,8 +17,11 @@ import type { PeriodicKind, StoryPoolItem, WeeklyContent } from "./types";
 // weekly v5 / monthly v4 (재감사 round 2): MONEY 의 같은 거래(통화만 다름)는 한 행, 기간 밖 거래 제외(지표 v4),
 //   월간 WEEK_STORIES — month_arc 의 refs 는 그 주의 사건만, 증감·쏠림 표현('열풍·확산·몰리')도 증감 지표 필요
 // weekly v6 / monthly v5: 수리 지시 — 방향 충돌 문장은 지우거나 FACTS 값을 그대로 인용 (사실 뒤집기 금지)
-export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v6-2026-11-02";
-export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v5-2026-11-02";
+// weekly v7 / monthly v6 (2026-11-10 사용자 결정 "쉽게 설명해 준다"): 큰 흐름마다 easy(쉽게 말하면)·why(왜 중요할까) —
+//   기사 쉽게 풀어보기와 같은 눈높이(초등 5~6학년·해요체·비유 하나·숫자 없음), text 는 사실만, 업계 용어 풀어 쓰기,
+//   기업 칸은 "언급이 늘었다"가 아니라 그 기간에 한 일
+export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v7-2026-11-10";
+export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v6-2026-11-10";
 export const WEEKLY_HEADLINE_MAX = 36;
 export const WEEKLY_STORY_LIMIT = 50;
 export const MONTHLY_STORY_LIMIT = 60;
@@ -192,8 +195,8 @@ function schema(kind: PeriodicKind, weekKeys: string[]): string {
   return `{
  "headline": "${W.cur}를 한 줄로, 공백 포함 ${WEEKLY_HEADLINE_MAX}자 이내 (엄수)",
  "dek": "${W.cur} 핵심 2~3문장, 220자 이내", "dek_refs": ["S.."], "dek_metrics": ["key.."],
- "big_picture": [ {"title":"흐름 이름 24자 이내","text":"무엇이 바뀌었고 왜 중요한가 2~3문장 240자 이내","refs":["S..",...],"metrics":["key.."]} ],  // 3~4개${arc}
- "movers": [ {"entity":"ent 키 (예: anthropic)","text":"이 기업이 ${W.cur} 무엇을 했나 90자 이내","refs":["S.."],"metrics":["ent.키"]} ],  // 3~4개
+ "big_picture": [ {"title":"흐름 이름 24자 이내 (쉬운 말)","text":"무슨 일이 있었나 — 사실 2~3문장 240자 이내","easy":"쉽게 말하면 — 해요체 2~3문장 90~170자","why":"왜 중요할까 — 해요체 1~2문장 60~130자","key":{"value":"이 흐름을 대표하는 숫자 하나 — text 에 쓴 표기 그대로 (예: 48.1%, 110억 달러, 135대)","label":"무엇의 숫자인지 14자 이내 (예: 수학 시험 점수)"},"refs":["S..",...],"metrics":["key.."]} ],  // 3~4개${arc}
+ "movers": [ {"entity":"ent 키 (예: anthropic)","text":"이 기업이 ${W.cur} 한 일(사건) 90자 이내 — '언급이 늘었다·줄었다'로 시작하지 말 것","refs":["S.."],"metrics":["ent.키"]} ],  // 3~4개
  "money": {"text":"돈 흐름 요약 200자 이내 (MONEY 표의 금액만, 합산 금지)","refs":["S.."]},
  "china_lens": {"text":"중국 매체가 본 중국 vs 해외 구도 200자 이내","refs":["S.."],"metrics":["key.."]},
  "watch_next": [ {"text":"${W.next}에 지켜볼 것 70자 이내 (기사에 예정·계획으로 나온 것만)","refs":["S.."]} ],  // 2~3개
@@ -237,6 +240,14 @@ ${volumeRule}
 20. MONEY 의 한 행은 거래 하나입니다. "(= …, 같은 거래)" 로 붙은 다른 통화 금액은 같은 거래이므로 두 거래로 나열하지 마십시오.${
     kind === "monthly" ? "\n21. month_arc 의 각 주 refs 에는 WEEK_STORIES 에 그 주로 나온 S id 만 넣습니다(다른 주 사건 금지)." : ""
   }
+
+쉽게 설명하기 (이 사이트의 강점 — 독자는 AI 업계 사람이 아닙니다)
+E1. 사실 칸(headline·dek·big_picture.text·movers·money·china_lens·watch_next)도 업계 용어를 그대로 두지 않습니다. 파라미터·토큰·추론·에이전트·벤치마크·가중치 같은 말은 쉬운 말로 바꾸거나 바로 뒤 괄호에 짧은 풀이를 붙입니다. 시험·모델 이름은 무엇인지 한마디를 붙입니다("수학 문제 시험 MATH-500").
+E2. movers.text 는 그 기업이 ${W.cur} 한 일을 사건으로 씁니다. "언급이 늘었다·줄었다"로 문장을 시작하지 마십시오. 언급 수는 사건 뒤에 덧붙일 때만, ent 지표 값 그대로 씁니다.
+E3. big_picture.easy("쉽게 말하면"): 초등학교 5~6학년도 이해하도록 이 흐름이 '무슨 뜻'인지 설명합니다. text 의 사실(누가·언제·숫자)을 되풀이하지 않습니다. 낯선 개념에는 아이가 아는 것(학교·집·놀이·가게·운동)에 빗댄 비유를 하나만 씁니다. 비유가 맞지 않거나 뜻을 틀리게 만들면 비유 없이 쉬운 말로만 씁니다.
+E4. big_picture.why("왜 중요할까"): 이 흐름으로 사람들(우리 생활, 일하는 사람, 회사, 나라)에게 무엇이 달라질 수 있는지를 기사가 말하는 범위 안에서 씁니다. 기사의 판단이면 "기사는 ~라고 봐요"처럼 기사의 말로 씁니다. 기사가 하지 않은 예측·평가·업계 전체 이야기를 지어내지 않습니다.
+E5. easy·why 공통: 친근한 해요체, 쉬운 우리말. 숫자를 쓰지 않습니다. 한자를 쓰지 않습니다. 영어 약어(AI 제외)는 쓰지 않거나 바로 뒤 괄호에 쉬운 풀이를 붙입니다. 회사·제품 이름은 text 에 쓴 표기 그대로, 새 이름·새 사실·새 원인을 보태지 않습니다. 해요체는 easy·why 에만 쓰고 나머지 칸은 평서문(~했다)입니다.
+E6. big_picture.key 는 한눈에 보기 칸에 크게 보일 숫자입니다. value 는 그 흐름의 text 에 쓴 숫자를 표기 그대로 옮기고(새 숫자 금지), label 은 독자가 바로 알아듣는 짧은 우리말로 씁니다. 대표할 숫자가 없으면 key 를 빼십시오.
 
 출력: 아래 스키마의 JSON 하나만. 코드 펜스·설명 금지.
 ${schema(kind, weekKeys)}`;

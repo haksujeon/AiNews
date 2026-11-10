@@ -13,6 +13,12 @@ export interface TrendItem<Ref = string> {
   text: string;
   refs: Ref[];
   metrics: string[];
+  /** "쉽게 말하면" (주간 v7, 2026-11-10 사용자 결정) — 기사 "쉽게 풀어보기"와 같은 규칙. 검사에 걸리면 비운다(사실 문장 text 는 그대로) */
+  easy?: string;
+  /** "왜 중요할까" (주간 v7) */
+  why?: string;
+  /** 한눈에 보기 큰 숫자 (주간 v7): value 는 text 에 나온 숫자 표기 그대로, label 은 무엇의 숫자인지. 검사에 걸리면 뺀다 */
+  key?: { value: string; label: string };
   /** "회사·관련 주제 히스토리 분석" (story-context.ts, 시범). 저장 content 에는 없고 화면에 보낼 때(public.ts hydrate)만 붙인다 */
   story_context?: StoryContext[];
 }

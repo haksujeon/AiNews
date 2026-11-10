@@ -23,6 +23,7 @@ import pool from "@/lib/db";
 import { COMPLETE_SINCE, computePeriodMetrics, type PeriodMetrics, type PeriodStory } from "@/lib/metrics/period";
 import { LlmError, PERIODIC_EFFORT, PERIODIC_MODEL, chat, modelTag, parseJsonContent } from "../llm";
 import { articleText, fitText, glossHanText, toSourceDoc } from "../validate";
+import { EASY_KO_LIMIT } from "../../easy-explain";
 import { SOURCE_ARTICLE_COLUMNS } from "../columns";
 import type { SourceDoc } from "../rules";
 import { BudgetExceeded, CostTracker, sumUsage } from "../generate";
@@ -54,6 +55,7 @@ import {
   normalizeWeekly,
   periodicText,
   pruneArcRefs,
+  cleanPeriodicEasy,
   repairProblems,
   revertFlips,
   validateWeekly,
@@ -303,7 +305,7 @@ export function glossPeriodicHan(c: WeeklyContent): WeeklyContent {
   };
   out.headline = f(out.headline);
   out.dek = f(out.dek);
-  out.big_picture = out.big_picture.map((b) => ({ ...b, title: f(b.title), text: f(b.text) }));
+  out.big_picture = out.big_picture.map((b) => ({ ...b, title: f(b.title), text: f(b.text), ...(b.easy ? { easy: f(b.easy) } : {}), ...(b.why ? { why: f(b.why) } : {}) }));
   out.movers = out.movers.map((b) => ({ ...b, text: f(b.text) }));
   if (out.money) out.money = { ...out.money, text: f(out.money.text) };
   if (out.china_lens) out.china_lens = { ...out.china_lens, text: f(out.china_lens.text) };
@@ -344,7 +346,10 @@ export async function generatePeriodicKo(
     if (JSON.stringify(g) !== JSON.stringify(c)) edits.push({ action: "gloss", path: "*", reason: "han_in_ko (용어·이름 사전 치환)", before: null, after: null, round });
     const a = pruneArcRefs(g, ctx);
     edits.push(...a.edits.map((e) => ({ ...e, round })));
-    return fitPeriodic(a.content, round);
+    // 쉽게 풀어보기(주간 v7): 검사에 걸린 칸만 비운다 — 길이는 먼저 끝 문장을 빼 본다
+    const e = cleanPeriodicEasy(fitPeriodic(a.content, round), ctx);
+    edits.push(...e.edits.map((x) => ({ ...x, round })));
+    return e.content;
   };
   // 길이 초과는 삭제 전에 끝 문장을 뺀다 (데일리와 같은 fitText — W44 round 2: term.why 85/80자로 term 칸 삭제)
   const fitPeriodic = (c: WeeklyContent, round: string): WeeklyContent => {
@@ -355,7 +360,11 @@ export async function generatePeriodicKo(
       return t;
     };
     out.dek = fit("dek", out.dek, 220);
-    out.big_picture.forEach((b, i) => (b.text = fit(`big_picture[${i}]`, b.text, 264 - b.title.length - 1)));
+    out.big_picture.forEach((b, i) => {
+      b.text = fit(`big_picture[${i}]`, b.text, 264 - b.title.length - 1);
+      if (b.easy) b.easy = fit(`big_picture[${i}].easy`, b.easy, EASY_KO_LIMIT.easy);
+      if (b.why) b.why = fit(`big_picture[${i}].why`, b.why, EASY_KO_LIMIT.why);
+    });
     out.movers.forEach((b, i) => (b.text = fit(`movers[${i}]`, b.text, 90)));
     if (out.money) out.money.text = fit("money", out.money.text, 200);
     if (out.china_lens) out.china_lens.text = fit("china_lens", out.china_lens.text, 200);

@@ -36,6 +36,7 @@ import type { ValidationIssue } from "../types";
 import { ENTITIES, entityMentioned, findEntities, properNouns } from "../entities";
 import { HAN_RE, NUM_RE, norm } from "../validate";
 import { maskGroundedQuantities } from "../quantity";
+import { EASY_KO_LIMIT } from "../../easy-explain";
 import {
   claimIssues,
   entityNotInOriginal,
@@ -84,6 +85,7 @@ export const TERM_KO: Record<string, string[]> = {
   大模型: ["대형 모델", "대모델", "거대 모델"],
   自由现金流: ["잉여현금흐름", "자유현금흐름"],
   开源: ["오픈소스"],
+  数据中心: ["데이터센터"],
 };
 
 /** 문장이 용어(중국어 원어 또는 한국어 표기)를 말하는가 */
@@ -109,7 +111,11 @@ export function normalizeWeekly(raw: unknown): { content: WeeklyContent; issues:
     dek: str(r.dek),
     dek_refs: strArr(r.dek_refs),
     dek_metrics: strArr(r.dek_metrics),
-    big_picture: arr(r.big_picture).map((b) => ({ title: str(b.title), text: str(b.text), refs: strArr(b.refs), metrics: strArr(b.metrics) })),
+    big_picture: arr(r.big_picture).map((b) => ({
+      title: str(b.title), text: str(b.text), refs: strArr(b.refs), metrics: strArr(b.metrics),
+      ...(str(b.easy) ? { easy: str(b.easy) } : {}), ...(str(b.why) ? { why: str(b.why) } : {}),
+      ...(obj(b.key) && str(obj(b.key)!.value) && str(obj(b.key)!.label) ? { key: { value: str(obj(b.key)!.value), label: str(obj(b.key)!.label) } } : {}),
+    })),
     movers: arr(r.movers).map((b) => ({ entity: str(b.entity), text: str(b.text), refs: strArr(b.refs), metrics: strArr(b.metrics) })),
     money: money && str(money.text) ? { text: str(money.text), refs: strArr(money.refs) } : null,
     china_lens: lens && str(lens.text) ? { text: str(lens.text), refs: strArr(lens.refs), metrics: strArr(lens.metrics) } : null,
@@ -528,12 +534,66 @@ export function arcOffWeekRefs(b: { week: string; refs: string[] }, ctx: Pick<Pe
 
 /** 주간·월간 생성 감사 기록 (데일리 validate.ts ContentEdit 와 같은 모양) */
 export interface PeriodicEdit {
-  action: "trim" | "gloss" | "sentence_delete" | "ref_strip" | "repair" | "drop" | "fallback" | "flip_rejected";
+  action: "trim" | "gloss" | "sentence_delete" | "ref_strip" | "repair" | "drop" | "fallback" | "flip_rejected" | "easy_clear";
   path: string;
   reason: string;
   before: unknown;
   after: unknown;
   round?: string;
+}
+
+/**
+ * 큰 흐름의 쉽게 풀어보기(easy·why, 주간 v7) 검사 — 걸린 칸만 비운다 (사실 문장·항목은 그대로, 치명 아님).
+ * 기사 쉽게 풀어보기(easy-explain easyFlags)와 같은 기준: 한자, 근거(인용 기사·지표)에 없는 숫자, 글자 수 상한.
+ * 주간은 근거 기사에 없는 고유명사도 본다(본문 검사와 같은 properNouns).
+ */
+export function easyIssuesPeriodic(text: string, ground: string, field: "easy" | "why"): string[] {
+  const out: string[] = [];
+  const han = text.match(HAN_RE);
+  if (han) out.push(`한자 ${han.join("")}`);
+  const pool = norm(ground);
+  for (const m of maskGroundedQuantities(stripPeriodLabels(text), ground).text.match(NUM_RE) ?? []) {
+    const n = norm(m).replace(/[.]+$/, "");
+    if (n && !pool.includes(n)) out.push(`근거에 없는 숫자 ${m}`);
+  }
+  for (const p of properNouns(text)) if (!p.matches(ground)) out.push(`근거에 없는 이름 ${p.label}`);
+  if (text.length > EASY_KO_LIMIT[field]) out.push(`${text.length}/${EASY_KO_LIMIT[field]}자`);
+  return out;
+}
+
+/** 큰 흐름 핵심 숫자 검사 (순수) — 문제가 있으면 이유, 없으면 null */
+export function keyNumberProblem(key: { value: string; label: string }, text: string): string | null {
+  if (!/\d/.test(key.value)) return "숫자가 없는 값";
+  if (!norm(text).includes(norm(key.value))) return `값 "${key.value}" 가 문장에 없음`;
+  if (HAN_RE.test(key.label)) return "이름표에 한자";
+  if (key.label.length > 20 || key.value.length > 16) return "너무 김";
+  return null;
+}
+
+export function cleanPeriodicEasy(c: WeeklyContent, ctx: Pick<PeriodicValidationContext, "sourceText" | "facts">): { content: WeeklyContent; edits: PeriodicEdit[] } {
+  const out = structuredClone(c);
+  const edits: PeriodicEdit[] = [];
+  out.big_picture.forEach((b, i) => {
+    const ground = [b.title, b.text, ...b.refs.map((r) => ctx.sourceText.get(r) ?? ""), ...b.metrics.map((k) => ctx.facts[k] ?? "")].join(" ");
+    for (const f of ["easy", "why"] as const) {
+      const t = b[f];
+      if (!t) continue;
+      const issues = easyIssuesPeriodic(t, ground, f);
+      if (issues.length) {
+        edits.push({ action: "easy_clear", path: `big_picture[${i}].${f}`, reason: issues.join(" / "), before: t, after: null });
+        delete b[f];
+      }
+    }
+    // 핵심 숫자: 값은 사실 문장(text)에 그대로 있어야 하고, 이름표는 한자 없이 짧게
+    if (b.key) {
+      const bad = keyNumberProblem(b.key, b.text);
+      if (bad) {
+        edits.push({ action: "easy_clear", path: `big_picture[${i}].key`, reason: bad, before: b.key, after: null });
+        delete b.key;
+      }
+    }
+  });
+  return { content: out, edits };
 }
 
 /** month_arc 의 주 밖 refs 를 결정적으로 뗀다 (남는 ref 가 없으면 그대로 — 검증이 치명으로 잡아 그 칸을 뺀다) */

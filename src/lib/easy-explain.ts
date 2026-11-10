@@ -68,8 +68,9 @@ export type EasyFlag =
   | { kind: "length"; field: EasyField; length: number }
   | { kind: "abbr"; field: EasyField; value: string };
 
-/** 한국어 글자 수 상한 (지시문 상한 + 여유) */
-const KO_MAX: Partial<Record<EasyField, number>> = { easy_kr: 210, why_kr: 160 };
+/** 한국어 글자 수 상한 (지시문 상한 + 여유) — 주간 큰 흐름의 쉽게 풀어보기도 같은 상한 (periodic/validate cleanPeriodicEasy) */
+export const EASY_KO_LIMIT = { easy: 210, why: 160 } as const;
+const KO_MAX: Partial<Record<EasyField, number>> = { easy_kr: EASY_KO_LIMIT.easy, why_kr: EASY_KO_LIMIT.why };
 
 function numbers(text: string): string[] {
   return text.replace(/(\d),(?=\d{3})/g, "$1").match(/\d+(?:\.\d+)?/g) ?? [];

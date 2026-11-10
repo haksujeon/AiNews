@@ -12,14 +12,15 @@ import { GlanceLink } from "./glance-link";
  * 칸·줄을 누르면 그 기사로 이동만 한다(음성 재생 없음). 음성이 그 기사를 읽는 동안에는 칸이 밝아진다(GlanceLink).
  * 화면에서 바로 보이므로 한 장 요약·이미지 저장 버튼은 두지 않고 공유만(actions).
  */
-export function BriefingGlance({ items, actions, className }: { items: GlanceCell[]; actions?: ReactNode; className?: string }) {
+/** countLabel: 제목 옆 작은 글자 (데일리 "주요 5건", 주간·월간 "큰 흐름 4개") */
+export function BriefingGlance({ items, actions, className, countLabel }: { items: GlanceCell[]; actions?: ReactNode; className?: string; countLabel?: string }) {
   const t = useTranslations("briefing");
   if (!items.length) return null;
   return (
     <section aria-labelledby="glance-h" className={cn("min-w-0", className)} data-testid="briefing-glance">
       <div className="flex items-center justify-between gap-x-3 border-b-2 border-rule-strong pb-2">
         <h2 id="glance-h" className="shrink-0 text-[15px] font-bold text-ink">
-          {t("glanceTitle")} <span className="ml-1 text-[13px] font-normal text-ink-3">{t("tocTitle", { count: items.length })}</span>
+          {t("glanceTitle")} <span className="ml-1 text-[13px] font-normal text-ink-3">{countLabel ?? t("tocTitle", { count: items.length })}</span>
         </h2>
         {actions}
       </div>

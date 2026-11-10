@@ -16,7 +16,7 @@ import pool from "@/lib/db";
 import { publishBriefing, PublishError } from "../publish";
 import { insertBriefing, withDateLock, type BriefingRow, type EditionType } from "../repository";
 import { citedRefs } from "../validate";
-import { citedSids } from "../periodic/validate";
+import { citedSids, keyNumberProblem } from "../periodic/validate";
 import { fallbackDek, fallbackHeadline } from "../periodic/prompt";
 import type { BriefingContent, ValidationIssue } from "../types";
 import { PERIODIC_MIN_BIG_PICTURE, type WeeklyContent } from "../periodic/types";
@@ -300,6 +300,10 @@ function applyFixPlan(input: ReviewInput, plan: FixPlan): FixAttempt {
   });
   if (edit.unfixable.length) return { plan, edit, content: null, newFatal: [], warn: [], reason: `고칠 수 없음: ${edit.unfixable.join("; ")}` };
   if (!plan.edits.length) return { plan, edit, content: null, newFatal: [], warn: [], reason: "적용할 수정이 없음" };
+  // 주간 큰 흐름 핵심 숫자: 문장을 고쳐 값이 사라졌으면 숫자도 뺀다 (한눈에 보기에 근거 없는 숫자가 남지 않게)
+  if (isPeriodic(input.editionType))
+    for (const b of (edit.content.big_picture ?? []) as { text?: string; key?: { value: string; label: string } }[])
+      if (b.key && keyNumberProblem(b.key, b.text ?? "")) delete b.key;
   if (edit.fallbacks.length) edit.content.meta = { ...((edit.content.meta ?? {}) as Record<string, unknown>), ...(isPeriodic(input.editionType) ? { fallbacks: [...new Set([...(((input.meta.fallbacks as string[]) ?? [])), ...edit.fallbacks])] } : {}) };
   // 결정적 재검증: 원본에 이미 있던 치명(지금 규칙으로 다시 돌린 것)은 빼고, 수정으로 새로 생긴 치명만 본다
   const baseline = input.revalidate(input.row.content);
