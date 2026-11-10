@@ -6,7 +6,7 @@
  * 검색이 고장난 것처럼 보였다. (2026-08-27 조사 P1-1)
  * 이제 모든 필터는 전체 테이블을 대상으로 SQL에서 처리한다.
  */
-import { isPublicCategory } from "./categories";
+import { isPublicCategory, scopeCategorySql } from "./categories";
 import { parseRegionChip, regionChipSql, type RegionChip } from "./region";
 
 export interface NewsFilters {
@@ -35,6 +35,15 @@ export const EMPTY_FILTERS: NewsFilters = {
  * 공개 집계 쿼리는 반드시 이 상수를 써서 조건이 어긋나지 않게 한다.
  */
 export const PUBLIC_NEWS_WHERE = "is_duplicate = FALSE AND is_hidden = FALSE";
+
+/**
+ * 목록 모집단 = 공개 기사 중 AI 범위 분류 (2026-11-10 사용자 결정, QA A-02).
+ * 뉴스 목록·검색·홈 주요 뉴스·LIVE 띠·필터 칩 수·관련 기사·sitemap·RSS 가 쓴다 — 오늘의 흐름·브리핑·주간 리포트의
+ * population 'ai'(metrics/period populationWhere)와 같은 조건이라 같은 날 기사 수가 화면마다 같다.
+ * 범위 밖 분류(economy·society·culture·tech)는 목록에서 빠지되, 상세(/news/[id])는 예전 링크 때문에 그대로 열린다.
+ * 브리핑 인용 기사 조인은 PUBLIC_NEWS_WHERE 그대로 (이미 발행된 판의 근거가 사라지지 않게).
+ */
+export const LIST_NEWS_WHERE = `${PUBLIC_NEWS_WHERE} AND ${scopeCategorySql()}`;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -100,7 +109,7 @@ export function buildNewsWhere(
   filters: NewsFilters,
   startIndex = 0
 ): { where: string; values: unknown[] } {
-  const clauses = [PUBLIC_NEWS_WHERE];
+  const clauses = [LIST_NEWS_WHERE];
   const values: unknown[] = [];
   let i = startIndex;
 

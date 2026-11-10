@@ -5,7 +5,7 @@ export { NEWS_PAGE_SIZE } from './news-types';
 export type { RankedNewsItem, NewsDay, NewsDaysPage, NewsDayRest } from './news-types';
 import type { NewsItem, NewsDaysPage, NewsDayRest, RankedNewsItem } from './news-types';
 import { NEWS_PAGE_SIZE, NEWS_DAYS_PER_PAGE, NEWS_DAY_TOP } from './news-types';
-import { buildNewsWhere, EMPTY_FILTERS, PUBLIC_NEWS_WHERE, type NewsFilters } from './news-query';
+import { buildNewsWhere, EMPTY_FILTERS, LIST_NEWS_WHERE, type NewsFilters } from './news-query';
 import { VISIBLE_CATEGORIES, publicCategoriesOf } from './categories';
 import { LIST_FIELDS } from './news-fields';
 import { findRelated, type RelatedSections } from './related';
@@ -130,7 +130,7 @@ async function splitDays(
 async function loadListItems(ranked: { item: RankRow; outletCount: number }[]): Promise<RankedNewsItem[]> {
   if (!ranked.length) return [];
   const { rows } = await pool.query(
-    `SELECT ${LIST_FIELDS} FROM ai_news_ex WHERE id = ANY($1::uuid[]) AND ${PUBLIC_NEWS_WHERE}`,
+    `SELECT ${LIST_FIELDS} FROM ai_news_ex WHERE id = ANY($1::uuid[]) AND ${LIST_NEWS_WHERE}`,
     [ranked.map((r) => r.item.id)]
   );
   const byId = new Map((rows as NewsItem[]).map((r) => [r.id, r]));
@@ -223,16 +223,17 @@ export async function fetchNewsFacets(): Promise<NewsFacets> {
   const { rows } = await pool.query(
     `SELECT
        ARRAY(SELECT DISTINCT country FROM ai_news_ex
-             WHERE ${PUBLIC_NEWS_WHERE} AND country IS NOT NULL ORDER BY country) AS countries,
+             WHERE ${LIST_NEWS_WHERE} AND country IS NOT NULL ORDER BY country) AS countries,
        ARRAY(SELECT category FROM ai_news_ex
-             WHERE ${PUBLIC_NEWS_WHERE} AND category = ANY($1::text[])
+             WHERE ${LIST_NEWS_WHERE} AND category = ANY($1::text[])
              GROUP BY category HAVING COUNT(*) >= $2) AS categories`,
     [VISIBLE_CATEGORIES, FACET_MIN_COUNT]
   );
   return {
     countries: rows[0]?.countries ?? [],
     categories: publicCategoriesOf(rows[0]?.categories ?? []),
-    regions: await regionCounts(pool, { population: "all" }),
+    // 지역 칩 수는 목록과 같은 모집단(LIST_NEWS_WHERE = population "ai")
+    regions: await regionCounts(pool, { population: "ai" }),
   };
 }
 
@@ -247,14 +248,14 @@ export async function fetchNewsList(): Promise<NewsItem[]> {
  * 이제 공개 조건(PUBLIC_NEWS_WHERE) 전체를 SQL 로 집계해 홈 총계와 같은 모집단을 쓴다.
  * 날짜 키는 기존 표시와 같게 news_date 의 UTC 날짜를 쓴다.
  *
- * 집계 함수는 주간·월간 리포트와 같은 src/lib/metrics/period.ts 를 쓴다 (Gate 2). 통계 페이지 모집단 = 'all'(공개 전체),
- * 리포트 모집단 = 'ai'. 기간 없이 부르면 전체 기간.
+ * 집계 함수는 주간·월간 리포트와 같은 src/lib/metrics/period.ts 를 쓴다 (Gate 2). 모집단 = 'ai'(공개 기사 중 AI 범위 분류) —
+ * 뉴스 목록(LIST_NEWS_WHERE)·리포트와 같다 (2026-11-10 사용자 결정, QA A-02. 예전에는 공개 전체 'all'). 기간 없이 부르면 전체 기간.
  */
 export async function fetchNewsStatistics(): Promise<StatisticsData> {
-  const all = { population: "all" as const };
+  const all = { population: "ai" as const };
   // 일별 건수: 최근 STATS_DAILY_WINDOW_DAYS 일(주간 집계가 깔끔하도록 월요일부터 시작),
   // 데이터가 그보다 짧으면 첫 기사 날짜부터. 끝은 오늘과 마지막 기사 날짜 중 늦은 날. 기사 없는 날은 0.
-  const bounds = await dayBounds(pool, "all");
+  const bounds = await dayBounds(pool, "ai");
   const endDay = bounds.last && bounds.last > bounds.today ? bounds.last : bounds.today;
   const windowMonday = mondayOf(addDays(endDay, -(STATS_DAILY_WINDOW_DAYS - 1)));
   const startDay = bounds.first && bounds.first > windowMonday ? bounds.first : windowMonday;

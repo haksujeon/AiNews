@@ -13,7 +13,7 @@
  * 일괄 계산: scripts/related-backfill.ts (같은 computeAndStore 를 쓴다).
  */
 import pool from "./db";
-import { PUBLIC_NEWS_WHERE } from "./news-query";
+import { LIST_NEWS_WHERE, PUBLIC_NEWS_WHERE } from "./news-query";
 import { LIST_FIELDS } from "./news-fields";
 import type { NewsItem } from "./news-types";
 import { EMPTY_RELATED, type RelatedItem, type RelatedSections } from "./related-types";
@@ -49,7 +49,7 @@ export const RELATED_DOC_FIELDS = `id, source_name, category, title_cn, title_kr
 
 /** 점수에 쓰는 본문이 바뀌었는지 보는 지문 (특징 캐시 무효화) */
 const DOC_SIG = `md5(concat_ws('|', title_cn, title_kr, title_en, left(summary_kr, 220), summary_cn, summary_en, key_terms::text))`;
-const WINDOW_WHERE = `${PUBLIC_NEWS_WHERE}
+const WINDOW_WHERE = `${LIST_NEWS_WHERE}
         AND news_date >= ($1::date - $2::int)::timestamp AT TIME ZONE 'UTC'
         AND news_date <  ($1::date + $2::int + 1)::timestamp AT TIME ZONE 'UTC'`;
 
@@ -193,7 +193,7 @@ async function readCached(newsId: string): Promise<CachedRow[]> {
        FROM related_articles r
        CROSS JOIN seed
        LEFT JOIN LATERAL (SELECT ${LIST_FIELDS}, (news_date AT TIME ZONE 'UTC')::date AS related_day FROM ai_news_ex
-                           WHERE id = r.related_id AND r.section <> '${META}' AND ${PUBLIC_NEWS_WHERE}) n ON TRUE
+                           WHERE id = r.related_id AND r.section <> '${META}' AND ${LIST_NEWS_WHERE}) n ON TRUE
       WHERE r.news_id = $1`,
     [newsId, RELATED_TTL_HOURS, RELATED_WINDOW_DAYS, RELATED_MIN_RECOMPUTE_MINUTES]
   );
