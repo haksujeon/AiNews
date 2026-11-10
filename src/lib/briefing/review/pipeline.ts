@@ -109,6 +109,8 @@ export interface PipelineDeps {
   easyTerms?: () => Promise<string>;
   /** 주간·월간 ko 판 자동 발행 뒤 en·zh 판 만들기 (periodic/translate-run.ts — 관리자 발행과 같은 함수). 알림 한 줄 */
   periodicTranslations?: (t: Target) => Promise<string>;
+  /** 스윕 끝 따라잡기: 최근 공개된 주간·월간 ko 판 중 en·zh 공개본이 없는 것 (일시 오류로 빠진 번역). 알림 한 줄 */
+  periodicTranslationsCatchUp?: () => Promise<string>;
   now: () => number;
 }
 
@@ -235,6 +237,10 @@ export const defaultPipelineDeps: PipelineDeps = {
     // 동적 import: translate-run → generate → review 순환 참조를 피한다
     const { ensurePeriodicTranslationsFor, periodicTranslateNote } = await import("../periodic/translate-run");
     return periodicTranslateNote(await ensurePeriodicTranslationsFor(t.editionType as "weekly" | "monthly", t.date));
+  },
+  periodicTranslationsCatchUp: async () => {
+    const { catchUpPeriodicTranslations } = await import("../periodic/translate-run");
+    return catchUpPeriodicTranslations();
   },
   now: () => Date.now(),
 };
@@ -678,7 +684,7 @@ export async function runReviewPipeline(opts: PipelineOptions = {}, deps: Pipeli
       if (note) r.message += ` · ${note}`;
     }
     // 주간·월간: ko 판이 공개되면 영어·중국어판 (2026-11-10 사용자 결정). 실패해도 발행은 그대로
-    if (r.published && t.editionType !== "daily" && !dryRun && deps.periodicTranslations) {
+    if (r.published && t.editionType !== "daily" && !dryRun && deps.periodicTranslations && easyTime()) {
       const note = await deps.periodicTranslations(t).catch((e: unknown) => `번역 실패: ${(e as Error).message}`);
       if (note) r.message += ` · ${note}`;
     }
@@ -704,6 +710,11 @@ export async function runReviewPipeline(opts: PipelineOptions = {}, deps: Pipeli
   // 따라잡기: 발행 직후 시간이 모자랐거나 관리자 발행 때 실패한 판 (이미 시도한 판은 LLM 없이 바로 끝난다)
   let catchUp = "";
   if (!opts.briefingId) catchUp = await easy();
+  // 주간·월간 번역 따라잡기 (시간이 남을 때만, 실패해도 검토 결과에는 영향 없음)
+  if (!opts.briefingId && !dryRun && deps.periodicTranslationsCatchUp && easyTime()) {
+    const tr = await deps.periodicTranslationsCatchUp().catch((e: unknown) => `주간·월간 번역 따라잡기 실패: ${(e as Error).message}`);
+    if (tr) catchUp = catchUp ? `${catchUp} · ${tr}` : tr;
+  }
   const notes = processed.filter((p) => p.notify);
   const lines = [...notes.map((p) => p.message), ...(catchUp ? [`[AiNews] ${catchUp}`] : [])];
   return {

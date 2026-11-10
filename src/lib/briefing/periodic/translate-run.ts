@@ -35,7 +35,7 @@ interface KoRow {
   input_hash: string;
 }
 
-export async function ensurePeriodicTranslations(koId: string): Promise<PeriodicTranslateOutcome[]> {
+export async function ensurePeriodicTranslations(koId: string, opts: { maxFailed?: number } = {}): Promise<PeriodicTranslateOutcome[]> {
   const { rows } = await pool.query(
     `SELECT id, edition_type, to_char(edition_date, 'YYYY-MM-DD') AS edition_date, to_char(period_start, 'YYYY-MM-DD') AS period_start,
             to_char(period_end, 'YYYY-MM-DD') AS period_end, metrics_id, mode, content, article_ids, input_article_ids, candidate_count, input_hash
@@ -59,6 +59,13 @@ export async function ensurePeriodicTranslations(koId: string): Promise<Periodic
     if (done.length) {
       out.push({ locale, status: "skipped", detail: "이미 번역·공개됨", costUsd: 0 });
       continue;
+    }
+    if (opts.maxFailed !== undefined) {
+      const { rows: f } = await pool.query(`SELECT count(*)::int AS n FROM daily_briefings WHERE source_briefing_id = $1::uuid AND locale = $2 AND status = 'failed'`, [ko.id, locale]);
+      if ((f[0]?.n ?? 0) >= opts.maxFailed) {
+        out.push({ locale, status: "skipped", detail: `실패 ${f[0].n}회 — 사람이 확인`, costUsd: 0 });
+        continue;
+      }
     }
     const tr = await translatePeriodic(ko.content, locale, ko.edition_type, { nameHints, glossary });
     const u = sumUsage(tr.usages);
@@ -113,4 +120,31 @@ export async function ensurePeriodicTranslationsFor(editionType: "weekly" | "mon
     [editionType, date]
   );
   return rows[0] ? ensurePeriodicTranslations(rows[0].id) : [];
+}
+
+/** 따라잡기에서 한 언어를 다시 시도하는 최대 실패 수 (그 뒤엔 사람이 CLI translate-periodic 으로) */
+const MAX_FAILED_TRIES = 3;
+
+/**
+ * 최근 14일 안에 공개된 주간·월간 ko 판 중 en·zh 공개본이 빠진 판을 다시 번역 (AI 검토 스윕 끝, 한 번에 최대 2판).
+ * 일시 오류로 빠진 번역을 다음 스윕이 메운다. 같은 언어가 MAX_FAILED_TRIES 번 실패했으면 더 시도하지 않는다.
+ */
+export async function catchUpPeriodicTranslations(): Promise<string> {
+  const { rows } = await pool.query(
+    `SELECT ko.id FROM daily_briefings ko
+      WHERE ko.locale = 'ko' AND ko.status = 'published' AND ko.edition_type IN ('weekly', 'monthly')
+        AND ko.published_at > now() - interval '14 days'
+        AND EXISTS (
+          SELECT 1 FROM (VALUES ('en'), ('zh')) AS l(loc)
+           WHERE NOT EXISTS (SELECT 1 FROM daily_briefings t WHERE t.source_briefing_id = ko.id AND t.locale = l.loc AND t.status = 'published')
+             AND (SELECT count(*) FROM daily_briefings t WHERE t.source_briefing_id = ko.id AND t.locale = l.loc AND t.status = 'failed') < $1)
+      ORDER BY ko.published_at DESC LIMIT 2`,
+    [MAX_FAILED_TRIES]
+  );
+  const notes: string[] = [];
+  for (const r of rows as { id: string }[]) {
+    const n = periodicTranslateNote(await ensurePeriodicTranslations(r.id, { maxFailed: MAX_FAILED_TRIES }));
+    if (n) notes.push(n);
+  }
+  return notes.length ? `주간·월간 ${notes.join(" / ")}` : "";
 }

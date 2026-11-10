@@ -93,7 +93,11 @@ export async function periodicMetadata(kind: PeriodicKind, locale: string, key?:
       title: { absolute: title },
       description: w.content.dek,
       alternates: { canonical: url, languages: publishedLanguageAlternates(periodicPath(kind, w.period_key), w.available_locales) },
-      openGraph: { type: "article", title, description: w.content.dek, url, publishedTime: w.published_at || undefined },
+      // 페이지 openGraph 는 레이아웃 것을 통째로 덮으므로 사이트 이름·언어를 다시 넣는다 (데일리 QA C-08 과 같게)
+      openGraph: {
+        type: "article", title, description: w.content.dek, url, publishedTime: w.published_at || undefined,
+        siteName: t("brand"), locale: LOCALE_HTML_LANG[w.locale as Locale].replace("-", "_"),
+      },
       twitter: { card: "summary", title, description: w.content.dek },
     };
   }
