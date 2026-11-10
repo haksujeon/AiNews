@@ -10,7 +10,7 @@ import { rootUrl } from "@/lib/site";
 // 브리핑 공유 카드: 발행본이 있으면 헤드라인, 없으면(다른 언어판만 있음·아직 발행 전) 날짜와 소개 문구.
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
-export const alt = "AI NEWS";
+export const alt = "SDSC AI NEWS";
 
 export default async function Image({ params }: { params: Promise<{ locale: string; date: string }> }) {
   const { locale, date } = await params;

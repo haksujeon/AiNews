@@ -1,7 +1,7 @@
 <!-- DRAFT: pending legal review (P0-6, decision D5). The newsletter (P0-4) records this version (CONSENT_VERSION) with each consent.
      When the text changes, bump CONSENT_VERSION in src/lib/trust/config.ts. Fill in the mail provider and privacy officer once decided. -->
 
-AI NEWS (the "Service") processes personal data as described below, in compliance with the Personal Information Protection Act of Korea and other applicable laws. You do not need an account or any personal data to read articles or briefings. This policy mainly applies to the email newsletter and to inquiries.
+SDSC AI NEWS (the "Service") processes personal data as described below, in compliance with the Personal Information Protection Act of Korea and other applicable laws. You do not need an account or any personal data to read articles or briefings. This policy mainly applies to the email newsletter and to inquiries.
 
 ## 1. Data we process
 

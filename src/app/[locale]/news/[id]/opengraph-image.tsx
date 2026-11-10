@@ -9,7 +9,7 @@ import { rootUrl } from "@/lib/site";
 // 기사 공유 카드: 자체 생성(브랜드·분류·제목·매체·날짜). 원문 이미지는 쓰지 않는다(결정 D3).
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
-export const alt = "AI NEWS";
+export const alt = "SDSC AI NEWS";
 
 export default async function Image({ params }: { params: Promise<{ locale: string; id: string }> }) {
   const { locale, id } = await params;

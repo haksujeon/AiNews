@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "AI News",
+    "appName": "SDSC AI News",
     "loading": "Loading...",
     "search": "Search",
     "statistics": "Statistics",
@@ -69,7 +69,7 @@
     "readTime": "{minutes} min read",
     "fewerRelated": "Show fewer related articles",
     "moreRelated": "Show more related articles",
-    "imageFallback": "AI NEWS",
+    "imageFallback": "SDSC AI NEWS",
     "aiInsightDisclosure": "Analysis written by AI from the original article. Check it against the source.",
     "translatedBody": "Translated text",
     "translatedGist": "Translated gist",
@@ -191,8 +191,8 @@
     "regionOTHER": "Other"
   },
   "meta": {
-    "brand": "AI NEWS",
-    "siteTitle": "AI NEWS — Chinese & global AI news in English",
+    "brand": "SDSC AI NEWS",
+    "siteTitle": "SDSC AI NEWS — Chinese & global AI news in English",
     "siteDescription": "AI technology, product and business news from China and around the world, with AI summaries and insights.",
     "statisticsTitle": "News statistics",
     "briefingTitle": "China AI Briefing, {date}: {headline}",
@@ -637,26 +637,26 @@
     "regionNote": "Each article counts once, by its subject region (Taiwan and Hong Kong count as China). {uschina} US–China stories; {unclassified} unclassified articles are left out of the shares."
   },
   "seo": {
-    "feedAllTitle": "AI NEWS — Latest",
+    "feedAllTitle": "SDSC AI NEWS — Latest",
     "feedAllDescription": "Headlines and summaries of AI news from China and beyond. Read the full story at the original outlet.",
-    "feedBriefingTitle": "AI NEWS — China AI Briefing",
+    "feedBriefingTitle": "SDSC AI NEWS — China AI Briefing",
     "feedBriefingDescription": "The daily China AI briefing and the weekly report.",
-    "feedCategoryTitle": "AI NEWS — {category}",
+    "feedCategoryTitle": "SDSC AI NEWS — {category}",
     "feedCategoryDescription": "Headlines and summaries of the latest {category} stories.",
     "weeklyItemTitle": "Weekly report {week}: {headline}",
-    "rssLinkTitle": "AI NEWS latest stories RSS",
+    "rssLinkTitle": "SDSC AI NEWS latest stories RSS",
     "breadcrumbHome": "Home",
     "ogBriefingKicker": "China AI Briefing",
     "ogBriefingFallback": "The day in China AI, in one edition",
-    "ogAlt": "AI NEWS share card",
+    "ogAlt": "SDSC AI NEWS share card",
     "monthlyItemTitle": "Monthly report {month}: {headline}"
   },
   "trust": {
     "footerNavLabel": "About this site",
     "about": {
       "nav": "About",
-      "title": "About AI NEWS",
-      "description": "What AI NEWS does and does not do, and which outlets we cover."
+      "title": "About SDSC AI NEWS",
+      "description": "What SDSC AI NEWS does and does not do, and which outlets we cover."
     },
     "methodology": {
       "nav": "Methodology",
@@ -803,7 +803,7 @@
     "step3Body": "Titles, summaries and insights in Korean, English and Chinese; bodies cut to a 3–5 sentence gist.",
     "step4When": "Daily 00:10",
     "step4Title": "Write the briefing",
-    "step4Body": "The day’s most important developments, organized into five top stories plus numbers, companies and a term.",
+    "step4Body": "The day’s most important developments, organized into five China and three global top stories plus numbers, companies and a term.",
     "step5When": "00:10 – 03:00",
     "step5Title": "Check & publish",
     "step5Body": "Automatic checks on numbers and sources, then two independent AI reviews. Published only if both pass; otherwise corrected and reviewed again.",
@@ -811,7 +811,7 @@
     "getTitle": "How to use it",
     "getToday": "Today",
     "getTodayTitle": "A briefing every morning",
-    "getTodayBody": "Five top stories, the day in numbers, companies to watch and the term of the day",
+    "getTodayBody": "Five China and three global top stories, the day in numbers, companies to watch and the term of the day",
     "getNews": "News",
     "getNewsTitle": "Articles by date, with search",
     "getNewsBody": "Search by company or keyword and filter China or US stories",
@@ -832,7 +832,7 @@
     "subBody": "RSS feeds (briefing, region, category) · morning email",
     "subRss": "RSS feeds",
     "moreTitle": "More about us",
-    "introStrip": "New to AI NEWS?",
+    "introStrip": "New to SDSC AI NEWS?",
     "introLink": "See how it is made",
     "introClose": "Close intro"
   },
@@ -900,7 +900,7 @@
     "pageTitle": "Subscribe to the morning email",
     "kicker": "China AI Daily · free",
     "title": "China AI news in your inbox every morning at 7",
-    "lead": "Yesterday's top 5 China AI stories and key numbers in a 3-minute read, plus a 3-minute AI audio version.",
+    "lead": "Yesterday's top 5 China AI stories with key numbers at a glance, plus the headlines of the top 3 global stories and a 3-minute AI audio version.",
     "organization": "Company",
     "organizationPh": "e.g. Samsung Electronics",
     "name": "Name",
@@ -935,7 +935,7 @@
     "doneCta": "Read today's briefing",
     "navSubscribe": "Subscribe",
     "ctaTitle": "Get it by email every morning at 7",
-    "ctaBody": "Yesterday's top 5 China AI stories and a 3-minute audio, free.",
+    "ctaBody": "Yesterday's top 5 China AI stories, top 3 global headlines and a 3-minute audio, free.",
     "ctaButton": "Subscribe",
     "recommend": "Recommend to a colleague",
     "ctaButtonShort": "Get by email"

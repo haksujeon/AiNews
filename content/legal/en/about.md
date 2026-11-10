@@ -2,7 +2,7 @@
 
 ## Who we are
 
-AI NEWS is a Chinese AI news briefing service run by aibaseclub.com. Chinese media publish a flood of AI technology, product and business stories every day; we organize them so readers in Korean, English and Chinese can scan them quickly.
+SDSC AI NEWS is a Chinese AI news briefing service run by aibaseclub.com. Chinese media publish a flood of AI technology, product and business stories every day; we organize them so readers in Korean, English and Chinese can scan them quickly.
 
 ## Outlets we cover
 

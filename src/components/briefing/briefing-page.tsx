@@ -54,7 +54,7 @@ export async function briefingMetadata(locale: string, date?: string): Promise<M
     const title = headlineTitle(b, (v) => t("briefingTitle", v));
     const url = absoluteUrl(b.locale, briefingDatePath(b.edition_date));
     return {
-      // 레이아웃 템플릿("%s | AI 뉴스")을 거치지 않고 그대로
+      // 레이아웃 템플릿("%s | SDSC AI NEWS")을 거치지 않고 그대로
       title: { absolute: title },
       description: b.content.lede,
       alternates: { canonical: url, languages: briefingAlternates(b.edition_date, b.available_locales) },

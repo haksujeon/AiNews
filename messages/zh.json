@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "AI 新闻",
+    "appName": "SDSC AI 新闻",
     "loading": "加载中...",
     "search": "搜索",
     "statistics": "统计",
@@ -69,7 +69,7 @@
     "readTime": "{minutes}分钟阅读",
     "fewerRelated": "减少相关新闻",
     "moreRelated": "增加相关新闻",
-    "imageFallback": "AI NEWS",
+    "imageFallback": "SDSC AI NEWS",
     "aiInsightDisclosure": "以上为AI根据原文生成的分析，请结合原文判断。",
     "translatedBody": "正文翻译",
     "translatedGist": "译文要点",
@@ -191,8 +191,8 @@
     "regionOTHER": "其他"
   },
   "meta": {
-    "brand": "AI NEWS",
-    "siteTitle": "AI NEWS — 中国与全球AI新闻速览",
+    "brand": "SDSC AI NEWS",
+    "siteTitle": "SDSC AI NEWS — 中国与全球AI新闻速览",
     "siteDescription": "汇集中国及全球AI技术、产品与商业新闻，附AI摘要与洞察。",
     "statisticsTitle": "新闻统计",
     "briefingTitle": "{date}中国AI简报：{headline}",
@@ -637,26 +637,26 @@
     "regionNote": "每篇文章按一个主体地区计（台湾、香港计入中国）。中美同为主角{uschina}篇；未判定地区的{unclassified}篇不计入占比。"
   },
   "seo": {
-    "feedAllTitle": "AI NEWS — 最新资讯",
+    "feedAllTitle": "SDSC AI NEWS — 最新资讯",
     "feedAllDescription": "中国及全球 AI 新闻的标题与摘要，全文请阅读原始媒体。",
-    "feedBriefingTitle": "AI NEWS — 中国AI简报",
+    "feedBriefingTitle": "SDSC AI NEWS — 中国AI简报",
     "feedBriefingDescription": "每日发布的中国AI简报与每周报告。",
-    "feedCategoryTitle": "AI NEWS — {category}",
+    "feedCategoryTitle": "SDSC AI NEWS — {category}",
     "feedCategoryDescription": "{category}领域最新资讯的标题与摘要。",
     "weeklyItemTitle": "{week}周报：{headline}",
-    "rssLinkTitle": "AI NEWS 最新资讯 RSS",
+    "rssLinkTitle": "SDSC AI NEWS 最新资讯 RSS",
     "breadcrumbHome": "首页",
     "ogBriefingKicker": "中国AI简报",
     "ogBriefingFallback": "一份简报，读懂当天的中国AI",
-    "ogAlt": "AI NEWS 分享卡片",
+    "ogAlt": "SDSC AI NEWS 分享卡片",
     "monthlyItemTitle": "{month}月报：{headline}"
   },
   "trust": {
     "footerNavLabel": "网站信息",
     "about": {
       "nav": "关于",
-      "title": "关于 AI NEWS",
-      "description": "介绍 AI NEWS 做什么、不做什么，以及收录哪些媒体的报道。"
+      "title": "关于 SDSC AI NEWS",
+      "description": "介绍 SDSC AI NEWS 做什么、不做什么，以及收录哪些媒体的报道。"
     },
     "methodology": {
       "nav": "编辑方法",
@@ -803,7 +803,7 @@
     "step3Body": "用韩、英、中三种语言撰写标题、摘要和洞察，正文压缩为3~5句要点。",
     "step4When": "每天00:10",
     "step4Title": "撰写简报",
-    "step4Body": "挑选当天最重要的动向，整理成5条要闻以及数字、公司和术语。",
+    "step4Body": "挑选当天最重要的动向，整理成中国要闻5条、海外要闻3条以及数字、公司和术语。",
     "step5When": "00:10 – 03:00",
     "step5Title": "校验与发布",
     "step5Body": "自动核对数字和依据后，进行两次独立AI审核。两次都通过才发布，否则修正后重新审核。",
@@ -811,7 +811,7 @@
     "getTitle": "这样使用",
     "getToday": "今日",
     "getTodayTitle": "每天早上的简报",
-    "getTodayBody": "5条要闻、数字看当日、值得关注的公司和当日术语",
+    "getTodayBody": "中国要闻5条、海外要闻3条、数字看当日、值得关注的公司和当日术语",
     "getNews": "新闻",
     "getNewsTitle": "按日期浏览与搜索",
     "getNewsBody": "按公司或关键词查找，按中国或美国筛选",
@@ -832,7 +832,7 @@
     "subBody": "RSS订阅（简报、地区、领域）· 早间邮件订阅",
     "subRss": "RSS订阅",
     "moreTitle": "详细介绍",
-    "introStrip": "第一次来AI NEWS？",
+    "introStrip": "第一次来SDSC AI NEWS？",
     "introLink": "看看我们如何制作",
     "introClose": "关闭介绍"
   },
@@ -900,7 +900,7 @@
     "pageTitle": "订阅早间邮件",
     "kicker": "中国AI每日简报 · 免费订阅",
     "title": "每天早上7点，把中国AI动态发到您的邮箱",
-    "lead": "每天整理前一天中国AI要闻5条和关键数字，3分钟读完，并附3分钟AI语音。",
+    "lead": "每天整理前一天中国AI要闻5条及关键数字一览，附海外要闻3条标题和3分钟AI语音。",
     "organization": "公司",
     "organizationPh": "例如：三星电子",
     "name": "姓名",
@@ -935,7 +935,7 @@
     "doneCta": "查看今天的简报",
     "navSubscribe": "订阅",
     "ctaTitle": "每天早上7点，邮件送达",
-    "ctaBody": "免费发送前一天中国AI要闻5条和3分钟收听。",
+    "ctaBody": "免费发送前一天中国AI要闻5条、海外要闻3条标题和3分钟收听。",
     "ctaButton": "订阅",
     "recommend": "推荐给同事",
     "ctaButtonShort": "邮件订阅"

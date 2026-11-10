@@ -9,7 +9,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { SubscribeLink } from "@/components/newsletter/subscribe-link";
 
 /**
- * 마스트헤드: 워드마크(로케일별 "AI 뉴스") + 작은 부제. 아이콘 타일·두 색 로고·그라데이션 선 없음.
+ * 마스트헤드: 워드마크(로케일별 "SDSC AI 뉴스") + 작은 부제. 아이콘 타일·두 색 로고·그라데이션 선 없음.
  * 관리자 링크는 공개 헤더에 두지 않는다(/admin 직접 접근).
  */
 export function Header() {

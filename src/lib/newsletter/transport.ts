@@ -5,7 +5,7 @@
  * 환경 변수 (.env.local, 저장소에 넣지 않는다):
  *   NEWSLETTER_SMTP_USER  Gmail 주소 (보내는 주소 = 이 주소. Gmail 은 다른 From 을 허용하지 않는다)
  *   NEWSLETTER_SMTP_PASS  Google 계정 > 보안 > 앱 비밀번호 (16자)
- *   NEWSLETTER_FROM_NAME  보내는 이름 (기본 "AI 뉴스")
+ *   NEWSLETTER_FROM_NAME  보내는 이름 (기본 "SDSC AI 뉴스")
  */
 import nodemailer, { type Transporter } from "nodemailer";
 
@@ -39,7 +39,7 @@ function gmailTransport(): MailTransport {
     greetingTimeout: 20_000,
     socketTimeout: 60_000,
   });
-  const from = { name: process.env.NEWSLETTER_FROM_NAME || "AI 뉴스", address: user };
+  const from = { name: process.env.NEWSLETTER_FROM_NAME || "SDSC AI 뉴스", address: user };
   return {
     name: "gmail-smtp",
     async send(m) {

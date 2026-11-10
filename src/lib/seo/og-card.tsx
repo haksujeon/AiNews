@@ -123,6 +123,12 @@ export async function renderOgCard(input: OgCardInput): Promise<ImageResponse> {
   return new ImageResponse(<OgCard {...input} />, { ...OG_SIZE, fonts: await loadFonts() });
 }
 
+/** 로고 워드마크 줄 나눔: 세 단어 이상("SDSC AI NEWS")이면 첫 단어를 윗줄로 — 정사각 안에 한 줄로 넣으면 넘친다 */
+export function logoLines(brand: string): string[] {
+  const words = brand.trim().split(/\s+/);
+  return words.length >= 3 ? [words[0], words.slice(1).join(" ")] : [brand];
+}
+
 /** 발행자 로고(정사각 PNG) — JSON-LD publisher.logo */
 export async function renderLogo(brand: string, size: number): Promise<ImageResponse> {
   return new ImageResponse(
@@ -140,7 +146,11 @@ export async function renderLogo(brand: string, size: number): Promise<ImageResp
           fontFamily: `"${KO}"`,
         }}
       >
-        <div style={{ display: "flex", fontSize: size * 0.2, letterSpacing: "-0.03em" }}>{brand}</div>
+        {logoLines(brand).map((line, i) => (
+          <div key={i} style={{ display: "flex", fontSize: size * 0.2, lineHeight: 1.1, letterSpacing: "-0.03em" }}>
+            {line}
+          </div>
+        ))}
         <div style={{ display: "flex", width: size * 0.42, height: size * 0.035, background: C.jade, marginTop: size * 0.05 }} />
       </div>
     ),
