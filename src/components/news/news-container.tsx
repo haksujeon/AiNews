@@ -8,7 +8,7 @@ import { NEWS_DAYS_PER_PAGE } from "@/lib/news-types";
 import { fetchNewsDaysClient, isAbortError } from "@/lib/supabase-client";
 import { formatDateGroup } from "@/lib/news-utils";
 import type { DateRange } from "@/lib/news-utils";
-import type { NewsFilters } from "@/lib/news-query";
+import { EMPTY_FILTERS, newsSearchString, type NewsFilters, type NewsView } from "@/lib/news-query";
 import type { RegionChip } from "@/lib/region";
 import type { RegionCounts } from "@/lib/metrics/period";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -23,10 +23,10 @@ interface NewsContainerProps {
   initialPage: NewsDaysPage;
   /** 테이블 전체 기준 필터 선택지 */
   facets?: { countries: string[]; categories: string[]; regions?: RegionCounts };
-  /** 주소의 ?region= (서버가 이 칩으로 첫 페이지를 걸러 보냈다) */
-  initialRegion?: RegionChip;
-  /** 주소의 ?q= (헤더·하단 탭 검색 → /news?q=, 서버가 이 검색어로 첫 페이지를 걸러 보냈다) */
-  initialQuery?: string;
+  /** 주소의 필터 (?q= ?region= ?categories= ?from= ?to=, parseFilters) — 서버가 이 필터로 첫 페이지를 걸러 보냈다 */
+  initialFilters?: NewsFilters;
+  /** 주소의 ?view= */
+  initialView?: NewsView;
   /** 주소의 ?focus=search (휴대폰 하단 "검색" 탭) — 검색창에 바로 커서 */
   autoFocusSearch?: boolean;
   isLoading?: boolean;
@@ -39,7 +39,7 @@ interface NewsContainerProps {
 // 기사 상세는 카드/리스트 항목의 링크(/news/[id])로 연다.
 // 소프트 이동이면 @modal/(.)news/[id] 가 모달로 가로채고, 직접 접속이면 전체 페이지가 뜬다.
 // 날짜 옆 "그날 브리핑" 은 ?briefing=YYYY-MM-DD 대화상자(DayBriefingDialog)로 연다 — 첫 화면과 무한 스크롤로 받은 날 모두 같은 링크.
-export function NewsContainer({ initialPage, facets, initialRegion = "ALL", initialQuery = "", autoFocusSearch = false, isLoading = false }: NewsContainerProps) {
+export function NewsContainer({ initialPage, facets, initialFilters = EMPTY_FILTERS, initialView = "grid", autoFocusSearch = false, isLoading = false }: NewsContainerProps) {
   const locale = useLocale();
   const t = useTranslations("list");
   const tc = useTranslations("common");
@@ -53,12 +53,13 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", init
   const [listError, setListError] = useState(false);
   const [moreError, setMoreError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
-  const [searchQuery, setSearchQuery] = useState(initialQuery);
-  const [selectedCountry, setSelectedCountry] = useState("ALL");
-  const [selectedRegion, setSelectedRegion] = useState<RegionChip>(initialRegion);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [dateRange, setDateRange] = useState<DateRange>({});
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const init = initialFilters;
+  const [searchQuery, setSearchQuery] = useState(init.q);
+  const [selectedCountry, setSelectedCountry] = useState(init.country);
+  const [selectedRegion, setSelectedRegion] = useState<RegionChip>(init.region);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(init.categories);
+  const [dateRange, setDateRange] = useState<DateRange>(() => ({ ...(init.from ? { from: init.from } : {}), ...(init.to ? { to: init.to } : {}) }));
+  const [viewMode, setViewMode] = useState<NewsView>(initialView);
   const sentinelRef = useRef<HTMLDivElement>(null);
   // 필터가 바뀔 때마다 증가. 이전 세대의 응답(추가 로드 포함)은 버린다.
   const generationRef = useRef(0);
@@ -81,14 +82,14 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", init
   );
 
   // 필터가 바뀌면 서버에서 첫 페이지를 다시 받아온다.
-  // 초기 렌더(필터 없음 + 주소의 지역 칩·검색어)는 서버 컴포넌트가 이미 준 데이터를 쓰므로 건너뛴다.
+  // 초기 렌더(주소의 필터 그대로)는 서버 컴포넌트가 이미 준 데이터를 쓰므로 건너뛴다.
   const isInitialFilters =
-    filters.q === initialQuery &&
-    filters.country === "ALL" &&
-    filters.region === initialRegion &&
-    filters.categories.length === 0 &&
-    !filters.from &&
-    !filters.to;
+    filters.q === init.q &&
+    filters.country === init.country &&
+    filters.region === init.region &&
+    filters.categories.join(",") === init.categories.join(",") &&
+    filters.from === init.from &&
+    filters.to === init.to;
   const skipFirstFetch = useRef(true);
 
   useEffect(() => {
@@ -188,38 +189,24 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", init
 
   const filterKey = `${selectedCategories.join(",")}-${selectedCountry}-${selectedRegion}-${debouncedQuery}-${dateRange.from || ""}-${dateRange.to || ""}`;
 
-  // 지역 칩은 주소(?region=)에 남겨 공유·새로고침에도 유지한다 (다른 필터는 지금처럼 화면 상태만)
-  const handleRegionChange = useCallback((region: RegionChip) => {
-    setSelectedRegion(region);
+  // 필터·보기 방식을 주소에 남겨 공유·새로고침에도 유지한다 (QA B-02. 예전에는 지역·검색어만 남았다).
+  // 검색어는 디바운스된 값만 반영해 타이핑마다 주소를 바꾸지 않는다. 읽기는 서버 페이지의 parseFilters — 같은 규칙.
+  useEffect(() => {
     try {
+      const next = newsSearchString(window.location.search, filters, viewMode);
+      if (next === window.location.search) return;
       const url = new URL(window.location.href);
-      if (region === "ALL") url.searchParams.delete("region");
-      else url.searchParams.set("region", region);
+      url.search = next;
       window.history.replaceState(window.history.state, "", url.toString());
     } catch {
       /* 주소 갱신 실패는 무시 — 목록 필터는 그대로 동작한다 */
     }
-  }, []);
-
-  // 검색어도 주소(?q=)와 맞춘다 — 헤더 검색으로 ?q= 를 달고 들어온 뒤 바꾸거나 지우면 주소에 옛 검색어가 남아
-  // 새로고침 때 되살아났다 (QA B-01). 디바운스된 값만 반영해 타이핑마다 주소를 바꾸지 않는다.
-  useEffect(() => {
-    try {
-      const url = new URL(window.location.href);
-      const q = debouncedQuery.trim();
-      if ((url.searchParams.get("q") ?? "") === q) return;
-      if (q) url.searchParams.set("q", q);
-      else url.searchParams.delete("q");
-      window.history.replaceState(window.history.state, "", url.toString());
-    } catch {
-      /* 주소 갱신 실패는 무시 */
-    }
-  }, [debouncedQuery]);
+  }, [filters, viewMode]);
 
   const handleReset = () => {
     setSearchQuery("");
     setSelectedCountry("ALL");
-    handleRegionChange("ALL");
+    setSelectedRegion("ALL");
     setSelectedCategories([]);
     setDateRange({});
   };
@@ -235,7 +222,7 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", init
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           selectedRegion={selectedRegion}
-          onRegionChange={handleRegionChange}
+          onRegionChange={setSelectedRegion}
           regionCounts={facets?.regions}
           selectedCategories={selectedCategories}
           onCategoriesChange={setSelectedCategories}
@@ -259,7 +246,7 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", init
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         selectedRegion={selectedRegion}
-        onRegionChange={handleRegionChange}
+        onRegionChange={setSelectedRegion}
         regionCounts={facets?.regions}
         selectedCategories={selectedCategories}
         onCategoriesChange={setSelectedCategories}

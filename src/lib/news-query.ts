@@ -148,3 +148,28 @@ export function buildNewsWhere(
 
   return { where: clauses.join(" AND "), values };
 }
+
+/** 뉴스 목록 주소가 들고 다니는 키 (필터 + 보기 방식). 그 밖의 키(?briefing= 등)는 건드리지 않는다 */
+const NEWS_URL_KEYS = ["q", "country", "region", "categories", "from", "to", "view"] as const;
+
+export type NewsView = "grid" | "list";
+
+/** 주소의 ?view= → 보기 방식 (모르는 값은 grid) */
+export function parseNewsView(v: string | null | undefined): NewsView {
+  return v === "list" ? "list" : "grid";
+}
+
+/**
+ * 현재 주소 검색 문자열 + 화면 필터 → 새 검색 문자열 ("?…" 또는 "").
+ * 필터·보기 방식을 주소에 남겨 새로고침·공유에도 유지한다 (QA B-02). 읽기는 parseFilters·parseNewsView — 서버 페이지와 API 가 같은 규칙.
+ * 일회성 키 focus(하단 "검색" 탭)는 한 번 쓰고 지운다.
+ */
+export function newsSearchString(current: string, filters: NewsFilters, view: NewsView): string {
+  const p = new URLSearchParams(current);
+  for (const k of NEWS_URL_KEYS) p.delete(k);
+  p.delete("focus");
+  filtersToParams({ ...filters, q: filters.q.trim() }).forEach((v, k) => p.set(k, v));
+  if (view === "list") p.set("view", "list");
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}

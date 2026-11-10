@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { notFoundMetadata } from "@/lib/seo/not-found-meta";
 import { Link } from "@/i18n/navigation";
 import { isLocale, LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
 import { Header } from "@/components/layout/header";
@@ -96,8 +97,7 @@ export async function periodicMetadata(kind: PeriodicKind, locale: string, key?:
     };
   }
   if (r.kind === "not_found") {
-    const tn = await getTranslations({ locale: loc, namespace: "notFound" });
-    return { title: tn("title"), robots: { index: false } };
+    return notFoundMetadata(loc);
   }
   return { title: t(LATEST_KEY[kind]), description: t(DESC_KEY[kind]), robots: { index: false, follow: true } };
 }

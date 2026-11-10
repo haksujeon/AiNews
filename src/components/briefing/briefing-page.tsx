@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { notFoundMetadata } from "@/lib/seo/not-found-meta";
 import { Link } from "@/i18n/navigation";
 import { isLocale } from "@/i18n/routing";
 import { Header } from "@/components/layout/header";
@@ -65,8 +66,7 @@ export async function briefingMetadata(locale: string, date?: string): Promise<M
     };
   }
   if (r.kind === "not_found") {
-    const tn = await getTranslations({ locale: loc, namespace: "notFound" });
-    return { title: tn("title"), robots: { index: false } };
+    return notFoundMetadata(loc);
   }
   // 언어판 없음 / 아직 발행 전: 색인하지 않는다
   return { title: t("briefingLatestTitle"), robots: { index: false, follow: true } };

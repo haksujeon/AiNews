@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { ArrowLeft, Search } from "lucide-react";
 import { isLocale } from "@/i18n/routing";
+import { notFoundMetadata } from "@/lib/seo/not-found-meta";
 import { absoluteUrl, languageAlternates } from "@/lib/site";
 import { Link } from "@/i18n/navigation";
 import { Header } from "@/components/layout/header";
@@ -21,7 +22,7 @@ import { addDays } from "@/lib/metrics/period";
  */
 export async function generateMetadata({ params }: { params: Promise<{ locale: string; key: string }> }): Promise<Metadata> {
   const { locale, key } = await params;
-  if (!isCompanyKey(key)) return {};
+  if (!isLocale(locale) || !isCompanyKey(key)) return notFoundMetadata(locale);
   const t = await getTranslations({ locale, namespace: "companies" });
   const name = companyName(key, locale);
   return {

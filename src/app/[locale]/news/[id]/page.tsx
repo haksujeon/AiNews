@@ -7,6 +7,7 @@ import { toPublicNewsItem } from "@/lib/news-gist";
 import { withNewsFx } from "@/lib/fx/news";
 import { absoluteUrl, languageAlternates } from "@/lib/site";
 import { LOCALE_HTML_LANG, isLocale } from "@/i18n/routing";
+import { notFoundMetadata } from "@/lib/seo/not-found-meta";
 import { clipText } from "@/lib/seo/text";
 import { breadcrumbLd, newsArticleLd, ogImagePath, safeJsonLd } from "@/lib/seo/jsonld";
 import { Header } from "@/components/layout/header";
@@ -21,8 +22,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale, id } = await params;
   const news = await fetchNewsById(id);
   if (!news || !isLocale(locale)) {
-    const t = await getTranslations({ locale: isLocale(locale) ? locale : "ko", namespace: "notFound" });
-    return { title: t("title"), robots: { index: false } };
+    return notFoundMetadata(locale);
   }
 
   const title = getTitle(news, locale);
