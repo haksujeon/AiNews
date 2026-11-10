@@ -1,5 +1,6 @@
 {
   "common": {
+    "skipToContent": "본문으로 건너뛰기",
     "appName": "SDSC AI 뉴스",
     "loading": "로딩 중...",
     "search": "검색",
@@ -379,6 +380,8 @@
   },
   "briefingAdmin": {
     "nav": "브리핑 검토",
+    "listShown": "최근 {count}건을 보여 주고 있습니다.",
+    "listMore": "150건 더 보기",
     "listTitle": "브리핑 검토",
     "listHint": "검증을 통과한 ko 초안을 검토해 발행합니다. 발행하면 그 ko 에서 번역한 en/zh 초안도 함께 발행되고, 같은 날짜의 기존 발행본은 교체됩니다.",
     "colDate": "날짜",

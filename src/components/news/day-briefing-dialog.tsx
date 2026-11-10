@@ -11,6 +11,7 @@ import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RouteModalShell, rememberFocusOrigin } from "@/components/layout/route-modal-shell";
 import { BriefingCompact, BriefingCompactHeader } from "@/components/briefing/briefing-compact";
+import { isCalendarDate } from "@/lib/news-query";
 
 /*
  * 홈 날짜 → 그날 브리핑 팝업 (구현 방식 (b): 클라이언트 대화상자 + ?briefing=YYYY-MM-DD).
@@ -30,7 +31,6 @@ import { BriefingCompact, BriefingCompactHeader } from "@/components/briefing/br
  */
 
 export const DAY_BRIEFING_PARAM = "briefing";
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 이 탭에서 우리가 pushState 로 넣은 기록 위에 있는가 (닫을 때 back 할지 replace 할지) */
 let pushedByUs = false;
@@ -93,7 +93,8 @@ export function DayBriefingDialog() {
   const locale = useLocale();
   const params = useSearchParams();
   const raw = params.get(DAY_BRIEFING_PARAM);
-  const date = raw && DATE_RE.test(raw) ? raw : null;
+  // 형식만이 아니라 실제 날짜여야 연다 (QA B-17: ?briefing=2026-02-30 이 제목에 그대로 나왔다)
+  const date = raw && isCalendarDate(raw) ? raw : null;
   const [result, setResult] = useState<{ key: string; loaded: Loaded } | null>(null);
   const [retry, setRetry] = useState(0);
   const key = date ? `${locale}:${date}:${retry}` : null;

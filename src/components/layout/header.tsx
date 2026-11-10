@@ -18,6 +18,13 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-rule bg-background">
+      {/* 키보드 사용자를 위한 본문 바로가기 — 탭 첫 번째, 포커스될 때만 보인다 (QA C-12·E-10). 대상은 각 페이지 <main id="main"> */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-[60] focus:rounded-sm focus:bg-ink focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-background"
+      >
+        {t("skipToContent")}
+      </a>
       <div className="container mx-auto flex h-14 items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-5 sm:gap-8">
           <Link

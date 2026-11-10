@@ -46,7 +46,7 @@ export default async function CompaniesPage({ params }: { params: Promise<{ loca
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-8" data-testid="companies-hub">
+      <main id="main" className="flex-1 container mx-auto px-4 py-8" data-testid="companies-hub">
         <h1 className="text-[26px] font-[800] tracking-[-0.02em] text-ink sm:text-[30px]">{t("title")}</h1>
         <p className="mt-2 max-w-3xl text-[14.5px] leading-relaxed text-ink-2">
           {t("lead", { start: shortDate(w.start, locale), end: shortDate(w.end, locale), total: w.total, prevTotal: w.prevTotal })}

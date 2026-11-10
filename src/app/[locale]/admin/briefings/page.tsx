@@ -25,14 +25,16 @@ export default async function AdminBriefingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; limit?: string }>;
 }) {
   const { locale } = await params;
-  const { type } = await searchParams;
+  const { type, limit: limitParam } = await searchParams;
+  // 목록은 기본 150행. 넘치면 아래 "더 보기"로 늘린다 (QA D-06: 150행에서 끊겨 오래된 판으로 갈 길이 없었다)
+  const limit = Math.min(Math.max(Number(limitParam) || 150, 150), 2000);
   const filter: TypeFilter = TYPES.includes(type as TypeFilter) ? (type as TypeFilter) : "all";
   const t = await getTranslations({ locale, namespace: "briefingAdmin" });
   const [rows, sla] = await Promise.all([
-    listBriefingsForAdmin(150, filter === "all" ? undefined : filter),
+    listBriefingsForAdmin(limit, filter === "all" ? undefined : filter),
     briefingSlaStatus(new Date()).catch((e) => {
       console.error("[admin/briefings] sla", e);
       return null;
@@ -119,6 +121,17 @@ export default async function AdminBriefingsPage({
                 ))}
               </tbody>
             </table>
+            {rows.length >= limit && (
+              <p className="py-4 text-sm text-ink-3">
+                {t("listShown", { count: rows.length })}{" "}
+                <Link
+                  href={`/admin/briefings?${filter === "all" ? "" : `type=${filter}&`}limit=${limit + 150}`}
+                  className="font-semibold text-ink underline underline-offset-4"
+                >
+                  {t("listMore")}
+                </Link>
+              </p>
+            )}
           </div>
         )}
       </div>

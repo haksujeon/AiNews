@@ -63,7 +63,9 @@ export async function verifyAdminToken(token: string): Promise<boolean> {
     const isValid = await crypto.subtle.verify(
       "HMAC",
       key,
-      new Uint8Array(sigBytes).buffer as ArrayBuffer,
+      // .buffer(ArrayBuffer)를 넘기면 미들웨어(Edge) 실행 환경에서 다른 영역의 ArrayBuffer 로 보여 verify 가 던진다
+      // ("3rd argument is not instance of ArrayBuffer…", QA D-01 — 로그인 뒤 관리자 화면이 로그인으로 되돌아감). 바이트 배열을 그대로 넘긴다
+      new Uint8Array(sigBytes),
       new TextEncoder().encode(payload)
     );
     if (!isValid) return false;
@@ -73,7 +75,9 @@ export async function verifyAdminToken(token: string): Promise<boolean> {
     ) as { iat: number; exp: number };
 
     return Math.floor(Date.now() / 1000) < decoded.exp;
-  } catch {
+  } catch (e) {
+    // 이유를 남긴다 (QA D-01: 미들웨어에서만 검증이 실패했는데 원인이 로그에 없었다). 토큰 값은 남기지 않는다
+    console.error("[admin-auth] 토큰 검증 오류:", (e as Error)?.message ?? String(e));
     return false;
   }
 }

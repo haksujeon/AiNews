@@ -5,6 +5,7 @@ import { isLocale } from "@/i18n/routing";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { SubscribeForm } from "@/components/newsletter/subscribe-form";
+import { absoluteUrl, languageAlternates } from "@/lib/site";
 
 /**
  * 아침 메일 구독 신청 (QR·사이트 "구독" 버튼). ?src= 는 어디서 왔는지(행사·자료별 QR) — 관리자 현황에 쓴다.
@@ -19,7 +20,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params;
   if (!isLocale(locale)) return {};
   const t = await getTranslations({ locale, namespace: "subscribe" });
-  return { title: t("pageTitle"), description: t("lead") };
+  // canonical·hreflang: QR 주소(?src=...)마다 따로 색인되지 않게 쿼리 없는 주소로 모은다 (QA C-05)
+  return {
+    title: t("pageTitle"),
+    description: t("lead"),
+    alternates: { canonical: absoluteUrl(locale, "/subscribe"), languages: languageAlternates("/subscribe") },
+  };
 }
 
 export default async function SubscribePage({ params, searchParams }: Props) {

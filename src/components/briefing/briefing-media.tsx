@@ -599,6 +599,15 @@ export function ListenShort({ className }: { className?: string }) {
   const t = useTranslations("briefing");
   const a = useAudio();
   const barRef = useBarRef<HTMLButtonElement>();
+  const hasAudio = !!a;
+  // 메일·홈의 "듣기" 링크는 #listen(데스크톱 듣기 막대)으로 온다. 휴대폰에서는 그 막대가 숨겨져 있어
+  // 이동하지 않으므로, 막대가 안 보이면 이 짧은 듣기 버튼으로 옮긴다 (QA A-06)
+  useEffect(() => {
+    if (!hasAudio || window.location.hash !== "#listen") return;
+    const bar = document.getElementById("listen");
+    if (bar && bar.offsetParent !== null) return;
+    document.querySelector<HTMLElement>('[data-testid="listen-short"]')?.scrollIntoView({ block: "center" });
+  }, [hasAudio]);
   if (!a) return null;
   const minutes = Math.max(1, Math.round(a.duration / 60));
   return (

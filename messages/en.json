@@ -1,5 +1,6 @@
 {
   "common": {
+    "skipToContent": "Skip to content",
     "appName": "SDSC AI News",
     "loading": "Loading...",
     "search": "Search",
@@ -379,6 +380,8 @@
   },
   "briefingAdmin": {
     "nav": "Briefing review",
+    "listShown": "Showing the latest {count}.",
+    "listMore": "Show 150 more",
     "listTitle": "Briefing review",
     "listHint": "Review validated ko drafts and publish them. Publishing also publishes the en/zh drafts translated from that ko version and replaces the date's current edition.",
     "colDate": "Date",

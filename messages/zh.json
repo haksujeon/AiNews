@@ -1,5 +1,6 @@
 {
   "common": {
+    "skipToContent": "跳到正文",
     "appName": "SDSC AI 新闻",
     "loading": "加载中...",
     "search": "搜索",
@@ -379,6 +380,8 @@
   },
   "briefingAdmin": {
     "nav": "简报审核",
+    "listShown": "显示最近 {count} 条。",
+    "listMore": "再显示 150 条",
     "listTitle": "简报审核",
     "listHint": "审核通过验证的韩文草稿并发布。发布时会同时发布由该版本翻译的英文/中文草稿，并替换该日期的现有版本。",
     "colDate": "日期",

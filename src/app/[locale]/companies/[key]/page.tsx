@@ -55,7 +55,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ locale
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-8" data-testid="company-page">
+      <main id="main" className="flex-1 container mx-auto px-4 py-8" data-testid="company-page">
         <Link href="/companies" className="inline-flex min-h-9 items-center gap-1.5 text-[13.5px] text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           {t("back")}
