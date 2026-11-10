@@ -107,6 +107,8 @@ export interface PipelineDeps {
   recordDecision: (reviewId: string, decision: unknown, fixedBriefingId?: string | null) => Promise<void>;
   /** 발행된 최신 데일리 판의 "쉬운 AI 설명" 만들기 (easy-terms-run.ts ensureEasyTerms — 관리자 발행과 같은 함수). 알림 한 줄(없으면 "") */
   easyTerms?: () => Promise<string>;
+  /** 주간·월간 ko 판 자동 발행 뒤 en·zh 판 만들기 (periodic/translate-run.ts — 관리자 발행과 같은 함수). 알림 한 줄 */
+  periodicTranslations?: (t: Target) => Promise<string>;
   now: () => number;
 }
 
@@ -229,6 +231,11 @@ export const defaultPipelineDeps: PipelineDeps = {
   },
   recordDecision: (id, decision, fixed) => updateReviewDecision(id, { decision, fixedBriefingId: fixed ?? null }),
   easyTerms: async () => easyRunNote(await ensureEasyTerms()),
+  periodicTranslations: async (t) => {
+    // 동적 import: translate-run → generate → review 순환 참조를 피한다
+    const { ensurePeriodicTranslationsFor, periodicTranslateNote } = await import("../periodic/translate-run");
+    return periodicTranslateNote(await ensurePeriodicTranslationsFor(t.editionType as "weekly" | "monthly", t.date));
+  },
   now: () => Date.now(),
 };
 
@@ -668,6 +675,11 @@ export async function runReviewPipeline(opts: PipelineOptions = {}, deps: Pipeli
     processed.push(r);
     if (r.published && t.editionType === "daily") {
       const note = await easy();
+      if (note) r.message += ` · ${note}`;
+    }
+    // 주간·월간: ko 판이 공개되면 영어·중국어판 (2026-11-10 사용자 결정). 실패해도 발행은 그대로
+    if (r.published && t.editionType !== "daily" && !dryRun && deps.periodicTranslations) {
+      const note = await deps.periodicTranslations(t).catch((e: unknown) => `번역 실패: ${(e as Error).message}`);
       if (note) r.message += ` · ${note}`;
     }
     // 누락 재생성: 판 잠금을 푼 뒤 생성(생성도 같은 날짜 잠금) → 시간이 남으면 새 판을 바로 검토, 아니면 다음 스윕이 잇는다

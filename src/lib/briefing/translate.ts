@@ -156,7 +156,11 @@ export function nameIssues(src: string, out: string, target: Target): string[] {
 
 /** 번역 입력의 이름표 줄 (ko = en = zh) */
 export function nameGlossaryLines(ko: BriefingContent): string[] {
-  const text = fieldsOf(ko).map((f) => f.get(ko) ?? "").join(" ");
+  return nameGlossaryLinesOf(fieldsOf(ko).map((f) => f.get(ko) ?? "").join(" "));
+}
+
+/** 글에 나오는 이름의 이름표 줄 — 데일리·주간·월간 번역이 같이 쓴다 */
+export function nameGlossaryLinesOf(text: string): string[] {
   const seen = new Set<string>();
   const lines: string[] = [];
   for (const { entry } of nameEntriesIn(text)) {
@@ -167,20 +171,16 @@ export function nameGlossaryLines(ko: BriefingContent): string[] {
   return lines;
 }
 
-/** 번역본 재검증. 문제 목록(빈 배열이면 통과) */
-export function checkTranslation(ko: BriefingContent, tr: BriefingContent, target: Target): string[] {
+/**
+ * 번역 칸 하나 재검증 (순수) — 데일리 checkTranslation 과 주간·월간 번역(periodic/translate.ts)이 같이 쓴다 (Gate 2).
+ * 한글 잔여, en 한자, 긴 원시 숫자, k 축약, 이름표 표기, 숫자 집합(zh 는 자릿수까지).
+ */
+export function checkTranslatedField(path: string, src: string, out: string, target: Target): string[] {
   const problems: string[] = [];
-  if (shapeOf(ko) !== shapeOf(tr)) {
-    problems.push(`structure: array lengths differ from source (${shapeOf(ko)} vs ${shapeOf(tr)})`);
-    return problems;
-  }
-  for (const f of fieldsOf(ko)) {
-    const src = f.get(ko) ?? "";
-    const out = f.get(tr) ?? "";
-    if (!src) continue;
+  const f = { path };
     if (!out.trim()) {
       problems.push(`${f.path}: empty translation`);
-      continue;
+      return problems;
     }
     if (HANGUL_RE.test(out)) problems.push(`${f.path}: Hangul remains ("${out.slice(0, 60)}")`);
     // en 은 괄호 병기 원어도 허용하지 않는다 (예전 규칙 그대로)
@@ -224,6 +224,20 @@ export function checkTranslation(ko: BriefingContent, tr: BriefingContent, targe
       if ([...da].some((x) => !db.has(x)) || [...db].some((x) => !da.has(x) && !condensed.has(x)))
         problems.push(`${f.path}: digits not verbatim — Korean: "${src}" / yours: "${out}" (keep the same digits; 억→亿, 만→万, 조→万亿)`);
     }
+  return problems;
+}
+
+/** 번역본 재검증. 문제 목록(빈 배열이면 통과) */
+export function checkTranslation(ko: BriefingContent, tr: BriefingContent, target: Target): string[] {
+  const problems: string[] = [];
+  if (shapeOf(ko) !== shapeOf(tr)) {
+    problems.push(`structure: array lengths differ from source (${shapeOf(ko)} vs ${shapeOf(tr)})`);
+    return problems;
+  }
+  for (const f of fieldsOf(ko)) {
+    const src = f.get(ko) ?? "";
+    if (!src) continue;
+    problems.push(...checkTranslatedField(f.path, src, f.get(tr) ?? "", target));
   }
   return problems;
 }

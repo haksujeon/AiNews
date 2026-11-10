@@ -55,6 +55,8 @@ export interface PublicPeriodic {
   /** 금액 환산 환율 (fx/briefing.ts withPeriodicFx 가 붙인다 — 화면만). 없으면 환산 표기 없음 */
   fx?: FxRates | null;
   fxApplied?: boolean;
+  /** 스냅숏 표 기사 제목 (보는 언어, 없으면 한국어) */
+  snapshot_titles?: Record<string, string>;
   /** 스냅숏(돈 표·여러 매체 이야기)의 기사 중 지금도 공개인 것 — 숨긴 기사 행은 화면에서 뺀다 */
   snapshot_visible_ids: string[];
 }
@@ -127,7 +129,12 @@ async function hydrate(row: RawRow, viewerLocale: BriefingLocale): Promise<Publi
           AND edition_date BETWEEN $2::date AND $3::date`,
       [viewerLocale, row.period_start, row.period_end]
     ),
-    pool.query(`SELECT id FROM ai_news_ex WHERE id = ANY($1::uuid[]) AND ${PUBLIC_NEWS_WHERE}`, [snapshotIds]),
+    // 스냅숏 표(돈 흐름·여러 매체 이야기)의 기사 제목은 보는 언어로 (en·zh 판, 2026-11-10) — 없으면 한국어
+    pool.query(
+      `SELECT id, COALESCE(NULLIF(${viewerLocale === "en" ? "title_en" : viewerLocale === "zh" ? "title_cn" : "title_kr"}, ''), title_kr) AS title
+         FROM ai_news_ex WHERE id = ANY($1::uuid[]) AND ${PUBLIC_NEWS_WHERE}`,
+      [snapshotIds]
+    ),
     kind === "monthly"
       ? pool.query(
           `SELECT DISTINCT to_char(edition_date, 'YYYY-MM-DD') AS d FROM daily_briefings
@@ -172,6 +179,7 @@ async function hydrate(row: RawRow, viewerLocale: BriefingLocale): Promise<Publi
       published: weeklyStarts.has(isoWeekRange(w.iso_week)?.start ?? ""),
     })),
     snapshot_visible_ids: (vis as { id: string }[]).map((v) => v.id),
+    snapshot_titles: Object.fromEntries((vis as { id: string; title: string }[]).map((v) => [v.id, v.title])),
   };
 }
 

@@ -124,3 +124,31 @@ export function fxFootnoteParts(locale: FxLocale, rates: FxRates): { from: Curre
       return { from: f, rate };
     });
 }
+
+const trim3 = (v: number) => Number(v.toFixed(3)).toString();
+const EN_CUR: Record<Currency, (n: string) => string> = {
+  USD: (n) => "$" + n,
+  CNY: (n) => n + " yuan",
+  HKD: (n) => "HK$" + n,
+  KRW: (n) => n + " won",
+  JPY: (n) => n + " yen",
+  EUR: (n) => "€" + n,
+};
+const ZH_CUR: Record<Currency, string> = { USD: "美元", CNY: "元", HKD: "港元", KRW: "韩元", JPY: "日元", EUR: "欧元" };
+
+/**
+ * 금액 표기를 그 언어로 (통화는 바꾸지 않는다 — 환산이 아니라 표기만). 주간·월간 en·zh 판의 "돈의 흐름" 표 (2026-11-10).
+ * "20억 위안" → en "2 billion yuan" · zh "20亿元", "110억 달러" → "$11 billion" · "110亿美元". ko 이거나 금액이 아니면 원문 그대로.
+ */
+export function localizeAmountText(raw: string, locale: FxLocale): string {
+  if (locale === "ko") return raw;
+  const q = parseQuantities(raw).find((x) => x.currency && !x.percent);
+  if (!q?.currency) return raw;
+  const v = q.value;
+  if (locale === "en") {
+    const n = v >= 1e12 ? `${trim3(v / 1e12)} trillion` : v >= 1e9 ? `${trim3(v / 1e9)} billion` : v >= 1e6 ? `${trim3(v / 1e6)} million` : comma(v);
+    return EN_CUR[q.currency](n);
+  }
+  const n = v >= 1e12 ? `${trim3(v / 1e12)}万亿` : v >= 1e8 ? `${trim3(v / 1e8)}亿` : v >= 1e4 ? `${trim3(v / 1e4)}万` : comma(v);
+  return n + ZH_CUR[q.currency];
+}

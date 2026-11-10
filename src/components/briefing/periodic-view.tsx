@@ -2,6 +2,7 @@ import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { LOCALE_HTML_LANG, type Locale } from "@/i18n/routing";
 import { getSourceName } from "@/lib/news-utils";
+import { companyName } from "@/lib/company-names";
 import { toCategoryStats } from "@/lib/statistics-utils";
 import { BACKFILL_CAPS, weekdayOf } from "@/lib/metrics/period";
 import { buildFacts, compactDays } from "@/lib/briefing/periodic/prompt";
@@ -18,7 +19,7 @@ import { ShareButton } from "./briefing-media";
 import { SubscribeBox } from "@/components/newsletter/subscribe-link";
 import { FxNote } from "@/components/fx/fx-note";
 import { buildPeriodicGlance } from "@/lib/briefing/periodic/glance";
-import { convertAmountText, type FxLocale } from "@/lib/fx/convert";
+import { convertAmountText, localizeAmountText, type FxLocale } from "@/lib/fx/convert";
 import { BarsTick, DailyColumns, Dumbbell, SmallMultiples, type DayBar } from "./charts/charts";
 
 /*
@@ -79,6 +80,9 @@ function Kpi({ label, value, sub, children, small }: { label: string; value: str
   );
 }
 
+/** metrics/period.ts dealKind 의 값 → 문구 키 */
+const MONEY_KIND: Record<string, string> = { 인수: "acq", "부채 조달": "debt", 상장: "ipo", "투자 유치": "raise", 투자: "invest", "자금 조달": "funding", 기타: "other" };
+
 const linkCls = "rounded-sm text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function PeriodicView({ report }: { report: PublicPeriodic }) {
@@ -94,6 +98,15 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
   const c = report.content;
   const m = report.metrics;
   const facts = buildFacts(m);
+  // 지표 문자열(FACTS)·기업 이름표·스냅숏 제목은 한국어로 저장돼 있다 → en·zh 판은 이름은 그 언어로, 지표 칩은 숨긴다 (2026-11-10 영어·중국어판)
+  const ko = loc === "ko";
+  const nm = (e: { key: string; name_ko: string }) => (ko ? e.name_ko : companyName(e.key, loc));
+  // 돈 흐름 표의 거래 유형(지표 dealKind 의 한국어 값) → 화면 언어
+  const kindLabel = (k: string) => {
+    const code = MONEY_KIND[k];
+    return code ? t(`moneyKind_${code}` as never) : k;
+  };
+  const titleOf = (id: string, fallback: string) => (ko ? fallback : report.snapshot_titles?.[id] ?? fallback);
   const v = m.volume;
   const hasPrev = m.baseline !== null;
   const lfl = v.like_for_like && v.like_for_like.days > 0 ? v.like_for_like : null;
@@ -168,15 +181,15 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
   const multiples = weeks.length
     ? ent.slice(0, 9).map((e) => ({
         key: e.key,
-        label: e.name_ko,
+        label: nm(e),
         cn: e.chinese,
         values: weeks.map((w) => w.entities_per_1k[e.key] ?? 0),
-        tips: weeks.map((w) => `${e.name_ko} ${w.key}: ${t("per1kTip", { n: w.entities_per_1k[e.key] ?? 0, raw: w.entities[e.key] ?? 0, total: w.total })}`),
+        tips: weeks.map((w) => `${nm(e)} ${w.key}: ${t("per1kTip", { n: w.entities_per_1k[e.key] ?? 0, raw: w.entities[e.key] ?? 0, total: w.total })}`),
       }))
     : [];
   const weekAxis = weeks.map((w) => ({ label: w.key, reduced: w.coverage === "reduced" }));
   // 한눈에 보기 (데일리와 같은 부품) — 큰 흐름마다 한 칸, 큰 숫자는 그 흐름이 인용한 지표 값 그대로
-  const glance = buildPeriodicGlance(c, facts).map((g) => ({
+  const glance = buildPeriodicGlance(c, ko ? facts : {}).map((g) => ({
     ...g,
     sectionLabel: "",
     // 큰 숫자가 금액이면 그 언어 통화 환산 값을 작은 줄로 (데일리 한눈에 보기와 같은 convertAmountText)
@@ -249,7 +262,7 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
             <Kpi
               small
               label={t("kpiTopEntity")}
-              value={`${top.name_ko} ${t("countUnit", { count: top.cur })}`}
+              value={`${nm(top)} ${t("countUnit", { count: top.cur })}`}
               sub={hasPrev ? tp("kpiTopEntitySub", { prev: top.prev, change: top.display_change }) : t("kpiTopEntitySubNoPrev", { titles: top.title_mentions, sources: top.sources })}
             />
           )}
@@ -310,7 +323,7 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                       className="mt-3 max-w-[40rem]"
                       labels={{ title: td("easyTitle"), saying: td("easySaying"), why: td("easyWhy") }}
                     />
-                    <Chips keys={b.metrics} facts={facts} label={t("metricChips")} />
+                    {ko && <Chips keys={b.metrics} facts={facts} label={t("metricChips")} />}
                     <Sources refs={b.refs} briefing={report} className="mt-2" />
                     <StoryContextBox contexts={b.story_context} className="mt-3" />
                   </div>
@@ -425,12 +438,12 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                     cnMark={t("cnMark")}
                     rows={ent.map((e) => ({
                       key: e.key,
-                      label: e.name_ko,
+                      label: nm(e),
                       prev: e.prev,
                       cur: e.cur,
                       chg: e.change_pct === null ? null : e.display_change,
                       cn: e.chinese,
-                      tip: `${e.name_ko}: ${e.prev} → ${e.cur}${e.change_pct === null ? "" : ` (${e.display_change})`}`,
+                      tip: `${nm(e)}: ${e.prev} → ${e.cur}${e.change_pct === null ? "" : ` (${e.display_change})`}`,
                     }))}
                   />
                 ) : (
@@ -440,10 +453,10 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                     noPrev
                     rows={ent.map((e) => ({
                       key: e.key,
-                      label: `${e.name_ko}${e.chinese ? ` ${t("cnMark")}` : ""}`,
+                      label: `${nm(e)}${e.chinese ? ` ${t("cnMark")}` : ""}`,
                       cur: e.cur,
                       prev: 0,
-                      tip: `${e.name_ko}: ${e.cur}`,
+                      tip: `${nm(e)}: ${e.cur}`,
                     }))}
                   />
                 )
@@ -452,7 +465,7 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                 <DataTable
                   head={hasPrev ? [t("colCompany"), tp("legendPrev"), tp("legendCur"), t("colChange")] : [t("colCompany"), tp("legendCur")]}
                   rows={ent.map((e) => {
-                    const name = `${e.name_ko}${e.chinese ? ` (${t("cnMark")})` : ""}`;
+                    const name = `${nm(e)}${e.chinese ? ` (${t("cnMark")})` : ""}`;
                     return hasPrev ? [name, e.prev, e.cur, e.display_change] : [name, e.cur];
                   })}
                 />
@@ -606,7 +619,7 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
             {c.china_lens && (
               <>
                 <p className="mt-3.5 max-w-[40rem] text-base leading-[1.8] text-ink-2">{c.china_lens.text}</p>
-                <Chips keys={c.china_lens.metrics} facts={facts} label={t("metricChips")} />
+                {ko && <Chips keys={c.china_lens.metrics} facts={facts} label={t("metricChips")} />}
                 <Sources refs={c.china_lens.refs} briefing={report} className="mt-2" />
               </>
             )}
@@ -716,7 +729,7 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                     <li key={i} className="border-b border-rule py-3.5">
                       <div className="flex items-baseline justify-between gap-2">
                         <p className="text-base font-bold text-ink">
-                          {e?.name_ko ?? mv.entity}
+                          {e ? nm(e) : mv.entity}
                           {e?.chinese && (
                             <span className="ml-1.5 rounded-[2px] border border-jade px-[3px] align-[2px] text-[11px] font-bold text-jade" title={t("cnMarkLabel")}>
                               {t("cnMark")}
@@ -763,11 +776,11 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                     {money.map((r) => (
                       <tr key={r.id} className="border-b border-rule align-top">
                         <td className="whitespace-nowrap py-2 pr-2.5 text-ink-2">{formatShortDate(r.day, loc)}</td>
-                        <td className="whitespace-nowrap py-2 pr-2.5 text-ink-2">{r.kind}</td>
-                        <td className="whitespace-nowrap py-2 pr-2.5 text-right font-bold text-ink">{r.amount}</td>
+                        <td className="whitespace-nowrap py-2 pr-2.5 text-ink-2">{kindLabel(r.kind)}</td>
+                        <td className="whitespace-nowrap py-2 pr-2.5 text-right font-bold text-ink">{localizeAmountText(r.amount, loc as FxLocale)}</td>
                         <td className="py-2 leading-normal">
                           <Link href={`/news/${r.id}`} className={linkCls}>
-                            {r.title_kr}
+                            {titleOf(r.id, r.title_kr)}
                           </Link>{" "}
                           <span className="text-[12.5px] text-ink-3">{getSourceName(r.source)}</span>
                         </td>
@@ -794,7 +807,7 @@ export function PeriodicView({ report }: { report: PublicPeriodic }) {
                     </time>
                     <div className="min-w-0">
                       <Link href={`/news/${e.primary_id}`} className={linkCls}>
-                        {e.title_kr}
+                        {titleOf(e.primary_id, e.title_kr)}
                       </Link>
                       <p className="text-[12.5px] text-ink-3">
                         {e.sources.map(getSourceName).join(" · ")} · {t("timelineOutlets", { count: e.sources.length })}

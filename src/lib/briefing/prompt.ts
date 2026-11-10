@@ -208,14 +208,10 @@ ${JSON.stringify(draft)}`;
 
 const LOCALE_NAME = { en: "English", zh: "简体中文" } as const;
 
-export function buildTranslateSystemPrompt(target: "en" | "zh"): string {
+/** 번역 규칙 3~8 (숫자·이름·문체) — 데일리 번역과 주간·월간 번역(periodic/translate.ts)이 같이 쓴다 (Gate 2) */
+export function translateCommonRules(target: "en" | "zh"): string {
   const zh = target === "zh";
-  return `You translate a Korean daily briefing about the Chinese AI industry into ${LOCALE_NAME[target]}.
-
-Rules (violations are rejected automatically):
-1. Input is JSON. Output the SAME JSON structure: same keys, same array lengths, same order. Translate ONLY the string values of these keys: headline, lede, title, what, why, text, label, name, subject, story, reason, value.
-2. Never change ids (A01...), refs, primary_ref, ref, rank, section codes, subject_is_chinese, term, pinyin.
-3. Numbers: ${
+  return `3. Numbers: ${
     zh
       ? "copy every number VERBATIM — the same digits in the same order. Only swap the unit character 1:1: 억 → 亿, 만 → 万, 조 → 万亿, 천 → 千 (e.g. '23억 위안' → '23亿元', '57.2만 개' → '57.2万个', '5억 3,700만 명' → '5亿3700万人'). Never rewrite the digits (no 53700万, no 0.23万亿), never use k/K, never convert currencies."
       : "keep every value exactly. Korean 억/만/조 have no English unit, so state the SAME value with million/billion/trillion (억 = 100 million, 만 = 10 thousand, 조 = trillion): '23억 위안' → '2.3 billion yuan', '57.2만 개' → '572,000 units', '5억 3,700만 명' → '537 million people'. Never round, never abbreviate with k/K, never write long raw digits like 2300000000, never convert currencies. Numbers without a Korean unit (1,600 / 34% / 500MW) stay exactly as written."
@@ -229,7 +225,16 @@ Rules (violations are rejected automatically):
 5. Plain, neutral news style. No additions, no omissions, no hype.
 6. NAME_HINTS are ONLY for spelling names (their digits are masked as #). Never copy facts from NAME_HINTS into the translation. NAME_GLOSSARY lines are "Korean = English = Chinese": when a Korean name in the glossary appears, write exactly the glossary spelling for your language (e.g. 천가오 = Tiangai = 天垓, 즈지동력 = LimX Dynamics = 逐际动力) — never invent a pinyin spelling for a name in the glossary.
 8. Copy version numbers and small numbers exactly (Feishu 8.0 stays 8.0, Gemini 4 stays 4).
-7. Translate each field on its own: the translated field must contain exactly the facts and numbers of the same Korean field — do not move information between fields.
+7. Translate each field on its own: the translated field must contain exactly the facts and numbers of the same Korean field — do not move information between fields.`;
+}
+
+export function buildTranslateSystemPrompt(target: "en" | "zh"): string {
+  return `You translate a Korean daily briefing about the Chinese AI industry into ${LOCALE_NAME[target]}.
+
+Rules (violations are rejected automatically):
+1. Input is JSON. Output the SAME JSON structure: same keys, same array lengths, same order. Translate ONLY the string values of these keys: headline, lede, title, what, why, text, label, name, subject, story, reason, value.
+2. Never change ids (A01...), refs, primary_ref, ref, rank, section codes, subject_is_chinese, term, pinyin.
+${translateCommonRules(target)}
 Output only the JSON, no code fences.`;
 }
 

@@ -46,6 +46,14 @@ async function main() {
           .catch((e: unknown) => `쉬운 AI 설명 실패: ${e instanceof Error ? e.message : String(e)}`);
         console.log(`쉬운 AI 설명: ${note}`);
       }
+    } else if (cmd === "translate-periodic") {
+      // 발행된 주간·월간 ko 판의 영어·중국어판 (관리자 발행·AI 검토 자동 발행과 같은 함수). --id <ko briefing id> 또는 --type weekly|monthly --date <시작일>
+      const { ensurePeriodicTranslations, ensurePeriodicTranslationsFor } = await import("../src/lib/briefing/periodic/translate-run");
+      const id = arg("id");
+      const type = arg("type") as "weekly" | "monthly" | undefined;
+      const r = id ? await ensurePeriodicTranslations(id) : type && date ? await ensurePeriodicTranslationsFor(type, date) : null;
+      if (!r) throw new Error("--id 또는 --type weekly|monthly --date 필요");
+      console.log(JSON.stringify(r, null, 2));
     } else if (cmd === "withdraw") {
       if (!date) throw new Error("--date 필요");
       const reason = arg("reason");

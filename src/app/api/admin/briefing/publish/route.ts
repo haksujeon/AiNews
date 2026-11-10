@@ -5,6 +5,7 @@ import { isValidEditionDate } from "@/lib/briefing/generate";
 import { BRIEFING_LOCALES, type BriefingLocale } from "@/lib/briefing/types";
 import { isEditionType } from "@/lib/briefing/repository";
 import { easyRunNote, ensureEasyTerms } from "@/lib/briefing/easy-terms-run";
+import { ensurePeriodicTranslations, periodicTranslateNote } from "@/lib/briefing/periodic/translate-run";
 
 // POST /api/admin/briefing/publish  (관리자 세션 쿠키 필요)
 // body: { date: 'YYYY-MM-DD', version?: number, action?: 'publish' | 'withdraw', locale?: 'ko'|'en'|'zh',
@@ -50,12 +51,20 @@ export async function POST(request: NextRequest) {
       acknowledgeDataQuality: b.acknowledgeDataQuality === true,
     });
     let easyTerms = "";
+    // 주간·월간: 영어·중국어판 (AI 검토 자동 발행과 같은 ensurePeriodicTranslations, 실패해도 발행은 그대로 — data.translations 에 한 줄)
+    let translations = "";
+    if (editionType !== "daily" && result.published.some((p) => p.locale === "ko")) {
+      const ko = result.published.find((p) => p.locale === "ko")!;
+      translations = await ensurePeriodicTranslations(ko.id)
+        .then(periodicTranslateNote)
+        .catch((e: unknown) => `번역 실패: ${(e as Error).message}`);
+    }
     if (editionType === "daily" && result.published.some((p) => p.locale === "ko")) {
       easyTerms = await ensureEasyTerms({ date })
         .then((r) => easyRunNote(r) || r.detail)
         .catch((e: unknown) => `쉬운 AI 설명 실패: ${(e as Error).message}`);
     }
-    return NextResponse.json({ data: { ...result, easyTerms } });
+    return NextResponse.json({ data: { ...result, easyTerms, translations } });
   } catch (e) {
     if (e instanceof PublishError) {
       return NextResponse.json({ error: { message: e.message } }, { status: e.status });
