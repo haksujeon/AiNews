@@ -48,7 +48,7 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
     { id: "summary", label: easy ? t("summaryFact") : t("tocSummary"), show: !!summary },
     { id: "insights", label: easy ? t("easyTitle") : t("aiInsights"), show: !!(easy || aiInsights) },
     { id: "content", label: t("translatedGist"), show: !easy && !!news.gist },
-    { id: "keywords", label: t("tocKeyTerms"), show: hasKeyTerms },
+    { id: "keywords", label: t("keyTerms"), show: hasKeyTerms },
   ].filter((item) => item.show);
 
   const facts = [
