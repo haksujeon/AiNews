@@ -13,6 +13,7 @@ import {
   getSummary,
   getAiInsights,
   getAiInsightsDetail,
+  getEasyExplain,
   getSourceName,
   getTermExplanation,
 } from "@/lib/news-utils";
@@ -77,7 +78,11 @@ export function ArticleByline({
   );
 }
 
-/** 요약(첫 문단) → AI 인사이트 1블록 → 번역 요지(3~5문장) → 원문 매체 안내(항상). */
+/**
+ * 쉽게 풀어보기가 있는 기사 (2026-11-10 결정): 요약(사실) → 쉽게 풀어보기 상자 { 쉽게 말하면 · 왜 중요할까 · 접힌 "더 깊이 보기" }
+ *   → AI 작성 안내 → 원문 매체 안내. 번역 요지는 보이지 않는다.
+ * 없는 기사(예전 기사·검사에 걸린 기사): 요약(첫 문단) → AI 인사이트 1블록 → 번역 요지(3~5문장) → 원문 매체 안내(항상).
+ */
 export function ArticleBody({
   news,
   locale,
@@ -93,6 +98,37 @@ export function ArticleBody({
   const gist = news.gist;
   const aiInsights = getAiInsights(news, locale);
   const aiInsightsDetail = getAiInsightsDetail(news, locale);
+  const easy = getEasyExplain(news, locale);
+
+  if (easy) {
+    return (
+      <div className="space-y-8">
+        {summary && (
+          <section id="summary" className="scroll-mt-20">
+            <Heading className={sectionLabel}>{t("summaryFact")}</Heading>
+            <p className="text-[17px] font-medium leading-[1.75] text-ink sm:text-[19px]">{summary}</p>
+          </section>
+        )}
+        <section id="insights" className="scroll-mt-20 border-l-[3px] border-jade bg-jade-weak px-5 py-4 sm:px-6 sm:py-5">
+          <Heading className="mb-3 text-[13px] font-bold text-jade">{t("easyTitle")}</Heading>
+          <div className="space-y-4">
+            <div>
+              <p className="mb-1 text-xs font-semibold text-ink-2">{t("easySaying")}</p>
+              <p className="text-[16px] leading-[1.8] text-ink">{easy.easy}</p>
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-semibold text-ink-2">{t("easyWhy")}</p>
+              <p className="text-[16px] leading-[1.8] text-ink">{easy.why}</p>
+            </div>
+          </div>
+          {aiInsightsDetail && <InsightDetail text={aiInsightsDetail} showLabel={t("deeperShow")} hideLabel={t("deeperHide")} />}
+        </section>
+        <p className="text-xs leading-relaxed text-ink-3">{t("easyDisclosure")}</p>
+        {news.fx && <FxNote fx={news.fx} locale={locale} className="block text-xs leading-relaxed text-ink-3" />}
+        {news.source_url && <ReadAtSource news={news} />}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -128,20 +164,26 @@ export function ArticleBody({
       {news.fx && <FxNote fx={news.fx} locale={locale} className="block text-xs leading-relaxed text-ink-3" />}
 
       {/* 전문은 항상 원문 매체에서 — 요지가 있어도 없어도 같은 안내 */}
-      {news.source_url && (
-        <p data-testid="read-full-at-source" className="text-[15px] leading-relaxed text-ink-2">
-          {t("readFullAtSource", { source: getSourceName(news.source_name) || t("sourceFallback") })}{" "}
-          <a
-            href={news.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-sm font-medium text-ink underline decoration-1 underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {t("viewOriginal")}
-          </a>
-        </p>
-      )}
+      {news.source_url && <ReadAtSource news={news} />}
     </div>
+  );
+}
+
+/** 원문 매체 안내 (두 구성 공통) */
+function ReadAtSource({ news }: { news: Pick<PublicNewsItem, "source_name" | "source_url"> }) {
+  const t = useTranslations("detail");
+  return (
+    <p data-testid="read-full-at-source" className="text-[15px] leading-relaxed text-ink-2">
+      {t("readFullAtSource", { source: getSourceName(news.source_name) || t("sourceFallback") })}{" "}
+      <a
+        href={news.source_url ?? undefined}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="rounded-sm font-medium text-ink underline decoration-1 underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {t("viewOriginal")}
+      </a>
+    </p>
   );
 }
 
@@ -152,7 +194,7 @@ const INSIGHT_DETAIL_KEY = "ainews.insightDetail";
  * "자세히" 단계 인사이트 (2026-11-04, src/lib/insights.ts). 쉬운 글 아래 버튼 → 같은 상자 안에서 펼친다.
  * 마지막에 고른 상태(펼침/접힘)를 기억해 다음 기사에도 적용한다. 첫 렌더는 항상 접힘(서버와 같은 모양) → 마운트 뒤 기억값 적용.
  */
-function InsightDetail({ text }: { text: string }) {
+function InsightDetail({ text, showLabel, hideLabel }: { text: string; showLabel?: string; hideLabel?: string }) {
   const t = useTranslations("detail");
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -181,7 +223,7 @@ function InsightDetail({ text }: { text: string }) {
         aria-controls={id}
         className="inline-flex min-h-9 items-center gap-1 rounded-sm text-[13px] font-semibold text-jade hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {open ? t("insightDetailHide") : t("insightDetailShow")}
+        {open ? (hideLabel ?? t("insightDetailHide")) : (showLabel ?? t("insightDetailShow"))}
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} aria-hidden="true" />
       </button>
       <div id={id} hidden={!open}>

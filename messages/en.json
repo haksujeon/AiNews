@@ -78,7 +78,14 @@
     "toneLabel": "Tone",
     "sourceLabel": "Source",
     "insightDetailShow": "More detail",
-    "insightDetailHide": "Less detail"
+    "insightDetailHide": "Less detail",
+    "summaryFact": "Summary",
+    "easyTitle": "Made simple",
+    "easySaying": "In plain words",
+    "easyWhy": "Why it matters",
+    "deeperShow": "Go deeper",
+    "deeperHide": "Show less",
+    "easyDisclosure": "The summary and explanation were written by AI from the original article. Check the original before drawing conclusions."
   },
   "related": {
     "title": "Related coverage",

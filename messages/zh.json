@@ -78,7 +78,14 @@
     "toneLabel": "论调",
     "sourceLabel": "来源",
     "insightDetailShow": "查看详细分析",
-    "insightDetailHide": "收起详细分析"
+    "insightDetailHide": "收起详细分析",
+    "summaryFact": "摘要",
+    "easyTitle": "通俗解读",
+    "easySaying": "简单来说",
+    "easyWhy": "为什么重要",
+    "deeperShow": "深入了解",
+    "deeperHide": "收起",
+    "easyDisclosure": "摘要和解读由 AI 根据原文撰写，请结合原文判断。"
   },
   "related": {
     "title": "相关报道",

@@ -1,4 +1,5 @@
 import type { NewsItem } from "@/lib/supabase";
+import { easyShowable } from "./easy-explain";
 
 // ─── Country ─────────────────────────────────────────────
 // 국기 이모지는 쓰지 않는다(윈도우에서 "CN" 글자로 보이고, 기사가 사실상 전부 중국발이라 정보가 되지 않음).
@@ -223,6 +224,21 @@ export function getAiInsightsDetail(
     { ai_insights_cn: item.ai_insights_detail_cn ?? null, ai_insights_kr: item.ai_insights_detail_kr ?? null, ai_insights_en: item.ai_insights_detail_en ?? null },
     locale
   );
+}
+
+/**
+ * 쉽게 풀어보기 (2026-11-10). 그 언어 글만 쓴다(다른 언어로 채우지 않음) — 말투가 섞이지 않게.
+ * 저장 검사에서 그 언어에 한자·원문에 없는 숫자 깃발이 있으면 숨긴다(easyShowable). 둘 다 있어야 보인다.
+ */
+export function getEasyExplain(
+  item: Pick<NewsItem, "ai_easy_kr" | "ai_easy_en" | "ai_easy_cn" | "ai_why_kr" | "ai_why_en" | "ai_why_cn" | "easy_flags">,
+  locale: string
+): { easy: string; why: string } | null {
+  const sfx = locale === "zh" ? "cn" : locale === "en" ? "en" : "kr";
+  const easy = (item[`ai_easy_${sfx}` as const] ?? "").trim();
+  const why = (item[`ai_why_${sfx}` as const] ?? "").trim();
+  if (!easy || !why || !easyShowable(item.easy_flags, sfx)) return null;
+  return { easy, why };
 }
 
 export function getTermExplanation(

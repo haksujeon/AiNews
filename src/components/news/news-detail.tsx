@@ -9,6 +9,7 @@ import {
   getTitle,
   getSummary,
   getAiInsights,
+  getEasyExplain,
   getImageUrl,
   getCategoryLabel,
   getSentimentLabel,
@@ -41,10 +42,12 @@ export function NewsDetail({ news, relatedNews }: NewsDetailProps) {
   const source = getSourceName(news.source_name);
   const hasKeyTerms = !!(news.key_terms && news.key_terms.length > 0);
 
+  // 쉽게 풀어보기가 있으면 목차도 새 구성(요약 · 쉽게 풀어보기 · 핵심 용어) — ArticleBody 와 같은 판정(getEasyExplain)
+  const easy = getEasyExplain(news, locale);
   const tocItems = [
-    { id: "summary", label: t("tocSummary"), show: !!summary },
-    { id: "insights", label: t("aiInsights"), show: !!aiInsights },
-    { id: "content", label: t("translatedGist"), show: !!news.gist },
+    { id: "summary", label: easy ? t("summaryFact") : t("tocSummary"), show: !!summary },
+    { id: "insights", label: easy ? t("easyTitle") : t("aiInsights"), show: !!(easy || aiInsights) },
+    { id: "content", label: t("translatedGist"), show: !easy && !!news.gist },
     { id: "keywords", label: t("tocKeyTerms"), show: hasKeyTerms },
   ].filter((item) => item.show);
 

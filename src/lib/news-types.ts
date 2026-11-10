@@ -23,6 +23,14 @@ export interface NewsItem {
   ai_insights_detail_cn?: string | null;
   ai_insights_detail_kr?: string | null;
   ai_insights_detail_en?: string | null;
+  /** 쉽게 풀어보기 (2026-11-10, src/lib/easy-explain.ts): 쉽게 말하면 · 왜 중요할까. 없는 기사는 예전 인사이트 화면 */
+  ai_easy_kr?: string | null;
+  ai_easy_en?: string | null;
+  ai_easy_cn?: string | null;
+  ai_why_kr?: string | null;
+  ai_why_en?: string | null;
+  ai_why_cn?: string | null;
+  easy_flags?: import("./easy-explain").EasyFlag[] | null;
   key_terms: { term: string; pinyin?: string; explanation_kr: string; explanation_en?: string; explanation_zh?: string }[] | null;
   sentiment: string | null;
   category: string | null;
