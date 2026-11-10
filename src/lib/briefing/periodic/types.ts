@@ -5,6 +5,9 @@
 import type { PeriodMetrics } from "../../metrics/period";
 import type { StoryContext, ValidationIssue } from "../types";
 
+/** 주간·월간 판의 "큰 흐름" 최소 개수 — 생성(generate.ts)과 AI 검토 마지막 지우기(pipeline.ts)가 같이 쓴다 */
+export const PERIODIC_MIN_BIG_PICTURE = 2;
+
 export interface TrendItem<Ref = string> {
   title: string;
   text: string;

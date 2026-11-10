@@ -42,6 +42,7 @@ import {
 } from "./prompt";
 import { previousPeriod, resolvePeriod, resolveWeek, type ResolvedPeriod } from "./period-key";
 import type { PeriodicKind, PeriodicMeta, PeriodicValidationReport, StoredPeriodicContent, StoryPoolItem, WeeklyContent } from "./types";
+import { PERIODIC_MIN_BIG_PICTURE } from "./types";
 import {
   TERM_KO,
   citedSids,
@@ -64,7 +65,7 @@ export { resolveWeek };
 
 // Opus 5.5 주간 실측 $0.23~0.38 (2026-11-03). 월간은 입력이 더 크다 → 상한 $1.50
 const PERIODIC_MAX_COST = Number(process.env.PERIODIC_MAX_COST_USD || "1.50");
-const MIN_BIG_PICTURE = 2;
+const MIN_BIG_PICTURE = PERIODIC_MIN_BIG_PICTURE;
 
 export interface PeriodicGenerateOptions {
   /** 주간 "2026-W44" / 월간 "2026-10". 없으면 start, 둘 다 없으면 베이징 기준 지난주·지난달 */

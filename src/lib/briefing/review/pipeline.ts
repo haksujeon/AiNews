@@ -19,11 +19,11 @@ import { citedRefs } from "../validate";
 import { citedSids } from "../periodic/validate";
 import { fallbackDek, fallbackHeadline } from "../periodic/prompt";
 import type { BriefingContent, ValidationIssue } from "../types";
-import type { WeeklyContent } from "../periodic/types";
+import { PERIODIC_MIN_BIG_PICTURE, type WeeklyContent } from "../periodic/types";
 import { SITE_ORIGIN } from "@/lib/site";
 import { loadReviewInput, type ReviewInput, type TranslationRow } from "./evidence";
 import { planFixes, type FixPlan } from "./fix";
-import { decide, decideHeadlines, policyFromEnv, type Decision, type ReviewPolicy } from "./policy";
+import { decide, decideHeadlines, minScoreFor, policyFromEnv, type Decision, type ReviewPolicy } from "./policy";
 import { corpusFor, defaultDeps as defaultReviewDeps, reviewBriefing, type ReviewDeps } from "./review";
 import { retranslate, type RetranslateResult } from "./retranslate";
 import type { TranslateOptions } from "../translate";
@@ -234,6 +234,11 @@ export const defaultPipelineDeps: PipelineDeps = {
 
 // ───────────────────────── 판 하나
 
+/** 주간·월간 마지막 차례에 지우기만으로 발행할 때 지울 수 있는 문장 수 상한 (그보다 많으면 사람이 본다) */
+export const FINAL_DELETE_MAX = 3;
+/** 마지막 차례 지우기 발행을 쓰는 판 유형 (월간을 넣으려면 여기에 "monthly") */
+export const FINAL_DELETE_TYPES: ReadonlySet<EditionType> = new Set<EditionType>(["weekly"]);
+
 const CLAIM_RULES = new Set(["verdict_pass", "no_wrong", "no_number-unit", "no_misattributed", "overclaim", "unsupported", "score"]);
 
 function storedFatal(row: BriefingRow): number {
@@ -267,7 +272,27 @@ export interface FixAttempt {
 
 /** 검토 결과 → 수정 계획 → 적용 → 결정적 재검증 (순수: DB·LLM 없음) */
 export function attemptFix(input: ReviewInput, review: ReviewResult): FixAttempt {
-  const plan = planFixes(input.segments, review.claims, review.fixes, (seg, refIds) => corpusFor(input, seg, refIds));
+  return applyFixPlan(input, planFixes(input.segments, review.claims, review.fixes, (seg, refIds) => corpusFor(input, seg, refIds)));
+}
+
+/**
+ * 주간(FINAL_DELETE_TYPES) 마지막 수정 차례: 문제 문장을 지우기만 한다 (바꿈 수정안도 지우기로). 순수.
+ * 지우기는 근거 없는 문장을 새로 만들 수 없으므로 다시 검토하지 않고 발행할 수 있다 — 결정적 재검증과 큰 흐름 최소 개수는 그대로 본다.
+ * 2026-11-10 사용자 결정 "주간 리포트 매주 자동 발행": W45 는 확인 검토마다 다른 작은 지적(unsupported 1건)이 나와 수정 2회를 다 쓰고 초안에 머물렀다.
+ */
+export function attemptDeleteOnlyFix(input: ReviewInput, review: ReviewResult): FixAttempt {
+  const base = planFixes(input.segments, review.claims, review.fixes, (seg, refIds) => corpusFor(input, seg, refIds));
+  const planned = base.planned.map((p) => (p.action === "delete" ? p : { ...p, action: "delete" as const, text: "", basis: "final_delete_only" as const }));
+  const fx = applyFixPlan(input, { ...base, planned, edits: planned.map((p) => ({ sid: p.sid, action: "delete" as const })) });
+  if (fx.content) {
+    const bp = (fx.content as { big_picture?: unknown[] }).big_picture;
+    const n = Array.isArray(bp) ? bp.length : 0;
+    if (n < PERIODIC_MIN_BIG_PICTURE) return { ...fx, content: null, reason: `지우면 큰 흐름 ${n}개 < ${PERIODIC_MIN_BIG_PICTURE}개` };
+  }
+  return fx;
+}
+
+function applyFixPlan(input: ReviewInput, plan: FixPlan): FixAttempt {
   const m = input.metrics;
   const edit = applySegmentEdits(input.row.content, input.editionType, input.segments, plan.edits, {
     headline: isPeriodic(input.editionType) ? (m ? () => fallbackHeadline(m) : undefined) : undefined,
@@ -536,6 +561,40 @@ async function processEdition(
           : await deps.loadInput(nextId);
         continue;
       }
+    }
+
+    // 3-1) 주간 마지막 차례: 지우기만 해서 발행 (사용자 결정 2026-11-10 "주간 리포트 매주 자동 발행" — 월간은 결정 전이라 예전대로 사람이 본다).
+    //   조건: 수정 횟수를 다 썼고, 문장 지적 말고는 막는 조건이 없고(결손일·결정적 치명·발행 가능), 점수 ≥ 기준, 지울 문장 ≤ FINAL_DELETE_MAX
+    const lastRound = FINAL_DELETE_TYPES.has(target.editionType) && flagged && !nonClaim.length && round >= o.policy.maxFixRounds && hard < 3;
+    if (lastRound && (review.score ?? 0) >= minScoreFor(o.policy, target.editionType) && o.policy.autoPublish) {
+      const fx = attemptDeleteOnlyFix(input, review);
+      if (fx.content && fx.plan.planned.length <= FINAL_DELETE_MAX) {
+        const info = {
+          from: { id: input.row.id, version: input.row.version }, review_id: review.id, round: round + 1, final_delete_only: true,
+          planned: fx.plan.planned, ignored: fx.plan.ignored, dropped: fx.edit.dropped, fallbacks: fx.edit.fallbacks,
+        };
+        const what = `마지막 차례 지우기 ${fx.plan.planned.length}문장${fx.edit.dropped.length ? ` (항목 삭제 ${fx.edit.dropped.join(",")})` : ""}`;
+        if (o.dryRun) {
+          await rec({ ...decision, final: true, action: "would_publish", fix: info });
+          steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: "would_publish", detail: what });
+          return out(true, true, `${head} v${versionLabel} (dry-run): ${what} 뒤 자동 발행 — ${errSummary}`, decision);
+        }
+        const saved = await deps.saveFixed(input, fx.content, info, fx.warn);
+        const next = await deps.loadInput(saved.id);
+        try {
+          const res = await deps.publish(target, next.row);
+          await rec({ ...decision, final: true, action: "published", fix: info, published: res.published }, saved.id);
+          steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: "published", detail: `${what} → v${saved.version} ${res.published.map((p) => p.locale).join("·")}` });
+          return out(true, true, `${head} v${saved.version}: AI 검토 ${review.verdict} ${review.score}점, ${what} → 자동 발행 (${res.published.map((p) => p.locale).join("·")}) ${adminUrl(saved.id)}`, decision, true);
+        } catch (e) {
+          const msg = e instanceof PublishError ? e.message : (e as Error).message;
+          await rec({ ...decision, final: true, action: "hold", fix: info, publish_error: msg }, saved.id);
+          steps.push({ briefingId: input.row.id, version: versionLabel, round, reviewId: review.id, verdict: review.verdict, score: review.score, action: "hold", detail: `${what} 뒤 발행 실패: ${msg}` });
+          return out(true, true, `${head} v${saved.version}: ${what} 뒤 발행 실패 — ${msg} ${adminUrl(saved.id)}`, decision);
+        }
+      }
+      if (fx.reason) holdReason = `${holdReason} · 마지막 지우기 불가: ${fx.reason}`;
+      else if (fx.plan.planned.length > FINAL_DELETE_MAX) holdReason = `${holdReason} · 지울 문장 ${fx.plan.planned.length}개 > ${FINAL_DELETE_MAX}`;
     }
 
     // 4) 초안 유지 + 알림

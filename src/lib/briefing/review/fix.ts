@@ -134,7 +134,8 @@ export interface PlannedFix {
   original: string;
   text: string;
   /** 왜 이 동작인가 (수정안 채택 / 근거 미확인으로 삭제 / 수정안 없음으로 삭제) */
-  basis: "reviewer_replace" | "reviewer_delete" | "rejected_replace_deleted" | "no_fix_deleted";
+  /** final_delete_only: 주간·월간 마지막 수정 차례 — 바꿈 수정안도 지우기로 (pipeline attemptDeleteOnlyFix) */
+  basis: "reviewer_replace" | "reviewer_delete" | "rejected_replace_deleted" | "no_fix_deleted" | "final_delete_only";
   labels: string[];
   evidence: string;
   rejected?: string[];

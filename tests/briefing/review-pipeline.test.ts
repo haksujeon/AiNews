@@ -10,7 +10,7 @@ import { runReviewPipeline, type PipelineDeps } from "../../src/lib/briefing/rev
 import { policyFromEnv } from "../../src/lib/briefing/review/policy";
 import type { ReviewInput } from "../../src/lib/briefing/review/evidence";
 import type { BriefingRow } from "../../src/lib/briefing/repository";
-import { dailyRow, fakeInput, reviewerJson } from "./review-fixtures";
+import { A1, A2, dailyRow, fakeInput, reviewerJson } from "./review-fixtures";
 
 interface Harness {
   regens: { date: string; must: string[]; reason: string }[];
@@ -306,4 +306,82 @@ test("쉬운 AI 설명: 정기 스윕은 끝에 따라잡기를 한 번 부르�
   const r = await runReviewPipeline({ policy }, h.deps);
   assert.equal(r.processed.length, 0);
   assert.match(r.message, /쉬운 AI 설명 실패: timeout/);
+});
+
+// ───────── 주간·월간 마지막 차례 지우기 (2026-11-10 사용자 결정 "주간 리포트 매주 자동 발행")
+const WEEKLY_CONTENT = {
+  headline: "즈푸 GLM-6 공개, 문샷AI 투자 유치",
+  dek: "즈푸가 GLM-6를 공개했고 문샷AI는 10억 달러를 유치했다.",
+  dek_refs: [A1, A2],
+  big_picture: [
+    { title: "오픈소스 모델", text: "즈푸가 GLM-6를 공개했다. 매개변수는 1조 2천억 개다.", refs: [A1], metrics: [] },
+    { title: "투자", text: "문샷AI가 10억 달러 규모 투자를 유치했다.", refs: [A2], metrics: [] },
+    { title: "경쟁", text: "GLM-6는 오픈소스로 배포된다.", refs: [A1], metrics: [] },
+  ],
+  movers: [],
+  watch_next: [],
+  meta: { edition_type: "weekly", period_key: "2026-W44", period_start: "2026-10-26", period_end: "2026-11-01", locale: "ko", ai_generated: true },
+};
+const weeklyRow = (over: Partial<BriefingRow> = {}) =>
+  dailyRow({ id: "wwwwwwww-wwww-4www-8www-wwwwwwwwwwww", edition_type: "weekly", edition_date: "2026-10-26", period_start: "2026-10-26", period_end: "2026-11-01", content: structuredClone(WEEKLY_CONTENT) as unknown as BriefingRow["content"], ...over });
+const weeklyInput = (row: BriefingRow) => fakeInput(row, { translations: [] });
+/** 큰 흐름 3번째 본문만 unsupported (수정안 없음) */
+const weeklyNit = (i: ReviewInput) => {
+  const sid = i.segments.find((s) => s.path === "big_picture[2].text")!.sid;
+  return reviewerJson(i, { [sid]: { l: "unsupported", e: "근거 없음", n: "기사에 없음" } }, { verdict: "FIXABLE" });
+};
+
+function weeklyHarness(row: BriefingRow, replies: ((input: ReviewInput) => unknown)[]) {
+  const inputs = new Map([[row.id, weeklyInput(row)]]);
+  const h = harness(replies, inputs);
+  // 이 버전은 수정 2회째로 만들어졌다 → 이번 검토가 마지막 차례(round 2)
+  h.deps.producedByRound = async (id) => (id === row.id ? 1 : 2);
+  h.deps.saveFixed = async (input, content) => {
+    h.saved.push(content);
+    const next = weeklyRow({ id: "fixed-w", version: input.row.version + 1, content: content as BriefingRow["content"] });
+    inputs.set("fixed-w", weeklyInput(next));
+    return { id: "fixed-w", version: next.version };
+  };
+  return h;
+}
+
+test("주간 마지막 차례: 확인 검토의 작은 지적은 문장을 지우기만 하고 새 버전을 발행 (다시 검토하지 않음)", async () => {
+  const row = weeklyRow();
+  const h = weeklyHarness(row, [weeklyNit]);
+  const r = await runReviewPipeline({ briefingId: row.id, editionType: "weekly", policy }, h.deps);
+  assert.equal(h.chats, 1);
+  assert.equal(h.saved.length, 1);
+  const bp = (h.saved[0] as { big_picture: { text: string }[] }).big_picture;
+  assert.ok(!bp.some((b) => b.text.includes("오픈소스로 배포된다")), "지적된 문장이 지워져야 한다");
+  assert.deepEqual(h.published, [{ id: "fixed-w", version: row.version + 1 }]);
+  assert.match(r.processed[0].message, /마지막 차례 지우기 1문장/);
+});
+
+test("주간 마지막 차례: 지우면 큰 흐름이 2개 미만이 되면 초안 유지", async () => {
+  const content = structuredClone(WEEKLY_CONTENT);
+  content.big_picture = content.big_picture.slice(1); // 2개만 → 하나를 지우면 1개
+  const row = weeklyRow({ content: content as unknown as BriefingRow["content"] });
+  const nit = (i: ReviewInput) => {
+    const sid = i.segments.find((s) => s.path === "big_picture[1].title")!.sid;
+    return reviewerJson(i, { [sid]: { l: "unsupported", e: "근거 없음", n: "기사에 없음" } }, { verdict: "FIXABLE" });
+  };
+  const h = weeklyHarness(row, [nit]);
+  const r = await runReviewPipeline({ briefingId: row.id, editionType: "weekly", policy }, h.deps);
+  assert.equal(h.published.length, 0);
+  assert.match(r.processed[0].steps.at(-1)!.detail, /마지막 지우기 불가/);
+});
+
+test("데일리 마지막 차례는 지우기 발행을 하지 않는다 (예전처럼 초안 유지)", async () => {
+  const inputs = new Map([[ORIG.id, fakeInput(ORIG)]]);
+  const h = harness([fixable], inputs);
+  h.deps.producedByRound = async () => 1;
+  await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.equal(h.published.length, 0);
+});
+
+test("월간 마지막 차례는 아직 지우기 발행을 하지 않는다 (사용자 결정은 주간만)", async () => {
+  const row = weeklyRow({ edition_type: "monthly" });
+  const h = weeklyHarness(row, [weeklyNit]);
+  await runReviewPipeline({ briefingId: row.id, editionType: "monthly", policy }, h.deps);
+  assert.equal(h.published.length, 0);
 });
