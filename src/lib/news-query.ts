@@ -45,6 +45,11 @@ export function isCalendarDate(s: string): boolean {
   return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
 }
 
+/** ILIKE 패턴 안에서 사용자 입력을 글자 그대로 (기본 이스케이프 문자 \) */
+export function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 /**
  * URLSearchParams → NewsFilters (API 라우트와 클라이언트가 공유).
  * 분류는 공개 분류(categories.ts)만 받는다 — 예전 링크의 economy 등은 조용히 버려 전체로 본다.
@@ -61,8 +66,9 @@ export function parseFilters(params: URLSearchParams): NewsFilters {
       .map((c) => c.trim())
       .filter((c) => isPublicCategory(c))
       .filter((c, i, a) => a.indexOf(c) === i),
-    from: DATE_RE.test(from) ? from : "",
-    to: DATE_RE.test(to) ? to : "",
+    // 형식만이 아니라 실제 달력 날짜여야 한다 (2026-02-30 을 DB 로 보내면 500, QA B-04)
+    from: isCalendarDate(from) ? from : "",
+    to: isCalendarDate(to) ? to : "",
   };
 }
 
@@ -102,7 +108,8 @@ export function buildNewsWhere(
     // 검색은 UI 로케일과 무관하게 3개 언어 제목·요약 + 출처를 모두 훑는다.
     // "OpenAI" 를 한국어 화면에서 검색해도 찾히게 하려는 의도.
     i += 1;
-    values.push(`%${filters.q}%`);
+    // % _ \ 는 ILIKE 와일드카드라 글자 그대로 찾도록 이스케이프한다 (QA B-06: "%" 만 넣으면 전체가 나왔다)
+    values.push(`%${escapeLike(filters.q)}%`);
     clauses.push(`(
       title_kr ILIKE $${i} OR title_en ILIKE $${i} OR title_cn ILIKE $${i} OR
       summary_kr ILIKE $${i} OR summary_en ILIKE $${i} OR summary_cn ILIKE $${i} OR

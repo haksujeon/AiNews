@@ -8,7 +8,8 @@ import { parseFilters } from '@/lib/news-query';
 //   필터링은 전부 SQL에서 수행한다 (이전에는 브라우저에 로드된 것만 걸러 결과가 불완전했음).
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0);
+  // 아주 큰 값은 SQL OFFSET 에서 오류(500)가 나므로 상한을 둔다 (QA B-05)
+  const offset = Math.min(Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0), 100_000);
   const limit = Math.min(
     Math.max(parseInt(searchParams.get('limit') || '30', 10) || 30, 1),
     100

@@ -19,6 +19,8 @@
   --color-rule: var(--rule);
   --color-rule-strong: var(--rule-strong);
   --color-surface: var(--surface);
+  /* 종이색(배경). 진한 바탕 위 글자: text-paper (구독·듣기 버튼). 없으면 클래스가 만들어지지 않아 글자가 본문색으로 나온다 (QA C-18) */
+  --color-paper: var(--paper);
   --color-jade: var(--jade);
   --color-jade-weak: var(--jade-weak);
   /* "오늘" 홈 브리핑 콘솔(어두운 카드)과 그 위의 밝은 청자 — 라이트·다크 모두 어두운 카드 (2026-11-03) */

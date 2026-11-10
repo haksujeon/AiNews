@@ -100,6 +100,7 @@
     "passwordPlaceholder": "관리자 비밀번호 입력",
     "signIn": "로그인",
     "loginFailed": "로그인에 실패했습니다.",
+    "tooManyAttempts": "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요.",
     "networkError": "서버에 연결할 수 없습니다. 네트워크를 확인해 주세요.",
     "serverError": "서버 오류가 발생했습니다 (HTTP {status}). 잠시 후 다시 시도해 주세요.",
     "sessionExpired": "세션이 만료되었습니다. 다시 로그인해 주세요.",

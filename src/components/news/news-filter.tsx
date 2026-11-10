@@ -25,6 +25,10 @@ import type { RegionCounts } from "@/lib/metrics/period";
 import type { DateRange } from "@/lib/news-utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import type { DateRange as RdpDateRange } from "react-day-picker";
+import { ko as rdpKo, zhCN as rdpZh, enUS as rdpEn } from "react-day-picker/locale";
+
+/** 달력 언어 (QA B-03: 지정하지 않으면 ko·zh 화면에서도 영어 달) */
+const RDP_LOCALE = { ko: rdpKo, zh: rdpZh, en: rdpEn } as const;
 
 interface NewsFilterProps {
   searchQuery: string;
@@ -82,7 +86,8 @@ export function NewsFilter({
   const locale = useLocale();
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  // 휴대폰 시트·데스크톱 줄의 달력은 열림 상태를 따로 둔다 (QA B-13: 하나를 같이 쓰면 숨은 쪽이 열려 휴대폰 달력이 안 보였다)
+  const [calendarOpen, setCalendarOpen] = useState<"mobile" | "desktop" | null>(null);
 
   const debouncedSearch = useDebounce(localSearch, 300);
   const desktopSearchRef = useRef<HTMLInputElement>(null);
@@ -144,7 +149,9 @@ export function NewsFilter({
         : `~ ${formatShortDate(dateRange.to!, locale)}`
     : t("dateRange");
 
-  const CategoryChips = () => (
+  // 아래 render* 는 컴포넌트가 아니라 JSX 를 돌려주는 함수다 — 렌더 안에서 컴포넌트를 새로 만들면 매번 다시 마운트되어
+  // 입력칸이 한 글자마다 초점을 잃고(QA B-14) 달력 팝오버가 열리지 않는다(QA B-13).
+  const renderCategoryChips = () => (
     <div className="flex flex-wrap gap-1.5">
       {categories.map((cat) => {
         const isSelected = selectedCategories.includes(cat);
@@ -209,8 +216,11 @@ export function NewsFilter({
     </div>
   );
 
-  const DateRangePicker = ({ isMobile = false }: { isMobile?: boolean }) => (
-    <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+  const renderDateRangePicker = (isMobile = false) => (
+    <Popover
+      open={calendarOpen === (isMobile ? "mobile" : "desktop")}
+      onOpenChange={(o) => setCalendarOpen(o ? (isMobile ? "mobile" : "desktop") : null)}
+    >
       <PopoverTrigger asChild>
         {isMobile ? (
           <Button variant="outline" className="w-full justify-start text-left font-normal">
@@ -235,6 +245,7 @@ export function NewsFilter({
           onSelect={handleRdpSelect}
           numberOfMonths={1}
           disabled={{ after: new Date() }}
+          locale={RDP_LOCALE[locale as keyof typeof RDP_LOCALE] ?? rdpEn}
         />
         {hasDateFilter && (
           <div className="border-t px-3 py-2">
@@ -244,7 +255,7 @@ export function NewsFilter({
               className="w-full h-7 text-xs"
               onClick={() => {
                 onDateRangeChange({});
-                setCalendarOpen(false);
+                setCalendarOpen(null);
               }}
             >
               <X className="w-3 h-3 mr-1" />
@@ -256,8 +267,8 @@ export function NewsFilter({
     </Popover>
   );
 
-  const FilterContent = ({ isMobile = false }: { isMobile?: boolean }) => (
-    <div className={`space-y-4 ${isMobile ? "mt-4" : ""}`}>
+  const renderFilterContent = () => (
+    <div className="mt-2 space-y-4 px-4 pb-4">
       <div className="space-y-2">
         <label className="text-sm font-medium">{t("search") || "Search"}</label>
         <div className="relative">
@@ -274,7 +285,7 @@ export function NewsFilter({
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium">{t("dateRange")}</label>
-        <DateRangePicker isMobile />
+        {renderDateRangePicker(true)}
       </div>
       {showRegion && (
         <div className="space-y-2">
@@ -284,7 +295,7 @@ export function NewsFilter({
       )}
       <div className="space-y-2">
         <label className="text-sm font-medium">{t("category")}</label>
-        <CategoryChips />
+        {renderCategoryChips()}
       </div>
       {hasActiveFilter && (
         <Button variant="outline" className="w-full" onClick={handleReset}>
@@ -339,11 +350,11 @@ export function NewsFilter({
               )}
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-[300px]" closeLabel={tc("close")}>
+          <SheetContent side="left" className="w-[300px]" closeLabel={tc("close")} aria-describedby={undefined}>
             <SheetHeader>
               <SheetTitle>{t("filters") || "Filters"}</SheetTitle>
             </SheetHeader>
-            <FilterContent isMobile />
+            {renderFilterContent()}
           </SheetContent>
         </Sheet>
 
@@ -351,7 +362,7 @@ export function NewsFilter({
         <div className="hidden md:flex items-center gap-2">
           <div className="w-px h-5 bg-rule" />
 
-          <DateRangePicker />
+          {renderDateRangePicker()}
 
           {hasActiveFilter && (
             <Button variant="ghost" size="sm" className="h-7 text-xs text-ink-2" onClick={handleReset}>
@@ -398,7 +409,7 @@ export function NewsFilter({
             <div className="w-px h-5 bg-rule" aria-hidden="true" />
           </>
         )}
-        <CategoryChips />
+        {renderCategoryChips()}
         {selectedCategories.length > 0 && (
           <Button
             type="button"

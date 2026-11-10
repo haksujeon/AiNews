@@ -201,6 +201,21 @@ export function NewsContainer({ initialPage, facets, initialRegion = "ALL", init
     }
   }, []);
 
+  // 검색어도 주소(?q=)와 맞춘다 — 헤더 검색으로 ?q= 를 달고 들어온 뒤 바꾸거나 지우면 주소에 옛 검색어가 남아
+  // 새로고침 때 되살아났다 (QA B-01). 디바운스된 값만 반영해 타이핑마다 주소를 바꾸지 않는다.
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const q = debouncedQuery.trim();
+      if ((url.searchParams.get("q") ?? "") === q) return;
+      if (q) url.searchParams.set("q", q);
+      else url.searchParams.delete("q");
+      window.history.replaceState(window.history.state, "", url.toString());
+    } catch {
+      /* 주소 갱신 실패는 무시 */
+    }
+  }, [debouncedQuery]);
+
   const handleReset = () => {
     setSearchQuery("");
     setSelectedCountry("ALL");

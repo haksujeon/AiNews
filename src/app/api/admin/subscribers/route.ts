@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAuth } from "@/lib/admin-auth";
 import { supabaseAdminFetch } from "@/lib/supabase-admin";
+import { escapeLike } from "@/lib/news-query";
 
 interface Subscriber {
   id: string;
@@ -43,8 +44,10 @@ export async function GET(request: NextRequest) {
       params.unsubscribed_at = "is.null";
     }
 
-    // 검색어는 조회 조건 문법 글자(쉼표·괄호·별표·점·콜론·따옴표·역슬래시)를 빼고 넣는다 — 조건을 바꿔 끼우지 못하게
-    const q = search.replace(/[,()*.:"\\]/g, " ").trim().slice(0, 60);
+    // 검색어는 조회 조건 문법 글자(쉼표·괄호·별표·따옴표)를 빼고 넣는다 — 조건을 바꿔 끼우지 못하게.
+    // 점(.)은 남긴다: 값은 supabaseAdminFetch 에서 자리표시자로 넘어가고, 빼면 이메일·도메인 검색이 안 됐다 (QA D-02).
+    // % _ \ 는 글자 그대로 찾도록 이스케이프 (escapeLike).
+    const q = escapeLike(search.replace(/[,()*"]/g, " ").trim().slice(0, 60));
     if (q) {
       params.or = `(name.ilike.*${q}*,email.ilike.*${q}*,organization.ilike.*${q}*,job_title.ilike.*${q}*)`;
     }

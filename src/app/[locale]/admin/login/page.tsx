@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { apiUrl } from "@/lib/api-path";
-import { extractErrorMessage } from "@/lib/api-error";
 import { useRouter } from "@/i18n/navigation";
 
 export default function AdminLoginPage() {
@@ -43,10 +42,15 @@ export default function AdminLoginPage() {
         router.push("/admin/send-history");
         return;
       }
-      // 502/503 등 JSON 이 아닌 응답도 상태 코드 기반 메시지로 보여준다.
-      const fallback =
-        res.status >= 500 ? t("serverError", { status: res.status }) : t("loginFailed");
-      setError(await extractErrorMessage(res, fallback));
+      // 화면 언어로 보이도록 서버 문구(영어) 대신 상태 코드로 번역문을 고른다 (QA D-03).
+      // 502/503 등 JSON 이 아닌 응답도 같은 규칙.
+      setError(
+        res.status === 429
+          ? t("tooManyAttempts")
+          : res.status >= 500
+            ? t("serverError", { status: res.status })
+            : t("loginFailed")
+      );
     } finally {
       setLoading(false);
     }

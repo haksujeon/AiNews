@@ -100,6 +100,7 @@
     "passwordPlaceholder": "Enter admin password",
     "signIn": "Sign In",
     "loginFailed": "Login failed.",
+    "tooManyAttempts": "Too many attempts. Please try again later.",
     "networkError": "Can't reach the server. Check your network.",
     "serverError": "Server error (HTTP {status}). Please try again shortly.",
     "sessionExpired": "Your session has expired. Please sign in again.",
