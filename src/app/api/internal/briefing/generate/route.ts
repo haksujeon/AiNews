@@ -30,6 +30,8 @@ const STATUS_BY_OUTCOME: Record<string, number> = {
   invalid_period: 400,
   locked: 409,
   blocked_data_quality: 422,
+  // 월간 합본: 발행된 주간 리포트가 모자람 (n8n 실패 알림으로 사람이 본다)
+  blocked_weeklies: 422,
   failed: 500,
 };
 

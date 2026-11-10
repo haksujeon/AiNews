@@ -756,7 +756,7 @@
     "railWeeklies": "Weekly reports this month",
     "weeklyOpen": "Open weekly",
     "weeklyNone": "No report",
-    "methodMonthly": "The month is split into ISO weeks (first and last weeks clipped to the month) to compute weekday daily averages and company mentions per 1,000 articles. Weeks are never compared on raw counts.",
+    "methodMonthly": "The month is split into ISO weeks (first and last weeks clipped to the month) to compute weekday daily averages and company mentions per 1,000 articles. Weeks are never compared on raw counts. The big picture combines the weekly reports published that month after review, and cites only articles those weekly reports cited.",
     "chartRegionDesc": "This month {cn}% of articles were about China, {us}% about the US and {other}% elsewhere (last month China {pcn}%, US {pus}%)."
   },
   "today": {

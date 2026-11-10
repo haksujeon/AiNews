@@ -21,7 +21,11 @@ import type { PeriodicKind, StoryPoolItem, WeeklyContent } from "./types";
 //   기사 쉽게 풀어보기와 같은 눈높이(초등 5~6학년·해요체·비유 하나·숫자 없음), text 는 사실만, 업계 용어 풀어 쓰기,
 //   기업 칸은 "언급이 늘었다"가 아니라 그 기간에 한 일
 export const WEEKLY_PROMPT_VERSION = "periodic-weekly-v7-2026-11-10";
-export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v6-2026-11-10";
+// monthly v7 (2026-11-10 사용자 결정 "월간 다시 짜기"): 주간 합본 — 그달에 발행된 주간 리포트(WEEKLY_REPORTS)를 바탕으로,
+//   근거 후보는 주간판이 인용한 사건(+돈 흐름 표)만. 주간판에 없는 새 사건을 큰 흐름으로 세우지 않는다
+export const MONTHLY_PROMPT_VERSION = "periodic-monthly-v7-2026-11-10";
+/** 월간을 만들 수 있는 최소 발행 주간 리포트 수 */
+export const MONTHLY_MIN_WEEKLIES = 2;
 export const WEEKLY_HEADLINE_MAX = 36;
 export const WEEKLY_STORY_LIMIT = 50;
 export const MONTHLY_STORY_LIMIT = 60;
@@ -238,7 +242,10 @@ ${volumeRule}
 18. STORIES 는 사건 단위입니다(같은 사건의 여러 날·여러 글이 한 id). 매체 수(sources)가 가장 많은 사건 1·2위는 big_picture 나 movers 에 반영합니다. 같은 사건을 두 항목에 나눠 쓰지 마십시오.
 19. "열풍·붐·쏠림·확산·몰리다" 도 증감 주장입니다 — 증감 FACTS 키(.chg/.rise/.fall/vol.lfl_change/week.*)가 없으면 쓰지 마십시오. 기사의 숫자("호출량 801% 급증")로 말하는 증감은 그 기사 표현 그대로 쓰고, 언급 수 지표와 섞지 마십시오.
 20. MONEY 의 한 행은 거래 하나입니다. "(= …, 같은 거래)" 로 붙은 다른 통화 금액은 같은 거래이므로 두 거래로 나열하지 마십시오.${
-    kind === "monthly" ? "\n21. month_arc 의 각 주 refs 에는 WEEK_STORIES 에 그 주로 나온 S id 만 넣습니다(다른 주 사건 금지)." : ""
+    kind === "monthly"
+      ? "\n21. month_arc 의 각 주 refs 에는 WEEK_STORIES 에 그 주로 나온 S id 만 넣습니다(다른 주 사건 금지)." +
+        "\n22. 이 월간 리포트는 그달에 이미 검토·발행된 주간 리포트(WEEKLY_REPORTS)의 합본입니다. big_picture 는 여러 주에 걸친 흐름을 WEEKLY_REPORTS 에서 골라 한 달 단위로 묶고, month_arc 의 각 주 문장은 그 주 주간 리포트의 흐름을 줄여 씁니다. WEEKLY_REPORTS 에 없는 새 사건을 큰 흐름으로 세우지 마십시오. 숫자·근거는 언제나 FACTS·STORIES 로 답니다(WEEKLY_REPORTS 는 근거가 아니라 길잡이)."
+      : ""
   }
 
 쉽게 설명하기 (이 사이트의 강점 — 독자는 AI 업계 사람이 아닙니다)
@@ -296,11 +303,24 @@ export function storyRegion(docs: SourceDoc[] | undefined): { region?: string; c
   return { region, ...(chinaByRegion([judged]) ? { cn: true as const } : {}) };
 }
 
+/** 월간 합본 입력: 그달에 발행된 주간 리포트 요약 */
+export interface WeeklyDigest {
+  key: string;
+  headline: string;
+  flows: { title: string; text: string }[];
+}
+
+/** 월간 근거 후보를 주간판이 인용한 사건(+돈 흐름 표 기사)으로 좁힌다 (순수). S id 는 그대로(빈 번호 허용) */
+export function filterPoolToWeeklies(pool: StoryPoolItem[], weeklyIds: Set<string>, moneyIds: Set<string>): StoryPoolItem[] {
+  return pool.filter((p) => p.ids.some((id) => weeklyIds.has(id) || moneyIds.has(id)));
+}
+
 export function buildPeriodicUserPrompt(
   m: PeriodMetrics,
   facts: Record<string, string>,
   pool: StoryPoolItem[],
-  docs?: Map<string, SourceDoc[]>
+  docs?: Map<string, SourceDoc[]>,
+  weeklies?: WeeklyDigest[]
 ): string {
   const W = WORDS[kindOfMetrics(m)];
   const sidOf = new Map(pool.flatMap((p) => p.ids.map((id) => [id, p.sid] as const)));
@@ -333,8 +353,13 @@ export function buildPeriodicUserPrompt(
   const weekStories = (m.weeks ?? [])
     .map((w) => `${w.key}: ${pool.filter((p) => p.days.some((d) => d >= w.start && d <= w.end)).map((p) => p.sid).join(", ") || "(없음)"}`)
     .join("\n");
+  const weeklyBlock = weeklies?.length
+    ? `\nWEEKLY_REPORTS (그달에 검토·발행된 주간 리포트 — 흐름의 길잡이, 근거는 STORIES·FACTS):\n${weeklies
+        .map((w) => `${w.key} | ${w.headline}\n${w.flows.map((f) => `  - ${f.title}: ${f.text.slice(0, 160)}`).join("\n")}`)
+        .join("\n")}`
+    : "";
   return `PERIOD: ${period}
-DATA_QUALITY: ${dataQualityLine(m)}${weeks ? `\nWEEKS:\n${weeks}` : ""}${weekStories ? `\nWEEK_STORIES (month_arc 의 주별 refs 후보):\n${weekStories}` : ""}
+DATA_QUALITY: ${dataQualityLine(m)}${weeks ? `\nWEEKS:\n${weeks}` : ""}${weekStories ? `\nWEEK_STORIES (month_arc 의 주별 refs 후보):\n${weekStories}` : ""}${weeklyBlock}
 FACTS (key = 값 문자열):
 ${Object.entries(facts)
   .map(([k, x]) => `${k} = ${x}`)

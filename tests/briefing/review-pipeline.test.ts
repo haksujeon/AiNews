@@ -379,9 +379,9 @@ test("데일리 마지막 차례는 지우기 발행을 하지 않는다 (예전
   assert.equal(h.published.length, 0);
 });
 
-test("월간 마지막 차례는 아직 지우기 발행을 하지 않는다 (사용자 결정은 주간만)", async () => {
+test("월간 마지막 차례도 지우기만 하고 발행 (2026-11-10 월간 합본 결정)", async () => {
   const row = weeklyRow({ edition_type: "monthly" });
   const h = weeklyHarness(row, [weeklyNit]);
   await runReviewPipeline({ briefingId: row.id, editionType: "monthly", policy }, h.deps);
-  assert.equal(h.published.length, 0);
+  assert.equal(h.published.length, 1);
 });

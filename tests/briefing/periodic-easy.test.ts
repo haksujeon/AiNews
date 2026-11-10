@@ -63,3 +63,10 @@ test("큰 흐름 핵심 숫자: 문장에 있는 값만, 한자 없는 짧은 �
   assert.match(keyNumberProblem({ value: "50%", label: "점수" }, text)!, /문장에 없음/);
   assert.match(keyNumberProblem({ value: "48.1%", label: "数学" }, text)!, /한자/);
 });
+
+test("월간 합본: 근거 후보를 주간판이 인용한 사건과 돈 흐름 표 기사로 좁힌다", async () => {
+  const { filterPoolToWeeklies } = await import("../../src/lib/briefing/periodic/prompt");
+  const item = (sid: string, ids: string[]) => ({ sid, ids, title_kr: "", summary_kr: "", sources: [], days: [], entities: [] });
+  const pool = [item("S01", ["a", "b"]), item("S02", ["c"]), item("S03", ["m"])];
+  assert.deepEqual(filterPoolToWeeklies(pool, new Set(["b"]), new Set(["m"])).map((p) => p.sid), ["S01", "S03"]);
+});

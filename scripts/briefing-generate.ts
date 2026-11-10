@@ -67,7 +67,7 @@ async function main() {
     } else if (cmd === "monthly") {
       const result = await generateMonthly({ month: arg("month"), force: flag("force"), dryRun: flag("dry-run") });
       console.log(JSON.stringify(result, null, 2));
-      if (["failed", "invalid_period", "blocked_data_quality", "locked"].includes(result.outcome)) process.exitCode = 1;
+      if (["failed", "invalid_period", "blocked_data_quality", "blocked_weeklies", "locked"].includes(result.outcome)) process.exitCode = 1;
     } else if (cmd === "generate") {
       // --exclude uuid,uuid : 후보에서 뺄 기사 (모델 거부 대응, 판에 기록돼 이후 재생성도 따른다). --exclude "" 는 제외 해제
       const ex = process.argv.includes("--exclude") ? (arg("exclude") ?? "").split(",").map((s) => s.trim()).filter(Boolean) : undefined;

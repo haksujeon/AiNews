@@ -32,6 +32,9 @@ import type { CandidateArticle, LlmUsage } from "../types";
 import {
   PROMPT_VERSION,
   STORY_LIMIT,
+  MONTHLY_MIN_WEEKLIES,
+  filterPoolToWeeklies,
+  type WeeklyDigest,
   WEEKLY_HEADLINE_MAX,
   buildFacts,
   buildPeriodicSystemPrompt,
@@ -95,7 +98,7 @@ export interface PeriodicGenerateResult {
   week: string;
   start: string | null;
   end: string | null;
-  outcome: "generated" | "failed" | "skipped_same_input" | "locked" | "dry_run" | "blocked_data_quality" | "invalid_week" | "invalid_period";
+  outcome: "generated" | "failed" | "skipped_same_input" | "locked" | "dry_run" | "blocked_data_quality" | "blocked_weeklies" | "invalid_week" | "invalid_period";
   id: string | null;
   version: number | null;
   status: string | null;
@@ -332,10 +335,12 @@ export async function generatePeriodicKo(
   m: PeriodMetrics,
   poolItems: StoryPoolItem[],
   ctx: PeriodicValidationContext,
-  cost: CostTracker
+  cost: CostTracker,
+  /** 월간 합본(v7): 그달에 발행된 주간 리포트 */
+  weeklies?: WeeklyDigest[]
 ): Promise<KoOutcome> {
   const system = buildPeriodicSystemPrompt(kind, (m.weeks ?? []).map((w) => w.key));
-  const user = buildPeriodicUserPrompt(m, ctx.facts, poolItems, ctx.docs);
+  const user = buildPeriodicUserPrompt(m, ctx.facts, poolItems, ctx.docs, weeklies);
   const validation: Record<string, unknown> = { prompt_version: PROMPT_VERSION[kind], prompt_chars: system.length + user.length };
   const track = (u: LlmUsage) => cost.add(u);
 
@@ -447,6 +452,28 @@ export async function generatePeriodicKo(
   return { status: "draft", content, validation, report, repaired, dropped, fallbacks };
 }
 
+/**
+ * 월간 합본 재료: 그달과 기간이 겹치는 발행 주간 리포트(ko). 판의 큰 흐름 제목·사실 문장과 인용 기사 id.
+ * (주는 월요일 시작이라 그달 첫 주는 앞달에서 시작할 수 있다 — 끝날이 그달 안이면 포함)
+ */
+export async function loadMonthWeeklies(start: string, end: string, status = "published"): Promise<{ digest: WeeklyDigest; articleIds: string[] }[]> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (edition_date) content, article_ids FROM daily_briefings
+      WHERE edition_type = 'weekly' AND locale = 'ko' AND status = $3
+        AND period_end >= $1::date AND period_start <= $2::date
+      ORDER BY edition_date, version DESC`,
+    [start, end, status]
+  );
+  return (rows as { content: StoredPeriodicContent; article_ids: string[] }[]).map((r) => ({
+    digest: {
+      key: r.content.meta?.period_key ?? r.content.meta?.iso_week ?? "",
+      headline: r.content.headline,
+      flows: (r.content.big_picture ?? []).map((b) => ({ title: b.title, text: b.text })),
+    },
+    articleIds: r.article_ids ?? [],
+  }));
+}
+
 /** 주간·월간 공용 생성 */
 export async function generatePeriodic(kind: PeriodicKind, opts: PeriodicGenerateOptions = {}): Promise<PeriodicGenerateResult> {
   const base = {
@@ -479,7 +506,17 @@ export async function generatePeriodic(kind: PeriodicKind, opts: PeriodicGenerat
           message: `수집 미완 날짜 ${dq.incomplete_days.join(", ")} — 보충이 끝난 뒤 생성하거나 --force 로 만든 뒤 발행 때 데이터 알림을 확인하십시오`,
         };
       }
-      const poolItems = buildStoryPool(stories as PeriodStory[], m.money_table, STORY_LIMIT[kind]);
+      let poolItems = buildStoryPool(stories as PeriodStory[], m.money_table, STORY_LIMIT[kind]);
+      // 월간 합본(v7, 2026-11-10 "월간 다시 짜기"): 그달에 발행된 주간 리포트가 길잡이, 근거 후보는 그 주간판들이 인용한 사건만
+      let weeklies: WeeklyDigest[] | undefined;
+      if (kind === "monthly") {
+        const w = await loadMonthWeeklies(start, end);
+        if (w.length < MONTHLY_MIN_WEEKLIES && !opts.dryRun) {
+          return { ...h, outcome: "blocked_weeklies", message: `발행된 주간 리포트 ${w.length}개 (${MONTHLY_MIN_WEEKLIES}개 이상 필요) — 월간 합본을 만들지 않음` };
+        }
+        poolItems = filterPoolToWeeklies(poolItems, new Set(w.flatMap((x) => x.articleIds)), new Set(m.money_table.map((r) => r.id)));
+        weeklies = w.map((x) => x.digest);
+      }
       const inputHash = computePeriodicInputHash(kind, m, poolItems);
       if (opts.dryRun) {
         const facts = buildFacts(m);
@@ -504,7 +541,7 @@ export async function generatePeriodic(kind: PeriodicKind, opts: PeriodicGenerat
       const cost = new CostTracker(PERIODIC_MAX_COST);
       let ko: KoOutcome;
       try {
-        ko = await generatePeriodicKo(kind, m, poolItems, ctx, cost);
+        ko = await generatePeriodicKo(kind, m, poolItems, ctx, cost, weeklies);
       } catch (e) {
         const msg = e instanceof LlmError || e instanceof BudgetExceeded ? e.message : `예상치 못한 오류: ${(e as Error).message}`;
         const u = sumUsage(cost.usages);

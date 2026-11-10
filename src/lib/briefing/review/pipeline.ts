@@ -243,8 +243,8 @@ export const defaultPipelineDeps: PipelineDeps = {
 
 /** 주간·월간 마지막 차례에 지우기만으로 발행할 때 지울 수 있는 문장 수 상한 (그보다 많으면 사람이 본다) */
 export const FINAL_DELETE_MAX = 3;
-/** 마지막 차례 지우기 발행을 쓰는 판 유형 (월간을 넣으려면 여기에 "monthly") */
-export const FINAL_DELETE_TYPES: ReadonlySet<EditionType> = new Set<EditionType>(["weekly"]);
+/** 마지막 차례 지우기 발행을 쓰는 판 유형 */
+export const FINAL_DELETE_TYPES: ReadonlySet<EditionType> = new Set<EditionType>(["weekly", "monthly"]);
 
 const CLAIM_RULES = new Set(["verdict_pass", "no_wrong", "no_number-unit", "no_misattributed", "overclaim", "unsupported", "score"]);
 
@@ -574,7 +574,7 @@ async function processEdition(
       }
     }
 
-    // 3-1) 주간 마지막 차례: 지우기만 해서 발행 (사용자 결정 2026-11-10 "주간 리포트 매주 자동 발행" — 월간은 결정 전이라 예전대로 사람이 본다).
+    // 3-1) 주간·월간 마지막 차례: 지우기만 해서 발행 (사용자 결정 2026-11-10 "주간 리포트 매주 자동 발행", "월간 다시 짜기" — 월간은 주간 합본 v7 부터).
     //   조건: 수정 횟수를 다 썼고, 문장 지적 말고는 막는 조건이 없고(결손일·결정적 치명·발행 가능), 점수 ≥ 기준, 지울 문장 ≤ FINAL_DELETE_MAX
     const lastRound = FINAL_DELETE_TYPES.has(target.editionType) && flagged && !nonClaim.length && round >= o.policy.maxFixRounds && hard < 3;
     if (lastRound && (review.score ?? 0) >= minScoreFor(o.policy, target.editionType) && o.policy.autoPublish) {
