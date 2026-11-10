@@ -161,7 +161,7 @@ export async function PeriodicPageContent({ kind, locale, periodKey }: { kind: P
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main id="main" className="container mx-auto flex-1 px-4">
+      <main id="main" tabIndex={-1} className="scroll-mt-16 outline-none container mx-auto flex-1 px-4">
         <BriefingTabs current={kind} />
         {body}
       </main>

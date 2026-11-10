@@ -37,7 +37,7 @@ export default async function SubscribePage({ params, searchParams }: Props) {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main id="main" className="container mx-auto flex-1 px-4">
+      <main id="main" tabIndex={-1} className="scroll-mt-16 outline-none container mx-auto flex-1 px-4">
         <section className="mx-auto grid max-w-[34rem] gap-6 py-10 sm:py-14" data-testid="subscribe-page">
           <div className="grid gap-3">
             <p className="text-[13px] font-[650] text-jade">{t("kicker")}</p>

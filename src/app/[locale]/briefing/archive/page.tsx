@@ -42,7 +42,7 @@ export default async function BriefingArchivePage({ params }: Props) {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main id="main" className="container mx-auto flex-1 px-4 pb-16">
+      <main id="main" tabIndex={-1} className="scroll-mt-16 outline-none container mx-auto flex-1 px-4 pb-16">
         <div className="flex items-baseline justify-between border-b-2 border-rule-strong pb-3 pt-8">
           <h1 className="text-2xl font-[740] tracking-[-0.02em] text-ink sm:text-3xl">{t("archiveTitle")}</h1>
           <span className="text-[13px] text-ink-3">{t("archiveCount", { count: editions.length })}</span>

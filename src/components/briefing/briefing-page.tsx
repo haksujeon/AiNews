@@ -17,6 +17,7 @@ import { loadCardSpec } from "@/lib/briefing/media-store";
 import { withFxNotes } from "@/lib/fx/briefing";
 import { briefingAlternates, briefingDatePath, briefingJsonLd, formatShortDate, safeJsonLd } from "@/lib/briefing/view";
 import type { BriefingLocale } from "@/lib/briefing/types";
+import { LOCALE_HTML_LANG } from "@/i18n/routing";
 
 /*
  * /[locale]/briefing (최신 판) 와 /[locale]/briefing/[date] 가 함께 쓰는 서버 렌더러·메타데이터.
@@ -58,7 +59,8 @@ export async function briefingMetadata(locale: string, date?: string): Promise<M
       title: { absolute: title },
       description: b.content.lede,
       alternates: { canonical: url, languages: briefingAlternates(b.edition_date, b.available_locales) },
-      openGraph: { type: "article", title, description: b.content.lede, url, publishedTime: b.published_at || undefined },
+      // 페이지 openGraph 는 레이아웃 것을 통째로 덮으므로 사이트 이름·언어를 다시 넣는다 (QA C-08)
+      openGraph: { type: "article", title, description: b.content.lede, url, publishedTime: b.published_at || undefined, siteName: t("brand"), locale: LOCALE_HTML_LANG[loc].replace("-", "_") },
       twitter: { card: "summary", title, description: b.content.lede },
     };
   }
@@ -126,7 +128,7 @@ export async function BriefingPageContent({ locale, date }: { locale: string; da
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main id="main" className="container mx-auto flex-1 px-4">
+      <main id="main" tabIndex={-1} className="scroll-mt-16 outline-none container mx-auto flex-1 px-4">
         <BriefingTabs current="daily" />
         {body}
       </main>

@@ -59,7 +59,7 @@ export async function TrustPage({
     <div className="flex min-h-screen flex-col">
       <Header />
       {lead}
-      <main id="main" className="container mx-auto flex-1 px-4 pb-16" data-testid={`trust-${pageKey}`}>
+      <main id="main" tabIndex={-1} className="scroll-mt-16 outline-none container mx-auto flex-1 px-4 pb-16" data-testid={`trust-${pageKey}`}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }} />
         <div className="max-w-3xl border-b-2 border-rule-strong pb-3 pt-8">
           {lead ? (

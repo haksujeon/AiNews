@@ -81,7 +81,7 @@ export default async function TodayPage({
       <Header />
       <IntroStrip />
       <TodayLive batch={batch} locale={locale} />
-      <main id="main" className="flex-1 container mx-auto space-y-10 px-4 py-6 sm:py-8">
+      <main id="main" tabIndex={-1} className="scroll-mt-16 outline-none flex-1 container mx-auto space-y-10 px-4 py-6 sm:py-8">
         {/* 판 날짜로 부른다 ("오늘의 중국 AI" → "11월 3일 판", 사용자 결정 2026-11-05 — 브리핑은 다음 날 아침에 읽힌다) */}
         <h1 className="sr-only">{briefing ? t("pageTitleDated", { date: formatShortDate(briefing.edition_date, locale) }) : t("pageTitle")}</h1>
         <TodayBriefing briefing={briefing} locale={locale} />

@@ -32,7 +32,7 @@ export default async function SubscribeConfirmPage({ params, searchParams }: Pro
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main id="main" className="container mx-auto flex-1 px-4">
+      <main id="main" tabIndex={-1} className="scroll-mt-16 outline-none container mx-auto flex-1 px-4">
         <section className="mx-auto grid max-w-[34rem] gap-4 py-12 sm:py-16" data-testid="subscribe-confirm-page">
           <h1 className="text-[26px] font-[760] leading-tight tracking-[-0.015em] text-ink">{t("confirmTitle")}</h1>
           {valid ? (

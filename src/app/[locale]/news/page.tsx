@@ -48,7 +48,7 @@ export default async function NewsPage({
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main id="main" className="flex-1 container mx-auto px-4 py-8">
+      <main id="main" tabIndex={-1} className="scroll-mt-16 outline-none flex-1 container mx-auto px-4 py-8">
         <h1 className="mb-4 text-[22px] font-[760] tracking-[-0.015em] text-ink sm:text-[26px]">{t("pageTitle")}</h1>
         {/* 최신 브리핑 한 줄 띠 (예전 홈과 같은 부품) */}
         <BriefingBanner locale={locale} />

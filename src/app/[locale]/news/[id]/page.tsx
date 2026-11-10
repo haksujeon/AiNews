@@ -93,7 +93,7 @@ export default async function NewsDetailPage({ params }: Props) {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main id="main" className="flex-1 container mx-auto px-4 py-8">
+      <main id="main" tabIndex={-1} className="scroll-mt-16 outline-none flex-1 container mx-auto px-4 py-8">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
         {/* 클라이언트 컴포넌트로는 번역 전문(content_*)을 넘기지 않는다 — RSC 페이로드에 실리지 않게 요지만 (P0-7) */}
         {/* 금액 환산 표기: 팝업·공개 상세 API 와 같은 withNewsFx (fx/news.ts) */}
