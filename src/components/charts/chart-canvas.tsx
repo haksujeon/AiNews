@@ -188,7 +188,8 @@ export function ChartCanvas<T extends ChartType = ChartType>({
 
   return (
     <div className={cn("relative min-w-0", className)} style={style}>
-      <canvas ref={ref} role="img" aria-label={label} />
+      {/* 차트가 그려지기 전 canvas 기본 크기(300×150)가 좁은 화면을 밀지 않게 (QA E-02) */}
+      <canvas ref={ref} role="img" aria-label={label} className="max-w-full" />
     </div>
   );
 }

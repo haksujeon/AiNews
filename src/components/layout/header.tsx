@@ -31,7 +31,8 @@ export function Header() {
             href="/"
             className="flex min-w-0 items-baseline gap-2.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            <span className="whitespace-nowrap text-[19px] font-[760] tracking-[-0.02em] text-ink">
+            {/* 이름이 길어져(SDSC AI News) 영어 320px 에서 구독 버튼과 겹쳤다 (QA E-13): 좁은 화면은 글자를 줄이고, 그래도 넘치면 말줄임 */}
+            <span className="min-w-0 truncate whitespace-nowrap text-[16px] font-[760] tracking-[-0.02em] text-ink min-[400px]:text-[17px] sm:text-[19px]">
               {t("appName")}
             </span>
             <span className="hidden whitespace-nowrap text-[13px] text-ink-3 sm:inline">

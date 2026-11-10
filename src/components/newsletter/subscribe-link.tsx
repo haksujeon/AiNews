@@ -21,7 +21,8 @@ export function SubscribeLink({ source, variant, className }: { source: string; 
         )}
       >
         <Mail aria-hidden="true" className="h-3.5 w-3.5" />
-        {t("navSubscribe")}
+        {/* 360px 미만에서는 글자를 숨겨 아이콘만(낭독기에는 그대로) — 사이트 이름이 잘리지 않게 (QA E-13) */}
+        <span className="max-[359px]:sr-only">{t("navSubscribe")}</span>
       </Link>
     );
   if (variant === "dark")

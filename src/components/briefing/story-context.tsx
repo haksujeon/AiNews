@@ -40,7 +40,7 @@ export function StoryContextBox({ contexts, tone = "light", className }: { conte
           dark ? "text-white focus-visible:ring-jade-bright" : "text-ink focus-visible:ring-ring"
         )}
       >
-        <span className="shrink-0">{t("storyTitle")}</span>
+        <span className="min-w-0 truncate">{t("storyTitle")}</span>
         <span className={cn("shrink-0 whitespace-nowrap rounded-[3px] border px-1.5 py-px text-[11px] font-semibold", dark ? "border-white/25 text-white/60" : "border-rule-strong/40 text-ink-3")}>{t("storyBeta")}</span>
         {/* 미리보기는 휴대폰에서 "De…" 처럼 잘려 의미가 없어 숨긴다 (쉬운 AI 설명 상자와 같게) */}
         <span className={cn("ml-auto min-w-0 truncate text-[12.5px] font-normal max-sm:hidden", c3)} aria-hidden="true">
