@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * 구독 신청 화면으로 가는 링크 — 상단 메뉴·브리핑 하단 상자·소개 화면이 같은 부품 (Gate 2).
  * source 는 어디서 왔는지(관리자 출처별 현황): header · briefing · landing
  */
-export function SubscribeLink({ source, variant, className }: { source: string; variant: "nav" | "button" | "dark"; className?: string }) {
+export function SubscribeLink({ source, variant, className }: { source: string; variant: "nav" | "button" | "outline"; className?: string }) {
   const t = useTranslations("subscribe");
   const href = { pathname: "/subscribe", query: { src: source } } as const;
   if (variant === "nav")
@@ -25,18 +25,18 @@ export function SubscribeLink({ source, variant, className }: { source: string; 
         <span className="max-[359px]:sr-only">{t("navSubscribe")}</span>
       </Link>
     );
-  if (variant === "dark")
-    // 홈 어두운 카드 버튼 줄 (옆 "지난 브리핑"·"듣기" 버튼과 같은 테두리 모양)
+  if (variant === "outline")
+    // 홈 브리핑 카드 버튼 줄 (옆 "지난 브리핑"·"듣기" 버튼과 같은 테두리 모양)
     return (
       <Link
         href={href}
         data-testid={`subscribe-cta-${source}`}
         className={cn(
-          "inline-flex min-h-11 items-center gap-2 rounded-[4px] border border-white/25 px-4 text-[15px] text-white/90 hover:border-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+          "inline-flex min-h-11 items-center gap-2 rounded-[4px] border border-rule px-4 text-[15px] text-ink hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           className
         )}
       >
-        <Mail aria-hidden="true" className="h-4 w-4 text-jade-bright" />
+        <Mail aria-hidden="true" className="h-4 w-4 text-jade" />
         {t("ctaButtonShort")}
       </Link>
     );

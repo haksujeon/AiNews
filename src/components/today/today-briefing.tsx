@@ -9,7 +9,7 @@ import { ListenLink } from "@/components/briefing/briefing-media";
 import { SubscribeLink } from "@/components/newsletter/subscribe-link";
 
 /**
- * "오늘" 홈의 브리핑 콘솔(어두운 카드) + 옆 칸(숫자로 보는 오늘·주목할 기업·오늘의 용어).
+ * "오늘" 홈의 브리핑 카드(옆 칸과 같은 밝은 바탕 — 2026-11-11 화이트 테마에서 검은 카드만 튀던 것) + 옆 칸(숫자로 보는 오늘·주목할 기업·오늘의 용어).
  * 데이터는 브리핑 페이지·홈 띠와 같은 getPublishedBriefing(최신 발행본, 숨긴 기사 근거는 이미 빠짐 — pruneToVisible) (Gate 2).
  * 최신 발행본이 마감 지난 옛 판이면 "최신 브리핑 · N월 N일 판"으로 날짜를 밝힌다 (bannerState, 홈 띠와 같은 판정).
  * 그 언어판 발행본이 없으면 빈 카드 대신 안내(언제 만들고 어떻게 발행하는지) + 지난 브리핑 링크.
@@ -20,13 +20,13 @@ export async function TodayBriefing({ briefing, locale }: { briefing: PublicBrie
 
   if (!briefing) {
     return (
-      <section aria-labelledby="today-brief-h" className="rounded-md bg-console px-6 py-7 text-white sm:px-8" data-testid="today-briefing-empty">
-        <p className="font-mono text-xs font-semibold text-jade-bright">DAILY BRIEFING</p>
+      <section aria-labelledby="today-brief-h" className="rounded-md border border-rule border-t-4 border-t-ink bg-background px-6 py-7 text-ink sm:px-8" data-testid="today-briefing-empty">
+        <p className="font-mono text-xs font-semibold text-jade">DAILY BRIEFING</p>
         <h2 id="today-brief-h" className="mt-2 text-[22px] font-[760] leading-tight sm:text-[26px]">
           {tb("emptyTitle")}
         </h2>
-        <p className="mt-2 max-w-xl text-[15px] leading-[1.7] text-white/75">{t("noBriefingBody")}</p>
-        <Link href="/news" className="mt-5 inline-flex min-h-11 items-center rounded-[4px] bg-jade-bright px-4 text-[15px] font-bold text-console focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
+        <p className="mt-2 max-w-xl text-[15px] leading-[1.7] text-ink-2">{t("noBriefingBody")}</p>
+        <Link href="/news" className="mt-5 inline-flex min-h-11 items-center rounded-[4px] bg-jade px-4 text-[15px] font-bold text-paper hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
           {t("allNews")}
         </Link>
       </section>
@@ -42,46 +42,46 @@ export async function TodayBriefing({ briefing, locale }: { briefing: PublicBrie
     <div className="grid gap-5 lg:grid-cols-12">
       <section
         aria-labelledby="today-brief-h"
-        className="min-w-0 rounded-md bg-console px-5 py-6 text-white sm:px-8 sm:py-7 lg:col-span-8 dark:ring-1 dark:ring-white/10"
+        className="min-w-0 rounded-md border border-rule border-t-4 border-t-ink bg-background px-5 py-6 text-ink sm:px-8 sm:py-7 lg:col-span-8"
         data-testid="today-briefing"
       >
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className="rounded-[3px] bg-jade-bright px-2 py-0.5 font-mono text-[11.5px] font-bold text-console">
+          <span className="rounded-[3px] bg-jade px-2 py-0.5 font-mono text-[11.5px] font-bold text-paper">
             {dated ? tb("bannerLabelLatest") : tb("kicker")}
           </span>
-          <span className="font-mono text-[13px] text-white/65">
+          <span className="font-mono text-[13px] text-ink-3">
             {date} · {t("coverage", { total: c.meta?.candidate_count ?? 0, cited: c.meta?.cited_count ?? Object.keys(briefing.articles).length })} ·{" "}
             {tb("readTime", { minutes: readMinutes(c, briefing.locale) })}
           </span>
         </p>
         <h2 id="today-brief-h" className="mt-4 text-[26px] font-[800] leading-[1.22] tracking-[-0.02em] sm:text-[36px]">
-          <Link href={briefingDatePath(briefing.edition_date)} className="rounded-sm hover:underline hover:decoration-2 hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade-bright">
+          <Link href={briefingDatePath(briefing.edition_date)} className="rounded-sm hover:underline hover:decoration-2 hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             {c.headline}
           </Link>
         </h2>
-        <p className="mt-3 max-w-[42rem] text-[16px] leading-[1.75] text-white/80 sm:text-[17px]">{c.lede}</p>
-        <Sources refs={c.lede_refs} briefing={briefing} className="mt-2 text-white/55 [&_a]:text-white/75 [&_a]:decoration-white/30" />
+        <p className="mt-3 max-w-[42rem] text-[16px] leading-[1.75] text-ink-2 sm:text-[17px]">{c.lede}</p>
+        <Sources refs={c.lede_refs} briefing={briefing} className="mt-2 text-ink-3" />
         <div className="mt-5">
           <TodayStories briefing={briefing} />
         </div>
         <div className="mt-5 flex flex-wrap gap-3">
           <Link
             href={briefingDatePath(briefing.edition_date)}
-            className="inline-flex min-h-11 items-center rounded-[4px] bg-jade-bright px-4 text-[15px] font-bold text-console focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex min-h-11 items-center rounded-[4px] bg-jade px-4 text-[15px] font-bold text-paper hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             {tb("compactReadFull")}
           </Link>
-          <ListenLink date={briefing.edition_date} audio={briefing.media?.audio} tone="dark" />
+          <ListenLink date={briefing.edition_date} audio={briefing.media?.audio} />
           {/* 구독 신청 (2026-11-05, 권장 2순위) */}
-          <SubscribeLink source="home" variant="dark" />
+          <SubscribeLink source="home" variant="outline" />
           <Link
             href={`${BRIEFING_PATH}/archive`}
-            className="inline-flex min-h-11 items-center rounded-[4px] border border-white/25 px-4 text-[15px] text-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex min-h-11 items-center rounded-[4px] border border-rule px-4 text-[15px] text-ink hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {tb("archiveLink")}
           </Link>
         </div>
-        <p className="mt-4 text-[12px] leading-relaxed text-white/50">{t("aiNote")}</p>
+        <p className="mt-4 text-[12px] leading-relaxed text-ink-3">{t("aiNote")}</p>
       </section>
 
       <aside className="flex min-w-0 flex-col gap-5 lg:col-span-4" aria-label={t("sideLabel")}>
