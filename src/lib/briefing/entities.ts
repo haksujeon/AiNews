@@ -49,7 +49,7 @@ export const ENTITIES: Entity[] = [
   { key: "nvidia", chinese: false, tier: 0.6, aliases: ["엔비디아", "NVIDIA", "Nvidia", "英伟达"] },
   { key: "apple", chinese: false, tier: 0.6, aliases: ["애플", "Apple", "苹果"] },
   { key: "tesla", chinese: false, tier: 0.6, aliases: ["테슬라", "Tesla", "特斯拉"] },
-  { key: "meta", chinese: false, tier: 0.6, aliases: [/메타(?!버스|데이터|인지|포)/, /\bMeta\b/, "扎克伯格", "저커버그", /\bLlama\b/, "Muse Wonder"] },
+  { key: "meta", chinese: false, tier: 0.6, aliases: [/메타(?!버스|데이터|인지|포|엑스)/, /\bMeta\b/, "扎克伯格", "저커버그", /\bLlama\b/, "Muse Wonder"] },
   { key: "google", chinese: false, tier: 0.6, aliases: ["구글", "Google", "谷歌", "Gemini", "제미나이", "DeepMind", "딥마인드"] },
   { key: "microsoft", chinese: false, tier: 0.6, aliases: ["마이크로소프트", "Microsoft", "微软"] },
   { key: "openai", chinese: false, tier: 0.6, aliases: ["오픈AI", "OpenAI", /\bGPT\b/, "ChatGPT", "챗GPT"] },
