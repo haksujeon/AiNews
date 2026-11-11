@@ -9,6 +9,7 @@
  * 이 파일은 DB 를 부르지 않는다.
  */
 import { HAN_RE, dropHanInsideParens } from "./text/han";
+import { normalizeKoNames } from "./text/ko-names";
 
 export const EASY_VERSION = "easy-v1";
 export const EASY_MODEL = process.env.EASY_EXPLAIN_MODEL || "anthropic-api-sonnet-5-5";
@@ -57,7 +58,8 @@ export function toEasyResult(raw: unknown): EasyResult | null {
   for (const f of EASY_FIELDS) {
     const v = typeof o[f] === "string" ? (o[f] as string).trim() : "";
     if (!v) return null;
-    out[f] = f.endsWith("_cn") ? v : dropHanInsideParens(v);
+    // 한국어는 기사 저장(upsert)과 같은 표기 사전으로 (2026-11-11: 쉬운 설명에만 "평터우거"가 남았다 — Gate 2)
+    out[f] = f.endsWith("_cn") ? v : f.endsWith("_kr") ? normalizeKoNames(dropHanInsideParens(v)) : dropHanInsideParens(v);
   }
   return out;
 }

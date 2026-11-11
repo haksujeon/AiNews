@@ -25,7 +25,7 @@ const TARGETS: Target[] = [
     key: "id",
     where: "TRUE",
     fields: [
-      ...["title_kr", "summary_kr", "content_kr", "ai_insights_kr", "ai_insights_detail_kr"].map((name) => ({ name, json: false })),
+      ...["title_kr", "summary_kr", "content_kr", "ai_insights_kr", "ai_insights_detail_kr", "ai_easy_kr", "ai_why_kr"].map((name) => ({ name, json: false })),
       { name: "key_terms", json: true },
     ],
   },

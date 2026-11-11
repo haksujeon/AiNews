@@ -20,6 +20,13 @@ test("toEasyResult: 빈 필드가 있으면 null, 한국어·영어 괄호 속 �
   assert.equal(toEasyResult({ ...ok, easy_cn: "座舱(车内)" })!.easy_cn, "座舱(车内)");
 });
 
+test("toEasyResult: 한국어 칸만 표기 사전으로 고친다 (평터우거·평투거 → 펑터우거, Qwen 변형 → 큐원)", () => {
+  const r = toEasyResult({ ...ok, easy_kr: "평투거는 알리바바의 칩 회사예요.", why_kr: "평터우거가 큐웬 모델용 칩을 만들어요.", easy_en: "T-Head makes chips." })!;
+  assert.equal(r.easy_kr, "펑터우거는 알리바바의 칩 회사예요.");
+  assert.equal(r.why_kr, "펑터우거가 큐원 모델용 칩을 만들어요.");
+  assert.equal(r.easy_en, "T-Head makes chips.");
+});
+
 test("easyFlags: 한자·원문에 없는 숫자·풀이 없는 약어(AI 제외)", () => {
   const src = { title_cn: "实验", content_cn: "公司投入 200 亿元", summary_kr: "200억 위안 투입" };
   assert.deepEqual(easyFlags(ok, src), []);
