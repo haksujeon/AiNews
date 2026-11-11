@@ -497,6 +497,7 @@
     "aiReviewDeleted": "deleted",
     "aiReviewOmissions": "Important stories left out",
     "aiReviewTranslation": "Translation consistency",
+    "aiReviewReadability": "Readability — {n} 'why it matters' lines a general reader may find hard (not part of the verdict)",
     "aiReviewHistory": "{n} reviews",
     "aiReviewFixedFrom": "This version is v{version} corrected with the AI reviewer's fixes ({n} sentences).",
     "aiReviewRerun": "Re-run AI review",

@@ -8,9 +8,10 @@
  *    "fixes": [{ "s": "S05", "a": "replace|delete", "t": "고친 문장", "r": "a03", "e": "근거 인용", "why": "이유" }],
  *    "omissions": [{ "c": "C2", "important": true, "why": "..." }],
  *    "translation": [{ "loc": "en|zh", "s": "S03", "sev": "major|minor", "issue": "..." }],
+ *    "readability": [{ "s": "S07", "issue": "..." }],   ← why 쉬움 점검 (v6.4, 판정에 안 들어감)
  *    "structure": ["..."], "verdict": "PASS|FIXABLE|FAIL", "summary": "한 줄" }
  */
-import { CLAIM_LABELS, VERDICTS, type ClaimLabel, type ParsedReview, type ReviewClaim, type ReviewFix, type ReviewOmission, type Segment, type TranslationIssue, type Verdict } from "./types";
+import { CLAIM_LABELS, VERDICTS, type ClaimLabel, type ParsedReview, type ReadabilityIssue, type ReviewClaim, type ReviewFix, type ReviewOmission, type Segment, type TranslationIssue, type Verdict } from "./types";
 
 export class ReviewSchemaError extends Error {
   constructor(message: string) {
@@ -147,11 +148,24 @@ export function parseReviewJson(raw: unknown, ctx: SchemaContext): ParsedReview 
     translation.push({ locale: loc, path, severity: s(t.sev ?? t.severity, 8).toLowerCase() === "major" ? "major" : "minor", issue: s(t.issue, 300) });
   });
 
+  // why 쉬움 점검: 주요 기사 why 문장만, 문장당 하나
+  const readability: ReadabilityIssue[] = [];
+  (Array.isArray(raw.readability) ? raw.readability : []).forEach((x, i) => {
+    if (!isObj(x)) return issues.push(`readability[${i}]: 객체 아님`);
+    const sid = s(x.s ?? x.sid, 8).toUpperCase();
+    const seg = bySid.get(sid);
+    if (!seg) return issues.push(`readability[${i}]: 모르는 문장 id ${sid || "(없음)"}`);
+    if (!/^top_stories\[\d+\]\.why$/.test(seg.path)) return issues.push(`readability[${i}]: why 문장이 아님 ${seg.path}`);
+    const issue = s(x.issue ?? x.n, 200);
+    if (!issue || readability.some((r) => r.sid === sid)) return;
+    readability.push({ sid, path: seg.path, issue });
+  });
+
   const structure = (Array.isArray(raw.structure) ? raw.structure : []).map((x) => s(x, 300)).filter(Boolean).slice(0, 12);
   const v = s(raw.verdict, 10).toUpperCase();
   const llmVerdict = (VERDICTS as string[]).includes(v) ? (v as Verdict) : null;
   if (!llmVerdict) issues.push(`verdict 없음/모름: ${v || "(없음)"}`);
-  return { claims, fixes, omissions, translation, structure, llmVerdict, summary: s(raw.summary, 400), schemaIssues: issues };
+  return { claims, fixes, omissions, translation, structure, readability, llmVerdict, summary: s(raw.summary, 400), schemaIssues: issues };
 }
 
 /** 위치 → 감사 기준표의 claim_type */

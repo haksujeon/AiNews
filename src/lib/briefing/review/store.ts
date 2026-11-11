@@ -18,7 +18,8 @@ export async function insertReview(r: ReviewResult, extra: { parentReviewId?: st
      RETURNING id`,
     [
       r.briefingId, r.version, r.editionType, r.editionDate, r.round, r.trigger, r.model, r.promptVersion, r.status, r.verdict, r.llmVerdict, r.score,
-      JSON.stringify(r.counts ? { ...r.counts, breakdown: r.breakdown, schema_issues: r.schemaIssues } : null),
+      // readability(why 쉬움 점검)는 열을 늘리지 않고 counts JSON 에 함께 둔다 (판정·점수와 무관한 기록)
+      JSON.stringify(r.counts ? { ...r.counts, breakdown: r.breakdown, schema_issues: r.schemaIssues, readability: r.readability ?? [] } : null),
       JSON.stringify(r.claims), JSON.stringify(r.fixes), JSON.stringify(r.omissions), JSON.stringify(r.translation), JSON.stringify(r.structure),
       r.summary || null, extra.decision ? JSON.stringify(extra.decision) : null, extra.parentReviewId ?? null, r.requestIds,
       r.inputTokens, r.outputTokens, r.costUsd, r.latencyMs, r.error ?? null, r.rawResponse ?? null,
@@ -49,7 +50,7 @@ export interface StoredReview {
   verdict: string | null;
   llm_verdict: string | null;
   score: string | null;
-  counts: (Record<string, number> & { breakdown?: string[]; schema_issues?: string[] }) | null;
+  counts: (Record<string, number> & { breakdown?: string[]; schema_issues?: string[]; readability?: { sid: string; path: string; issue: string }[] }) | null;
   claims: ReviewResult["claims"] | null;
   fixes: ReviewResult["fixes"] | null;
   omissions: ReviewResult["omissions"] | null;

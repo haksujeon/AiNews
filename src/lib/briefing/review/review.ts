@@ -224,6 +224,7 @@ export async function reviewBriefing(
     omissions: parsed.omissions,
     translation: parsed.translation,
     structure: parsed.structure,
+    readability: parsed.readability,
     summary: parsed.summary,
     schemaIssues: parsed.schemaIssues,
   });

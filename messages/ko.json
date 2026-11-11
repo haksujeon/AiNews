@@ -497,6 +497,7 @@
     "aiReviewDeleted": "지움",
     "aiReviewOmissions": "빠진 중요한 이야기",
     "aiReviewTranslation": "번역 일관성",
+    "aiReviewReadability": "쉬움 점검 — 일반 독자가 어려워할 '왜 중요한가' {n}건 (판정과 무관)",
     "aiReviewHistory": "검토 이력 {n}건",
     "aiReviewFixedFrom": "이 버전은 v{version} 을 AI 검토 수정안으로 고친 판입니다 ({n}문장).",
     "aiReviewRerun": "AI 다시 검토",

@@ -61,6 +61,29 @@ test("parseReviewJson: 모르는 문장·라벨·후보는 버리고 기록, 라
   assert.ok(p.schemaIssues.some((x) => x.startsWith("주장으로 다루지 않은 문장")));
 });
 
+test("parseReviewJson: readability(why 쉬움 점검)는 주요 기사 why 문장만, 문장당 하나", () => {
+  const why = input.segments.find((x) => /^top_stories\[\d+\]\.why$/.test(x.path))!;
+  const notWhy = input.segments.find((x) => x.path === "headline")!;
+  const raw = {
+    claims: [{ s: "S01", c: "x", l: "correct", r: "a01" }],
+    readability: [
+      { s: why.sid, issue: "'핵심 쟁점'을 줄여 옮겨 그래서가 없다" },
+      { s: why.sid, issue: "중복" },
+      { s: notWhy.sid, issue: "제목은 대상 아님" },
+      { s: "S99", issue: "?" },
+      { s: why.sid },
+    ],
+    verdict: "PASS",
+  };
+  const p = parseReviewJson(raw, ctx);
+  assert.deepEqual(p.readability, [{ sid: why.sid, path: why.path, issue: "'핵심 쟁점'을 줄여 옮겨 그래서가 없다" }]);
+  assert.ok(p.schemaIssues.some((x) => x.includes("why 문장이 아님")));
+  assert.ok(p.schemaIssues.some((x) => x.includes("S99")));
+  assert.deepEqual(parseReviewJson({ claims: [], verdict: "PASS" }, ctx).readability, [], "없으면 빈 배열");
+  const co = input.segments.find((x) => x.path.startsWith("companies_to_watch"))!;
+  assert.deepEqual(parseReviewJson({ claims: [], readability: [{ s: co.sid, issue: "회사 why 는 대상 아님" }], verdict: "PASS" }, ctx).readability, []);
+});
+
 test("parseReviewJson: 메모에서 스스로 철회한 오류 라벨은 correct 로 (보정 10-27 v7 실제 응답)", () => {
   const p = parseReviewJson(
     {

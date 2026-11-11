@@ -17,6 +17,7 @@ async function main() {
   loadEnvConfig(process.cwd());
   const pool = (await import("../src/lib/db")).default;
   const { WHY_RULES, clipBody } = await import("../src/lib/briefing/prompt");
+  const { WHY_MAX } = await import("../src/lib/briefing/validate");
   const { chat, parseJsonContent, BRIEFING_MODEL, BRIEFING_EFFORT } = await import("../src/lib/briefing/llm");
   const { loadReviewInput } = await import("../src/lib/briefing/review/evidence");
   const { saveFixedDb, saveTranslationsDb } = await import("../src/lib/briefing/review/pipeline");
@@ -70,7 +71,7 @@ async function main() {
     }));
     const system = `당신은 '중국 AI 뉴스' 데일리 브리핑 편집자입니다. 이미 발행한 판의 주요 기사마다 "왜 중요한가(why)" 한 칸만 아래 규칙으로 다시 씁니다.
 제목·what 은 바꾸지 않습니다. 근거는 각 기사의 ARTICLES(title_kr·summary_kr·body_kr)뿐입니다. 사전 지식으로 사실·수치·인물·날짜를 보태지 마십시오.
-숫자를 쓸 때는 근거 기사에 나온 값과 단위를 그대로 씁니다(규칙 4). why 는 1~2문장 120자 이내(공백 포함, 엄수).
+숫자를 쓸 때는 근거 기사에 나온 값과 단위를 그대로 씁니다(규칙 4). why 는 1~2문장 ${WHY_MAX}자 이내(공백 포함, 엄수).
 
 ${WHY_RULES}
 
@@ -99,7 +100,7 @@ ${WHY_RULES}
     if (newFatal.length) throw new Error("새 치명 위반 — 저장하지 않음");
     if (process.argv.includes("--dry")) return;
 
-    const info = { kind: "why_rewrite", rules: "ko-v4.6 규칙 19·20", from: { id: input.row.id, version: input.row.version }, changes, cost_usd: cost };
+    const info = { kind: "why_rewrite", rules: "ko-v5.1 규칙 19·20", from: { id: input.row.id, version: input.row.version }, changes, cost_usd: cost };
     const saved = await saveFixedDb(input, re.content, info, re.warn);
     await pool.query(`UPDATE daily_briefings SET edited_by = 'why-rewrite' WHERE id = $1`, [saved.id]);
     console.log(`\nko v${saved.version} draft ${saved.id}`);

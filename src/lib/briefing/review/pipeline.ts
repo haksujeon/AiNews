@@ -204,7 +204,7 @@ export const defaultPipelineDeps: PipelineDeps = {
                 trigger: "pipeline", model: r.model, promptVersion: r.prompt_version, status: "done", verdict: r.verdict as ReviewResult["verdict"],
                 llmVerdict: r.llm_verdict as ReviewResult["llmVerdict"], score: r.score === null ? null : Number(r.score),
                 counts: r.counts as unknown as ReviewResult["counts"], breakdown: r.counts?.breakdown ?? [], claims: r.claims ?? [], fixes: r.fixes ?? [],
-                omissions: r.omissions ?? [], translation: r.translation ?? [], structure: r.structure ?? [], summary: r.summary ?? "", schemaIssues: [],
+                omissions: r.omissions ?? [], translation: r.translation ?? [], structure: r.structure ?? [], readability: r.counts?.readability ?? [], summary: r.summary ?? "", schemaIssues: [],
                 costUsd: 0, latencyMs: 0, inputTokens: 0, outputTokens: 0, requestIds: [],
               } satisfies ReviewResult)
             : null,

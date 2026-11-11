@@ -84,6 +84,13 @@ export interface TranslationIssue {
   issue: string;
 }
 
+/** why 쉬움 점검 (review-v6.4) — 판정·점수에 넣지 않고 기록만 */
+export interface ReadabilityIssue {
+  sid: string;
+  path: string;
+  issue: string;
+}
+
 export interface LabelCounts {
   correct: number;
   unsupported: number;
@@ -101,6 +108,7 @@ export interface ParsedReview {
   omissions: ReviewOmission[];
   translation: TranslationIssue[];
   structure: string[];
+  readability: ReadabilityIssue[];
   llmVerdict: Verdict | null;
   summary: string;
   /** 스키마 경고 (버린 항목 등) */
@@ -139,6 +147,8 @@ export interface ReviewResult {
   omissions: ReviewOmission[];
   translation: TranslationIssue[];
   structure: string[];
+  /** why 쉬움 점검 (없으면 빈 배열로 본다 — 예전 검토 기록·제목만 판) */
+  readability?: ReadabilityIssue[];
   summary: string;
   schemaIssues: string[];
   costUsd: number;

@@ -497,6 +497,7 @@
     "aiReviewDeleted": "删除",
     "aiReviewOmissions": "遗漏的重要报道",
     "aiReviewTranslation": "译文一致性",
+    "aiReviewReadability": "易读性 — 普通读者可能难懂的「为什么重要」{n} 条（不计入判定）",
     "aiReviewHistory": "审核记录 {n} 条",
     "aiReviewFixedFrom": "此版本由 v{version} 按 AI 审核修改建议修正（{n} 句）。",
     "aiReviewRerun": "重新进行 AI 审核",

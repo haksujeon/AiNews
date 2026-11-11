@@ -185,6 +185,18 @@ export async function BriefingAiReview({ locale, briefingId, reviews, producedBy
               </ul>
             </div>
           )}
+          {(latest.counts?.readability ?? []).length > 0 && (
+            <div className="mt-3" data-testid="admin-ai-readability">
+              <p className="text-xs font-semibold text-ink">{t("aiReviewReadability", { n: latest.counts?.readability?.length ?? 0 })}</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-ink-2">
+                {(latest.counts?.readability ?? []).map((x) => (
+                  <li key={x.sid}>
+                    <span className="font-mono text-ink-3">{x.path}</span> {x.issue}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {(latest.structure ?? []).length > 0 && (
             <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-ink-3">
               {(latest.structure ?? []).map((s, i) => (

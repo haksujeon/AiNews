@@ -12,7 +12,9 @@ import type { Hint } from "./hints";
 import type { GenLog } from "./evidence";
 
 // v6.3 (2026-11-09): 데일리 주요 기사 = 중국 묶음(최대 5) + 해외 묶음(최대 3) — 해외 묶음이 찼으면 다른 해외 이야기는 중요 누락이 아니다
-export const REVIEW_PROMPT_VERSION = "review-v6.3-2026-11-09";
+// v6.4 (2026-11-11): why 가 "배경 → 그래서 의미" 로 길어짐 — 기사에 없는 조언·일반화·예전 상태 짐작·까닭은 overclaim/unsupported,
+//   why 쉬움 점검(readability) 출력 — 판정·점수에는 넣지 않고 기록만 (관리자 화면)
+export const REVIEW_PROMPT_VERSION = "review-v6.4-2026-11-11";
 
 export function buildReviewSystemPrompt(editionType: EditionType, withTranslations: boolean): string {
   const periodic = isPeriodic(editionType);
@@ -37,6 +39,7 @@ export function buildReviewSystemPrompt(editionType: EditionType, withTranslatio
    - 회사·기관이 스스로 내세운 "세계 최초·업계 첫·최초의 ○○"(발표문·号称·宣称·自称)는, 판이 "~라고 밝혔다·~라고 소개했다" 처럼 주체를 밝히지 않고 객관 사실처럼 쓰면 overclaim 입니다.
      (제3자 순위·벤치마크·매체 평가로 근거 제목에 있는 '1위'는 이 규칙이 아니라 위 overclaim 기준으로 봅니다.)
    - 해석 문장(headline·lede·why·dek·big_picture·china_lens)의 "흐름·추세·재편·쏠림·확산·가속·두드러진·몰리는" 같은 판단은, 근거 기사(인사이트 포함)가 그렇게 말하지 않고${periodic ? " FACTS 의 증감 지표도 없으면" : " 서로 다른 매체 2곳 이상이 같은 방향을 보도하지도 않으면"} overclaim 입니다.
+   - why(왜 중요한가)는 일반 독자를 위해 배경과 "그래서" 의미를 쉬운 말로 풉니다. 낱말 뜻풀이와 기사 사실의 쉬운 바꿔 말하기는 correct 입니다. 그러나 근거 기사에 없는 조언·당부("~해야 한다", "알아 둘 필요가 있다"), 일반화("반복 업무가 줄어든다"), 예전 상태 짐작("전에는 ~했다"), 기사가 가능성으로 쓴 선택을 단정("~로 옮겨 가야 한다"), 기사가 밝히지 않은 까닭("~이기 때문이다")은 overclaim(단정·인과) 또는 unsupported(새 사실) 입니다.
    - headline 이 두 사실을 묶어 공통 행보·대립·인과를 암시하는데 근거가 그 관계를 말하지 않으면 wrong(헤드라인 왜곡) 입니다. headline 은 각 부분을 따로 대조합니다.
    - 시점: "지난 N월·작년·올해·이번 주" 같은 상대 시점은 판 날짜(기간) 기준으로 계산해 맞는지 봅니다. 판 날짜와 같은 달 일을 "지난 N월"로 쓰거나, 기사 날짜가 기간 밖인 사건(이미 지난주에 보도된 거래 등)을 이번 소식처럼 쓰면 wrong.
    - 같은 거래·라운드를 통화만 바꿔 두 건처럼 쓰거나 합치면 number-unit, 환산 금액을 원래 금액처럼 쓰면 number-unit.${
@@ -57,10 +60,11 @@ export function buildReviewSystemPrompt(editionType: EditionType, withTranslatio
       : `
    - 데일리 판의 주요 기사는 중국 묶음(중국 기업·기관 주체, 최대 5건)과 해외 묶음(최대 3건)입니다. 해외 묶음이 이미 3건이면 빠진 해외 이야기(중국 밖 기업·기관이 주체)는 important:false 입니다. 해외 묶음이 3건보다 적을 때만 큰 해외 이야기의 누락을 important:true 로 봅니다. 중국 이야기의 누락은 그대로 판단합니다.`
   }
-7. 구조(structure): 같은 사건을 두 번 서술, 광고·행사·칼럼·순위표를 주요 기사로, 수집 결손 알림이 필요한데 없음, 한자·길이 문제 등 (각 문자열 하나, 없으면 빈 배열).${
+7. 쉬움(readability): 주요 기사 why 문장(top_stories[].why) 가운데, AI·경제를 모르는 중학생이 한 번 읽고 "그래서 누구에게 뭐가 달라지는지" 알 수 없는 것만 적습니다 — 뜻을 모를 낱말(업계 용어·영문 약어), 기사 말을 줄여 옮겨 '그래서'가 빠짐, 남의 판단("기사는 ~라고 본다")만 옮기고 까닭이 없음, 사실 하나를 더 늘어놓기만 함. 사실 오류는 여기 말고 claims 에 씁니다. 판정에는 들어가지 않습니다. 없으면 빈 배열.
+8. 구조(structure): 같은 사건을 두 번 서술, 광고·행사·칼럼·순위표를 주요 기사로, 수집 결손 알림이 필요한데 없음, 한자·길이 문제 등 (각 문자열 하나, 없으면 빈 배열).${
     withTranslations
       ? `
-8. 번역(translation): 필드 단위로 비교합니다. en/zh 가 ko 와 숫자·이름·주체·의미(부정·방향·시점)가 다르거나 내용이 빠지·더해지면 major, 어색한 표현은 minor. 문장을 나누거나 합친 것은 문제가 아닙니다. 문제 없으면 빈 배열.`
+9. 번역(translation): 필드 단위로 비교합니다. en/zh 가 ko 와 숫자·이름·주체·의미(부정·방향·시점)가 다르거나 내용이 빠지·더해지면 major, 어색한 표현은 minor. 문장을 나누거나 합친 것은 문제가 아닙니다. 문제 없으면 빈 배열.`
       : ""
   }
 
@@ -74,7 +78,8 @@ export function buildReviewSystemPrompt(editionType: EditionType, withTranslatio
 {"claims":[{"s":"S01","c":"주장(25자 이내)","l":"correct","r":"a01"},
            {"s":"S02","c":"주장(50자 이내)","l":"wrong","r":"a03","e":"근거 인용 그대로","n":"무엇이 틀렸나(60자 이내)"}],
  "fixes":[{"s":"S02","a":"replace","t":"고친 문장","r":"a03","e":"근거 인용 그대로"}],
- "omissions":[{"c":"C1","important":true,"why":"짧게"}],${withTranslations ? `\n "translation":[{"loc":"en","s":"S03","sev":"major","issue":"짧게"}],` : ""}
+ "omissions":[{"c":"C1","important":true,"why":"짧게"}],
+ "readability":[{"s":"S07","issue":"무엇이 어려운가(60자 이내)"}],${withTranslations ? `\n "translation":[{"loc":"en","s":"S03","sev":"major","issue":"짧게"}],` : ""}
  "structure":[],
  "verdict":"PASS|FIXABLE|FAIL",
  "summary":"한 줄 요약(한국어)"}

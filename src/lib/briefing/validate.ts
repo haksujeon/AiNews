@@ -237,7 +237,7 @@ export function fitSentenceLengths(content: BriefingContent): { content: Briefin
     // 제목 41/40자로 주요 기사가 통째로 빠졌다 (round 2 재생성 10-31) — 제목도 절 경계("…", ",")에서 자른다
     st.title = fit(`top_stories[${i}].title`, st.title, 40, true);
     st.what = fit(`top_stories[${i}].what`, st.what, 160);
-    st.why = fit(`top_stories[${i}].why`, st.why, 120);
+    st.why = fit(`top_stories[${i}].why`, st.why, WHY_MAX);
   });
   c.sections.forEach((sec, j) => sec.items.forEach((it, k) => (it.text = fit(`sections[${j}].items[${k}]`, it.text, 70, true))));
   c.companies_to_watch.forEach((co, i) => (co.why = fit(`companies_to_watch[${i}].why`, co.why, 40, true)));
@@ -461,13 +461,15 @@ export const norm = (s: string) => s.replace(/[\s,]/g, "");
 
 /** 헤드라인 글자 수 상한 (공백 포함). 15% 여유 없이 엄격하게 본다 — 넘으면 수리 호출 대상 (자동 자르기 없음) */
 export const HEADLINE_MAX = 32;
+/** 주요 기사 why 글자 수 상한 — 2026-11-11 사용자 결정: 배경 한 가지 + "그래서" 의미를 쉬운 말로 쓰려면 120자가 모자라 150자 */
+export const WHY_MAX = 150;
 
 /** 글자 수 상한 (공백 포함). 2026-11-02 부터 여유 없이 치명 — 수리에서 줄이고, 그래도 넘으면 그 항목을 뺀다 */
 export const LIMITS: [RegExp, number][] = [
   [/^lede$/, 200],
   [/^top_stories\[\d+\]\.title$/, 40],
   [/^top_stories\[\d+\]\.what$/, 160],
-  [/^top_stories\[\d+\]\.why$/, 120],
+  [/^top_stories\[\d+\]\.why$/, WHY_MAX],
   [/^sections\[\d+\]\.items\[\d+\]$/, 70],
   [/^companies_to_watch\[\d+\]\.why$/, 40],
 ];
