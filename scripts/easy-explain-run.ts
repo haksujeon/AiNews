@@ -4,6 +4,7 @@
  *   npx tsx scripts/easy-explain-run.ts --date 2026-11-10                 # 시험: 생성만, DB 에 쓰지 않음. 결과·비용을 파일로
  *   npx tsx scripts/easy-explain-run.ts --date 2026-11-10 --apply --from <시험 결과 jsonl>   # 시험 결과를 그대로 저장 (다시 생성하지 않음)
  *   npx tsx scripts/easy-explain-run.ts --date 2026-11-10 --apply          # 생성하면서 저장
+ *   npx tsx scripts/easy-explain-run.ts --date 2026-11-11 --redo [--apply] # 지금 버전이 아닌 풀이도 다시 (바꾸기 전 값은 결과 파일 old)
  *
  * - 대상: 그 날짜(news_date, 베이징 날짜)의 공개 기사 중 본문이 있고 아직 풀이가 없는 것. --limit 로 줄일 수 있다.
  * - 비용 상한: EASY_EXPLAIN_MAX_COST_USD (기본 5). 넘으면 멈춘다.
@@ -29,17 +30,20 @@ async function main() {
   const date = arg("date") ?? "";
   if (!isCalendarDate(date)) throw new Error("--date YYYY-MM-DD 가 필요합니다");
   const apply = process.argv.includes("--apply");
+  // --redo: 이미 풀이가 있어도 지금 버전(EASY_VERSION)이 아니면 다시 만든다 (2026-11-12 easy-v2). 바꾸기 전 값은 결과 파일에 old 로 남긴다
+  const redo = process.argv.includes("--redo");
   const from = arg("from");
   const limit = Number(arg("limit") ?? 1000);
   const maxCost = Number(process.env.EASY_EXPLAIN_MAX_COST_USD ?? 5);
 
   const { rows } = await pool.query(
-    `SELECT id::text, title_kr, title_cn, summary_kr, summary_cn, content_cn
+    `SELECT id::text, title_kr, title_cn, summary_kr, summary_cn, content_cn,
+            ai_easy_kr, ai_why_kr, ai_easy_en, ai_why_en, ai_easy_cn, ai_why_cn, easy_flags, easy_version
        FROM ai_news_ex
       WHERE ${PUBLIC_NEWS_WHERE} AND news_date >= $1::date AND news_date < $1::date + interval '1 day'
-        AND coalesce(content_cn, '') <> '' AND ai_easy_kr IS NULL
+        AND coalesce(content_cn, '') <> '' AND ${redo ? "easy_version IS DISTINCT FROM $2" : "ai_easy_kr IS NULL"}
       ORDER BY created_at`,
-    [date]
+    redo ? [date, E.EASY_VERSION] : [date]
   );
   const targets = rows.slice(0, limit);
   console.log(JSON.stringify({ date, candidates: rows.length, targets: targets.length, apply, from: from ?? null }));
@@ -48,7 +52,7 @@ async function main() {
   mkdirSync(dir, { recursive: true });
   const out = join(dir, `run-${date}-${apply ? "apply" : "dry"}-${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`);
 
-  type Rec = { id: string; result: ReturnType<typeof E.toEasyResult>; flags: ReturnType<typeof E.easyFlags>; usage?: unknown };
+  type Rec = { id: string; result: ReturnType<typeof E.toEasyResult>; flags: ReturnType<typeof E.easyFlags>; usage?: unknown; old?: unknown };
   const preset = new Map<string, Rec>();
   if (from) for (const line of readFileSync(from, "utf8").split("\n").filter(Boolean)) { const r = JSON.parse(line) as Rec; if (r.result) preset.set(r.id, r); }
 
@@ -70,6 +74,7 @@ async function main() {
         rec = { id: a.id, result: null, flags: [], usage: String(e) };
       }
     }
+    if (redo && a.ai_easy_kr) rec = { ...rec, old: { ai_easy_kr: a.ai_easy_kr, ai_why_kr: a.ai_why_kr, ai_easy_en: a.ai_easy_en, ai_why_en: a.ai_why_en, ai_easy_cn: a.ai_easy_cn, ai_why_cn: a.ai_why_cn, easy_flags: a.easy_flags, easy_version: a.easy_version } };
     appendFileSync(out, JSON.stringify(rec) + "\n");
     if (!rec.result) { failed++; continue; }
     ok++;
@@ -78,7 +83,7 @@ async function main() {
       const r = rec.result;
       const res = await pool.query(
         `UPDATE ai_news_ex SET ai_easy_kr=$2, ai_why_kr=$3, ai_easy_en=$4, ai_why_en=$5, ai_easy_cn=$6, ai_why_cn=$7, easy_flags=$8, easy_version=$9
-          WHERE id=$1::uuid AND ai_easy_kr IS NULL`,
+          WHERE id=$1::uuid AND ${redo ? "easy_version IS DISTINCT FROM $9" : "ai_easy_kr IS NULL"}`,
         [a.id, r.easy_kr, r.why_kr, r.easy_en, r.why_en, r.easy_cn, r.why_cn, rec.flags.length ? JSON.stringify(rec.flags) : null, E.EASY_VERSION]
       );
       saved += res.rowCount ?? 0;
