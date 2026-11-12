@@ -385,3 +385,32 @@ test("월간 마지막 차례도 지우기만 하고 발행 (2026-11-10 월간 �
   await runReviewPipeline({ briefingId: row.id, editionType: "monthly", policy }, h.deps);
   assert.equal(h.published.length, 1);
 });
+
+// 2026-11-12 사용자 지적(11-11 판 4·7번): 자동 수정이 why 의 의미 문장을 지우면 사실 한 줄만 남는다 → 그 기사 why 만 다시 쓴다
+const whyFlagged = (i: ReviewInput) =>
+  reviewerJson(i, { S08: { l: "unsupported", e: "근거 없음", n: "경쟁 이야기는 기사에 없음" } }, { verdict: "FIXABLE" });
+
+test("why 되살리기: 자동 수정이 why 문장을 지우면 같은 함수로 다시 쓰고(검토 지적은 avoid 로), 새 버전은 다시 2회 검토", async () => {
+  const h = harness([whyFlagged, pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  const asked: { rank: number; avoid?: string[]; articles: number }[] = [];
+  h.deps.rewriteWhy = async (stories) => {
+    asked.push(...stories.map((s) => ({ rank: s.rank, avoid: s.avoid, articles: s.articles.length })));
+    return { out: { 1: "누구나 GLM-6를 내려받아 쓸 수 있다. 그래서 개발자는 직접 고쳐 쓸 수 있다." }, costUsd: 0.02 };
+  };
+  await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  assert.deepEqual(asked.map((a) => a.rank), [1]);
+  assert.ok(asked[0].avoid?.some((t) => t.includes("경쟁 이야기는 기사에 없음")));
+  assert.ok(asked[0].articles > 0, "근거 기사를 넘긴다");
+  const fixed = h.saved[0] as { top_stories: { rank: number; why: string }[] };
+  assert.equal(fixed.top_stories.find((s) => s.rank === 1)?.why, "누구나 GLM-6를 내려받아 쓸 수 있다. 그래서 개발자는 직접 고쳐 쓸 수 있다.");
+  assert.deepEqual(h.published, [{ id: "fixed-1", version: 4 }]);
+  assert.deepEqual(h.stored.map((s) => s.round), [0, 1, 1], "다시 쓴 버전도 처음부터 2회 검토");
+});
+
+test("why 되살리기: 다시 쓴 문장에 숫자가 있으면 받지 않고 지운 그대로", async () => {
+  const h = harness([whyFlagged, pass, pass], new Map([[ORIG.id, fakeInput(ORIG)]]));
+  h.deps.rewriteWhy = async () => ({ out: { 1: "매개변수가 1조 개라 강하다." }, costUsd: 0.01 });
+  await runReviewPipeline({ briefingId: ORIG.id, policy }, h.deps);
+  const fixed = h.saved[0] as { top_stories: { rank: number; why: string }[] };
+  assert.notEqual(fixed.top_stories.find((s) => s.rank === 1)?.why ?? "", "매개변수가 1조 개라 강하다.");
+});

@@ -56,6 +56,7 @@ import {
 } from "./validate";
 import { headlinesEdition, headlinesReport, shortFallback } from "./fallback";
 import { translateBriefing } from "./translate";
+import { acceptableWhy, rewriteWhys, whyHasNumber } from "./why-rewrite";
 import {
   finishGenerating,
   insertBriefing,
@@ -154,6 +155,46 @@ export interface KoOutcome {
 }
 
 const MAX_REPAIRS = 2;
+
+/**
+ * 생성 직후 why 에 숫자가 남은 주요 기사만 다시 쓴다 (규칙 20 "why 에는 숫자 금지", 2026-11-12 11-11 판 4번).
+ * why-rewrite.ts — AI 검토 수정·수동 스크립트와 같은 함수 (Gate 2). 실패·부적합이면 그대로 둔다 (이어지는 AI 검토가 본다).
+ */
+export async function fixWhyNumbers(
+  content: BriefingContent,
+  groups: CandidateGroup[],
+  track: (u: LlmUsage) => void
+): Promise<{ content: BriefingContent; info: Record<string, unknown> | null }> {
+  const targets = content.top_stories.filter((s) => whyHasNumber(s.why));
+  if (!targets.length) return { content, info: null };
+  const byShort = new Map(groups.map((g) => [g.shortId, [g.primary, ...g.siblings]]));
+  const stories = targets
+    .map((s) => ({ rank: s.rank, subject: s.subject, title: s.title, what: s.what, why: s.why, articles: s.refs.flatMap((r) => byShort.get(r) ?? []) }))
+    .filter((s) => s.articles.length > 0);
+  const info: { ranks: number[]; changes: { rank: number; before: string; after: string }[]; rejected: { rank: number; text: string }[]; error?: string } = {
+    ranks: stories.map((s) => s.rank), changes: [], rejected: [],
+  };
+  if (!stories.length) return { content, info };
+  let out: Record<number, string>;
+  try {
+    out = await rewriteWhys(stories, track);
+  } catch (e) {
+    info.error = (e as Error).message;
+    return { content, info };
+  }
+  const next = structuredClone(content);
+  for (const s of next.top_stories) {
+    const w = out[s.rank];
+    if (w === undefined || !info.ranks.includes(s.rank)) continue;
+    if (!acceptableWhy(w)) {
+      info.rejected.push({ rank: s.rank, text: w });
+      continue;
+    }
+    info.changes.push({ rank: s.rank, before: s.why, after: w });
+    s.why = w;
+  }
+  return { content: next, info };
+}
 
 /** 헤드라인 치명이 남았고 1위 기사 제목이 상한 안이면 그 제목을 헤드라인으로 쓴 판 (아니면 null) */
 export function headlineFallback(c: BriefingContent, r: ValidationReport): BriefingContent | null {
@@ -547,6 +588,15 @@ export async function generateBriefing(opts: GenerateOptions = {}): Promise<Gene
       // LLM 장애·비용 상한: 판 없는 날을 만들지 않도록 제목만 판(LLM 문장 없음)을 draft 로 남긴다 (fallback.ts)
       const hl = headlinesEdition(sel.groups, period.periodStart);
       ko = { status: "draft", content: hl, validation: { prompt_version: PROMPT_VERSION, fallback: "headlines", fallback_reason: msg, final: headlinesReport(hl, msg) }, usages: [...cost.usages], mode: "headlines" };
+    }
+
+    if (ko.content && ko.status === "draft" && ko.mode !== "headlines") {
+      const w = await fixWhyNumbers(ko.content, sel.groups, (u) => {
+        cost.add(u);
+        ko.usages.push(u);
+      });
+      ko.content = w.content;
+      if (w.info) ko.validation.why_number_rewrite = w.info;
     }
 
     // 누락 재생성 표시 (대체 판으로 떨어져도 남긴다 — 같은 판을 다시 누락 재생성하지 않게)

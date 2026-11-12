@@ -16,9 +16,8 @@ function arg(name: string): string | undefined {
 async function main() {
   loadEnvConfig(process.cwd());
   const pool = (await import("../src/lib/db")).default;
-  const { WHY_RULES, clipBody } = await import("../src/lib/briefing/prompt");
+  const { rewriteWhys, whyHasNumber } = await import("../src/lib/briefing/why-rewrite");
   const { WHY_MAX } = await import("../src/lib/briefing/validate");
-  const { chat, parseJsonContent, BRIEFING_MODEL, BRIEFING_EFFORT } = await import("../src/lib/briefing/llm");
   const { loadReviewInput } = await import("../src/lib/briefing/review/evidence");
   const { saveFixedDb, saveTranslationsDb } = await import("../src/lib/briefing/review/pipeline");
   const { retranslate } = await import("../src/lib/briefing/review/retranslate");
@@ -57,38 +56,30 @@ async function main() {
     );
     if (!rows[0]) throw new Error("발행 ko 판 없음");
     const input = await loadReviewInput(rows[0].id, { includeTranslations: false });
-    const content = input.row.content as unknown as { top_stories: { rank: number; title: string; what: string; why: string; refs: string[] }[] };
+    const content = input.row.content as unknown as { top_stories: { rank: number; subject?: string; title: string; what: string; why: string; refs: string[] }[] };
     const byId = new Map(input.articles.map((a) => [a.id, a]));
+    // 프롬프트·호출은 생성·AI 검토 수정과 같은 함수 (src/lib/briefing/why-rewrite.ts, Gate 2)
     const stories = content.top_stories.map((s) => ({
       rank: s.rank,
+      subject: s.subject,
       title: s.title,
       what: s.what,
-      why_old: s.why,
-      articles: s.refs
-        .map((r) => byId.get(r))
-        .filter((a): a is NonNullable<typeof a> => Boolean(a))
-        .map((a) => ({ title_kr: a.title_kr, summary_kr: a.summary_kr, body_kr: clipBody(a.content_kr || "") })),
+      why: s.why,
+      articles: s.refs.map((r) => byId.get(r)).filter((a): a is NonNullable<typeof a> => Boolean(a)),
     }));
-    const system = `당신은 '중국 AI 뉴스' 데일리 브리핑 편집자입니다. 이미 발행한 판의 주요 기사마다 "왜 중요한가(why)" 한 칸만 아래 규칙으로 다시 씁니다.
-제목·what 은 바꾸지 않습니다. 근거는 각 기사의 ARTICLES(title_kr·summary_kr·body_kr)뿐입니다. 사전 지식으로 사실·수치·인물·날짜를 보태지 마십시오.
-숫자를 쓸 때는 근거 기사에 나온 값과 단위를 그대로 씁니다(규칙 4). why 는 1~2문장 ${WHY_MAX}자 이내(공백 포함, 엄수).
-
-${WHY_RULES}
-
-출력: JSON 하나만. {"why":{"1":"...","2":"..."}} (키는 rank)`;
     console.log(`근거 기사: ${stories.map((s) => `#${s.rank} ${s.articles.length}건`).join(", ")}`);
     if (stories.some((s) => !s.articles.length)) throw new Error("근거 기사를 못 찾은 주요 기사가 있음");
-    const user = stories.map((s) => JSON.stringify({ rank: s.rank, title: s.title, what: s.what, why_old: s.why_old, ARTICLES: s.articles })).join("\n");
     let cost = 0;
-    const res = await chat({ model: BRIEFING_MODEL, effort: BRIEFING_EFFORT, system, messages: [{ role: "user", content: user }], maxTokens: 4000 }, (u) => (cost += u.costUsd));
-    const out = (parseJsonContent(res.content) as { why?: Record<string, unknown> }).why ?? {};
+    const out = await rewriteWhys(stories, (u) => (cost += u.costUsd));
     const next = structuredClone(input.row.content) as typeof content;
     const changes: { rank: number; before: string; after: string }[] = [];
     for (const s of next.top_stories) {
-      const w = out[String(s.rank)];
-      if (typeof w !== "string" || !w.trim()) throw new Error(`rank ${s.rank} why 없음`);
-      changes.push({ rank: s.rank, before: s.why, after: w.trim() });
-      s.why = w.trim();
+      const w = out[s.rank];
+      if (!w) throw new Error(`rank ${s.rank} why 없음`);
+      if (w.length > WHY_MAX) console.log(`  (경고) #${s.rank} ${w.length}자 > ${WHY_MAX}`);
+      if (whyHasNumber(w)) console.log(`  (경고) #${s.rank} 숫자가 남음`);
+      changes.push({ rank: s.rank, before: s.why, after: w });
+      s.why = w;
     }
     for (const c of changes) console.log(`#${c.rank} (${c.after.length}자)\n  전: ${c.before}\n  후: ${c.after}`);
     // 결정적 재검증: 원본에 이미 있던 치명은 빼고 새로 생긴 치명만 (AI 검토 수정과 같은 방식)

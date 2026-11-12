@@ -31,6 +31,7 @@ import { applySegmentEdits, isPeriodic, segmentContent, type EditOutcome } from 
 import { reviewThatProduced, reviewsOf, updateReviewDecision } from "./store";
 import type { ReviewResult, ReviewTrigger } from "./types";
 import { EASY_TIMEOUT_MS, easyRunNote, ensureEasyTerms } from "../easy-terms-run";
+import { acceptableWhy, rewriteWhys, whyHasNumber, type WhyStory } from "../why-rewrite";
 
 export const REVIEW_SINCE = process.env.BRIEFING_REVIEW_SINCE || "2026-11-02";
 /** 검토 1회를 시작하려면 남아 있어야 하는 시간 (측정한 최장 검토 + 여유) */
@@ -111,6 +112,8 @@ export interface PipelineDeps {
   periodicTranslations?: (t: Target) => Promise<string>;
   /** 스윕 끝 따라잡기: 최근 공개된 주간·월간 ko 판 중 en·zh 공개본이 없는 것 (일시 오류로 빠진 번역). 알림 한 줄 */
   periodicTranslationsCatchUp?: () => Promise<string>;
+  /** 자동 수정이 why 문장을 지운(또는 why 에 숫자가 남은) 주요 기사의 why 다시 쓰기 (why-rewrite.ts — 생성·수동 스크립트와 같은 함수). 없으면 지운 그대로 */
+  rewriteWhy?: (stories: WhyStory[]) => Promise<{ out: Record<number, string>; costUsd: number }>;
   now: () => number;
 }
 
@@ -224,6 +227,11 @@ export const defaultPipelineDeps: PipelineDeps = {
     publishBriefing({ date: t.date, version: row.version, briefingId: row.id, editionType: t.editionType, editedBy: "ai-review", onlyIfLatest: true, noSupersede: true }),
   saveFixed: saveFixedDb,
   saveTranslations: saveTranslationsDb,
+  rewriteWhy: async (stories) => {
+    let costUsd = 0;
+    const out = await rewriteWhys(stories, (u) => (costUsd += u.costUsd));
+    return { out, costUsd };
+  },
   retranslate: (ko, input, locales, optsFor) => retranslate(ko, input.candidateArticles, () => {}, undefined, locales, optsFor),
   regenerate: async (t, mustInclude, reason) => {
     // 동적 import: generate → review 순환 참조를 피한다
@@ -305,14 +313,109 @@ export function attemptDeleteOnlyFix(input: ReviewInput, review: ReviewResult): 
   return fx;
 }
 
-function applyFixPlan(input: ReviewInput, plan: FixPlan): FixAttempt {
+export interface WhyRestoreInfo {
+  ranks: number[];
+  changes: { rank: number; before: string; after: string }[];
+  rejected: { rank: number; text: string; reason: string }[];
+  costUsd: number;
+}
+
+const WHY_PATH = /^top_stories\[(\d+)\]\.why$/;
+const storyKey = (s: { refs?: string[]; primary_ref?: string | null }) => `${s.primary_ref ?? ""}|${(s.refs ?? []).join(",")}`;
+
+/**
+ * 데일리 자동 수정 + why 되살리기 (2026-11-12 사용자 지적: 11-11 판 4·7번).
+ * 검토가 why 문장을 지우면 "그래서" 의미가 사라져 사실 한 줄만 남거나(2문장), why 가 비어 기사째 빠진다(1문장).
+ * → 지우기 전에 그 기사 why 를 규칙 19·20 으로 다시 쓰고(검토 지적은 avoid 로), 받아들인 기사는 why 지우기를 빼고 새 문장을 넣는다.
+ *   why 에 숫자가 남은 기사도 함께 (규칙 20). 새 문장은 길이·숫자·결정적 재검증을 통과할 때만 받는다.
+ *   새 버전은 다음 차례에서 처음부터 다시 검토된다(passed 초기화) — 근거 확인은 검토가 한다.
+ * rewrite 가 없거나(주간·월간 포함) 고칠 why 가 없으면 attemptFix 와 같다.
+ */
+export async function attemptFixWithWhy(
+  input: ReviewInput,
+  review: ReviewResult,
+  rewrite?: PipelineDeps["rewriteWhy"]
+): Promise<{ fx: FixAttempt; info: WhyRestoreInfo | null; costUsd: number }> {
+  const plan = planFixes(input.segments, review.claims, review.fixes, (seg, refIds) => corpusFor(input, seg, refIds));
+  const plain = () => applyFixPlan(input, plan);
+  if (!rewrite || isPeriodic(input.editionType)) return { fx: plain(), info: null, costUsd: 0 };
+  const orig = (input.row.content as unknown as BriefingContent).top_stories ?? [];
+  const idxs = new Set<number>();
+  const avoid = new Map<number, string[]>();
+  for (const p of plan.planned) {
+    const m = p.path.match(WHY_PATH);
+    if (!m || p.action !== "delete" || !orig[Number(m[1])]) continue;
+    const i = Number(m[1]);
+    idxs.add(i);
+    const notes = review.claims.filter((c) => c.sid === p.sid && c.label !== "correct").map((c) => `${c.claim}${c.note ? ` — ${c.note}` : ""}`);
+    avoid.set(i, [...(avoid.get(i) ?? []), ...notes]);
+  }
+  orig.forEach((s, i) => whyHasNumber(s.why) && idxs.add(i));
+  if (!idxs.size) return { fx: plain(), info: null, costUsd: 0 };
+
+  const byId = new Map(input.articles.map((a) => [a.id, a]));
+  const stories: (WhyStory & { idx: number })[] = [...idxs]
+    .map((i) => {
+      const s = orig[i];
+      return {
+        idx: i, rank: s.rank, subject: s.subject, title: s.title, what: s.what, why: s.why, avoid: avoid.get(i),
+        articles: s.refs.map((r) => byId.get(r)).filter((a): a is NonNullable<typeof a> => Boolean(a)),
+      };
+    })
+    .filter((s) => s.articles.length > 0);
+  const info: WhyRestoreInfo = { ranks: stories.map((s) => s.rank), changes: [], rejected: [], costUsd: 0 };
+  if (!stories.length) return { fx: plain(), info, costUsd: 0 };
+  let out: Record<number, string>;
+  try {
+    const r = await rewrite(stories.map((s) => ({ rank: s.rank, subject: s.subject, title: s.title, what: s.what, why: s.why, avoid: s.avoid, articles: s.articles })));
+    out = r.out;
+    info.costUsd = r.costUsd;
+  } catch (e) {
+    info.rejected.push({ rank: 0, text: "", reason: `다시 쓰기 오류: ${(e as Error).message}` });
+    return { fx: plain(), info, costUsd: 0 };
+  }
+  const accepted = new Map<number, string>(); // 원본 top_stories 위치 → 새 why
+  for (const s of stories) {
+    const w = out[s.rank];
+    if (w === undefined) continue;
+    if (!acceptableWhy(w)) {
+      info.rejected.push({ rank: s.rank, text: w, reason: whyHasNumber(w) ? "숫자가 남음" : "길이 초과·빈 문장" });
+      continue;
+    }
+    accepted.set(s.idx, w);
+    info.changes.push({ rank: s.rank, before: s.why, after: w });
+  }
+  if (!accepted.size) return { fx: plain(), info, costUsd: info.costUsd };
+  // 받아들인 기사는 why 문장 수정(지우기·바꾸기)을 빼고, 수정 적용 뒤 같은 기사(refs 로 찾음)에 새 why 를 넣는다
+  const planned = plan.planned.filter((p) => {
+    const m = p.path.match(WHY_PATH);
+    return !(m && accepted.has(Number(m[1])));
+  });
+  const why2 = new Map([...accepted].map(([i, w]) => [storyKey(orig[i]), w]));
+  const fx = applyFixPlan(input, { ...plan, planned, edits: planned.map((p) => ({ sid: p.sid, action: p.action, text: p.text || undefined })) }, (c) => {
+    for (const s of ((c as unknown as BriefingContent).top_stories ?? [])) {
+      const w = why2.get(storyKey(s));
+      if (w !== undefined) s.why = w;
+    }
+  });
+  if (fx.reason || !fx.content) {
+    info.rejected.push(...info.changes.map((c) => ({ rank: c.rank, text: c.after, reason: fx.reason ?? "적용 실패" })));
+    info.changes = [];
+    return { fx: plain(), info, costUsd: info.costUsd };
+  }
+  return { fx, info, costUsd: info.costUsd };
+}
+
+/** post: 문장 수정을 적용한 뒤 재검증 전에 내용을 더 고친다 (why 되살리기). post 가 있으면 문장 수정이 0건이어도 된다 */
+function applyFixPlan(input: ReviewInput, plan: FixPlan, post?: (content: Record<string, unknown>) => void): FixAttempt {
   const m = input.metrics;
   const edit = applySegmentEdits(input.row.content, input.editionType, input.segments, plan.edits, {
     headline: isPeriodic(input.editionType) ? (m ? () => fallbackHeadline(m) : undefined) : undefined,
     dek: isPeriodic(input.editionType) && m ? () => fallbackDek(m) : undefined,
   });
   if (edit.unfixable.length) return { plan, edit, content: null, newFatal: [], warn: [], reason: `고칠 수 없음: ${edit.unfixable.join("; ")}` };
-  if (!plan.edits.length) return { plan, edit, content: null, newFatal: [], warn: [], reason: "적용할 수정이 없음" };
+  if (!plan.edits.length && !post) return { plan, edit, content: null, newFatal: [], warn: [], reason: "적용할 수정이 없음" };
+  post?.(edit.content);
   // 주간 큰 흐름 핵심 숫자: 문장을 고쳐 값이 사라졌으면 숫자도 뺀다 (한눈에 보기에 근거 없는 숫자가 남지 않게)
   if (isPeriodic(input.editionType))
     for (const b of (edit.content.big_picture ?? []) as { text?: string; key?: { value: string; label: string } }[])
@@ -532,12 +635,16 @@ async function processEdition(
     else if (round >= o.policy.maxFixRounds) holdReason = `수정 ${o.policy.maxFixRounds}회 뒤에도 미달 (${review.verdict} ${review.score}점, ${errSummary})`;
 
     if (!holdReason) {
-      const fx = attemptFix(input, review);
+      const w = await attemptFixWithWhy(input, review, deps.rewriteWhy);
+      const fx = w.fx;
+      const whyRestore = w.info;
+      cost += w.costUsd;
       if (fx.reason || !fx.content) holdReason = fx.reason ?? "수정 실패";
       else {
         const info = {
           from: { id: input.row.id, version: input.row.version }, review_id: review.id, round: round + 1,
           planned: fx.plan.planned, ignored: fx.plan.ignored, dropped: fx.edit.dropped, fallbacks: fx.edit.fallbacks,
+          ...(whyRestore ? { why_restore: whyRestore } : {}),
         };
         let translations: TranslationRow[] = [];
         let nextId = input.row.id;
