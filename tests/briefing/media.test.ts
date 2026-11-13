@@ -107,3 +107,14 @@ test("장 찾기: 중국어 '第一，'·영어 'First,' 서수, 본문의 '第�
   const en = "A: 0:00 Good morning.\nA: 0:08 First, DeepSeek opened its second funding round.\nA: 0:30 It is the first round this year.\nA: 0:45 Second, Qwen Office.\nA: 1:05 Third, Xiaomi.\nA: 1:30 That's all for today.";
   assert.deepEqual(chaptersFromTranscript(en, 3).map((c) => [c.t, c.rank]), [[0, null], [8, 1], [45, 2], [65, 3], [90, null]]);
 });
+
+test("주요 기사 8개 판: 여섯째~여덟째(第八·Eighth)까지 장을 찾는다 (2026-11-13: 장 5/8 로 음성이 공개되지 않음)", () => {
+  const ko = ["첫째", "둘째", "셋째", "넷째", "다섯째", "여섯째", "일곱째", "여덟 번째"].map((w, i) => `A: 0:${String(i * 7).padStart(2, "0")} ${w}, 소식입니다.`).join("\n");
+  assert.deepEqual(chaptersFromTranscript(ko, 8).filter((c) => c.rank !== null).map((c) => c.rank), [1, 2, 3, 4, 5, 6, 7, 8]);
+  const zh = ["一", "二", "三", "四", "五", "六", "七", "八"].map((d, i) => `A: 0:${String(i * 7).padStart(2, "0")} 第${d}，消息。`).join("\n");
+  assert.equal(chaptersFromTranscript(zh, 8).filter((c) => c.rank !== null).length, 8);
+  const en = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"].map((w, i) => `A: 0:${String(i * 7).padStart(2, "0")} ${w}, news.`).join("\n");
+  assert.equal(chaptersFromTranscript(en, 8).filter((c) => c.rank !== null).length, 8);
+  // "第十一，" 은 第十 이 아니다
+  assert.deepEqual(chaptersFromTranscript("A: 0:01 第十一，消息", 10), []);
+});

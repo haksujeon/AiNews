@@ -4,7 +4,7 @@
  *   npx tsx scripts/briefing-audio.ts [--date 2026-11-04] [--locale ko] [--attempts 3] [--approve-on-pass] [--dry] [--force] [--recheck]
  * --recheck: 새로 만들지 않고 등록된 음성을 다시 받아써 대조 (받아쓰기 한도·오인식으로 실패했을 때).
  *
- * --date 가 없으면 그 언어의 최신 발행 판. 숫자 대조(audio-check.ts checkTranscript)를 통과할 때까지 최대 --attempts 번 다시 만든다.
+ * --date 가 없으면 최근 3일(BRIEFING_MEDIA_LOOKBACK_DAYS) 발행 판 가운데 음성이 승인되지 않은 가장 최신 판 (모두 승인됐으면 건너뜀). 숫자 대조(audio-check.ts checkTranscript)를 통과할 때까지 최대 --attempts 번 다시 만든다.
  * 통과하지 못하면 숫자가 가장 덜 틀린 것을 검토 중(review)으로 남긴다 (공개 화면에 안 보임). 통과 + --approve-on-pass 면 바로 승인.
  * 이미 승인된 음성이 있으면 아무것도 하지 않는다 (--force 로 다시 만들기).
  * NotebookLM: ~/.local/bin/notebooklm (로그인 세션은 그 프로필). 노트북 "AiNews 데일리 음성"을 찾거나 만들고, 자료는 끝나면 지운다.
@@ -125,23 +125,24 @@ async function main() {
   const attempts = Math.max(1, Math.min(5, Number(arg("attempts") ?? 3)));
   const { default: pool } = await import("../src/lib/db");
   const { getPublishedBriefing } = await import("../src/lib/briefing/public");
-  const { getMediaRow } = await import("../src/lib/briefing/media-store");
+  const { getMediaRow, pendingMediaDate } = await import("../src/lib/briefing/media-store");
   const { registerMedia, setMediaStatus } = await import("../src/lib/briefing/media-register");
   const ac = await import("../src/lib/briefing/audio-check");
-  const { formatShortDate } = await import("../src/lib/briefing/view");
   const work = mkdtempSync(join(tmpdir(), "briefing-audio-"));
   let nb = "";
   let sid = "";
   try {
-    const b = await getPublishedBriefing(locale, arg("date"));
-    if (!b) throw new Error(`${arg("date") ?? "최신"} ${locale} 발행본이 없습니다`);
+    // --date 가 없으면 최근 발행판 가운데 음성이 승인되지 않은 가장 최신 판 (카드와 같은 함수)
+    const pick = arg("date") ?? (await pendingMediaDate(locale, "audio"));
+    const b = await getPublishedBriefing(locale, pick);
+    if (!b) throw new Error(`${pick ?? "최신"} ${locale} 발행본이 없습니다`);
     const date = b.edition_date;
     const existing = await getMediaRow(date, locale, "audio");
     if (existing?.status === "approved" && !flag("force")) {
       log(`${date} ${locale} 승인된 음성이 이미 있음 — 건너뜀`);
       return;
     }
-    const source = ac.audioSourceMarkdown(b.content, formatShortDate(date, locale), locale);
+    const source = ac.audioSourceMarkdown(b.content, ac.audioDateLabel(date, locale), locale);
     const srcFile = join(work, `briefing-${date}-${locale}.md`);
     writeFileSync(srcFile, source);
     if (flag("dry")) {
@@ -177,7 +178,7 @@ async function main() {
       let taskId = "";
       try {
         const gen = nlmJson<{ task_id?: string; id?: string }>(
-          ["generate", "audio", "-n", nb, "-s", sid, "--format", "brief", "--language", ac.NOTEBOOKLM_LANG[locale], "--no-wait", "--retry", "3", ac.audioInstructions(locale)],
+          ["generate", "audio", "-n", nb, "-s", sid, "--format", "brief", "--language", ac.NOTEBOOKLM_LANG[locale], "--no-wait", "--retry", "3", ac.audioInstructions(locale, b.content.top_stories.length)],
           5 * 60_000
         );
         taskId = gen.task_id ?? gen.id ?? "";

@@ -108,3 +108,25 @@ export async function loadCardSpec(date: string, locale: string): Promise<import
     .then((t) => JSON.parse(t))
     .catch(() => null);
 }
+
+/**
+ * 만들 판 고르기 (음성·카드 스크립트가 같이 쓴다, Gate 2): 최근 lookbackDays 일 발행 데일리 판 가운데
+ * 그 종류가 아직 승인되지 않은 가장 최신 판. 모두 승인됐으면 undefined (→ 스크립트는 최신 판을 보고 건너뛴다).
+ * 발행이 늦은 판(2026-11-10 판은 다음 날 21:42 발행)도 다음 실행 때 만든다 — 최신 판만 보면 영영 건너뛴다.
+ */
+export async function pendingMediaDate(
+  locale: BriefingLocale,
+  kind: MediaKind,
+  lookbackDays = Number(process.env.BRIEFING_MEDIA_LOOKBACK_DAYS ?? 3)
+): Promise<string | undefined> {
+  const { rows } = await pool.query(
+    `SELECT to_char(b.edition_date, 'YYYY-MM-DD') AS d
+       FROM daily_briefings b
+       LEFT JOIN briefing_media m ON m.edition_date = b.edition_date AND m.locale = b.locale AND m.kind = $2
+      WHERE b.status = 'published' AND b.edition_type = 'daily' AND b.locale = $1
+        AND b.edition_date >= current_date - $3::int AND m.status IS DISTINCT FROM 'approved'
+      ORDER BY b.edition_date DESC LIMIT 1`,
+    [locale, kind, Math.max(0, Math.floor(lookbackDays) || 0)]
+  );
+  return (rows[0] as { d: string } | undefined)?.d;
+}

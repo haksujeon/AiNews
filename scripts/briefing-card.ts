@@ -2,7 +2,7 @@
  * "한 장 요약" 카드 만들기 — 그림 명세(LLM + 코드 검사) → 카드 화면 캡처(Playwright) → briefing_media 에 검토 중으로 등록.
  *
  *   npx tsx scripts/briefing-card.ts [--date 2026-11-04] [--locale ko] [--base http://localhost:3012] [--render-only] [--no-register] [--approve]
- * --date 가 없으면 그 언어의 최신 발행 판.
+ * --date 가 없으면 최근 3일(BRIEFING_MEDIA_LOOKBACK_DAYS) 발행 판 가운데 카드가 승인되지 않은 가장 최신 판 (모두 승인됐으면 건너뜀).
  *
  * --render-only: 이미 있는 card-spec.json 으로 다시 찍기만 (LLM 호출 없음).
  * 카드 화면: /ainews/{locale}/briefing/{date}/card (card-spec.json 이 있어야 열린다). 운영 서버(3012)가 새 코드를 돌고 있어야 한다.
@@ -29,13 +29,14 @@ async function main() {
 
   const { default: pool } = await import("../src/lib/db");
   const { getPublishedBriefing } = await import("../src/lib/briefing/public");
-  const { cardSpecPath } = await import("../src/lib/briefing/media-store");
+  const { cardSpecPath, pendingMediaDate } = await import("../src/lib/briefing/media-store");
   const cs = await import("../src/lib/briefing/card-spec");
   const { chat, parseJsonContent, BRIEFING_MODEL } = await import("../src/lib/briefing/llm");
   const { registerMedia } = await import("../src/lib/briefing/media-register");
   try {
-    const b = await getPublishedBriefing(locale, dateArg);
-    if (!b) throw new Error(`${dateArg ?? "최신"} ${locale} 발행본이 없습니다`);
+    const pick = dateArg ?? (await pendingMediaDate(locale, "card"));
+    const b = await getPublishedBriefing(locale, pick);
+    if (!b) throw new Error(`${pick ?? "최신"} ${locale} 발행본이 없습니다`);
     const date = b.edition_date;
     const { getMediaRow } = await import("../src/lib/briefing/media-store");
     if ((await getMediaRow(date, locale, "card"))?.status === "approved" && !flag("force")) {

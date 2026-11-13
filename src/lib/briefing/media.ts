@@ -66,17 +66,21 @@ export function formatClock(sec: number): string {
 
 // 서수 — 언어별 음성 지시문(audio-check.ts audioInstructions)이 시키는 말. 세 언어 표현이 겹치지 않아 한 목록으로 찾는다.
 // zh 는 "第一轮融资" 같은 본문을 피하려고 뒤에 쉼표·条·个 가 올 때만, en 은 문장 첫머리 대문자 + 쉼표일 때만.
+// 지시문과 장 찾기가 같은 목록을 쓴다 (Gate 2) — 2026-11-13: 주요 기사가 7~8개로 늘었는데 지시문은 "다섯째"까지,
+// 장 찾기는 "일곱째"까지만 알아 11-10 판부터 음성이 장 검사(5/7·5/8)에서 떨어져 공개되지 않았다.
+export const ORDINAL_WORDS = {
+  ko: ["첫째", "둘째", "셋째", "넷째", "다섯째", "여섯째", "일곱째", "여덟째", "아홉째", "열째"],
+  zh: ["第一", "第二", "第三", "第四", "第五", "第六", "第七", "第八", "第九", "第十"],
+  en: ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"],
+} as const;
+/** 서수로 장을 찾을 수 있는 주요 기사 수 상한 */
+export const MAX_ORDINAL = ORDINAL_WORDS.ko.length;
+const KO_COUNT = ["첫", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉", "열"];
 const ZH_P = "(^|[\\s，。、：！？])";
 const ORDINALS: [RegExp, number][] = [
-  [/(^|\s)(첫째|첫 번째|첫번째)/, 1],
-  [/(^|\s)(둘째|두 번째|두번째)/, 2],
-  [/(^|\s)(셋째|세 번째|세번째)/, 3],
-  [/(^|\s)(넷째|네 번째|네번째)/, 4],
-  [/(^|\s)(다섯째|다섯 번째|다섯번째)/, 5],
-  [/(^|\s)(여섯째|여섯 번째)/, 6],
-  [/(^|\s)(일곱째|일곱 번째)/, 7],
-  ...(["一", "二", "三", "四", "五", "六", "七"] as const).map((d, i) => [new RegExp(`${ZH_P}第${d}(条新闻|条|个)?[，,、：:]`), i + 1] as [RegExp, number]),
-  ...(["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh"] as const).map((w, i) => [new RegExp(`(^|[.!?]\\s+|\\s)${w}(ly)?\\s*[,:]`), i + 1] as [RegExp, number]),
+  ...ORDINAL_WORDS.ko.map((w, i) => [new RegExp(`(^|\\s)(${w}|${KO_COUNT[i]} ?번째)`), i + 1] as [RegExp, number]),
+  ...ORDINAL_WORDS.zh.map((w, i) => [new RegExp(`${ZH_P}${w}(条新闻|条|个)?[，,、：:]`), i + 1] as [RegExp, number]),
+  ...ORDINAL_WORDS.en.map((w, i) => [new RegExp(`(^|[.!?]\\s+|\\s)${w}(ly)?\\s*[,:]`), i + 1] as [RegExp, number]),
 ];
 const LAST_WORDS = /(마지막|最后|Finally|Lastly)/;
 const OUTRO_WORDS = /(요약하자면|정리하면|정리하자면|오늘 브리핑은 여기까지|总结一下|总的来说|以上就是|To sum up|In summary|That wraps up|That's all for)/;

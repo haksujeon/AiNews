@@ -1,7 +1,7 @@
 /** NotebookLM 음성 숫자 대조 (audio-check.ts) — 시험에서 나온 실제 오류("1,070억"·"iOS 18.2")를 잡는다 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { audioSourceMarkdown, checkTranscript, confirmedUnknown, linesFromJson, linesFromTranscript, retimeByLength, transcriptText } from "../../src/lib/briefing/audio-check";
+import { audioDateLabel, audioInstructions, audioSourceMarkdown, checkTranscript, confirmedUnknown, linesFromJson, linesFromTranscript, retimeByLength, transcriptText } from "../../src/lib/briefing/audio-check";
 
 const SOURCE = `### 5. Anthropic, 3분기 영업손실 5억 6700만 달러로 적자 전환
 무슨 일: 3분기 매출은 약 170억 달러로 전분기 대비 47% 늘었고 컴퓨팅 약정은 약 8954억 달러다.
@@ -62,4 +62,27 @@ test("시각은 글자 수 비율로 다시 매긴다 (뭉개진 받아쓰기 �
 test("두 번 받아써 양쪽에 다 나온 숫자만 오류로 본다", () => {
   assert.deepEqual(confirmedUnknown(["89500000000", "1070"], ["1070", "5"]), ["1070"]);
   assert.deepEqual(confirmedUnknown(["89500000000"], []), []);
+});
+
+test("음성 지시문의 서수는 그 판의 주요 기사 수만큼 (8개 판 = 여덟째·第八·Eighth)", () => {
+  assert.match(audioInstructions("ko", 8), /주요 기사 8개를 하나도 빼지 말고 1번부터 순서대로 "첫째, 둘째, 셋째, 넷째, 다섯째, 여섯째, 일곱째, 여덟째"/);
+  assert.doesNotMatch(audioInstructions("ko", 8), /아홉째|\{ORDINALS\}/);
+  assert.match(audioInstructions("zh", 8), /全部 8 条.*“第八，”开头/);
+  assert.match(audioInstructions("en", 7), /all 7 top stories.*"Seventh,"\./);
+  assert.doesNotMatch(audioInstructions("en", 7), /Eighth/);
+  assert.match(audioInstructions("ko"), /"첫째, 둘째, 셋째, 넷째, 다섯째"/); // 기본 5개 (이전과 같음)
+});
+
+test("자료 날짜에 연도, 자료의 '백만'은 받아쓰기 '100만'과 같다 (2026-11-13 시험: 2026·1000000 이 잘못 걸림)", () => {
+  assert.equal(audioDateLabel("2026-11-12", "ko"), "2026년 11월 12일");
+  assert.equal(audioDateLabel("2026-11-12", "zh"), "2026年11月12日");
+  assert.equal(audioDateLabel("2026-11-12", "en"), "Nov 12, 2026");
+  const src = audioSourceMarkdown(
+    { headline: "H", lede: "L", top_stories: [{ rank: 1, title: "T", what: "백만 입력 토큰당 0.10달러", why: "Y" }] as never, key_numbers: [], sections: [], companies_to_watch: [] },
+    audioDateLabel("2026-11-12", "ko")
+  );
+  const ok = checkTranscript("A: 0:00 2026년 11월 12일 브리핑\nA: 0:05 첫째, 100만 입력 토큰당 0.10달러입니다.", src, 1);
+  assert.deepEqual(ok.unknownNumbers, []);
+  // 다른 숫자는 여전히 잡는다
+  assert.ok(checkTranscript("A: 0:05 첫째, 200만 입력 토큰당 0.10달러", src, 1).unknownNumbers.length > 0);
 });

@@ -6,7 +6,7 @@
  * 숫자 비교는 브리핑 번역 검사와 같은 valueSets/numericValues (Gate 2).
  * 받아쓰기는 기계라서 고유명사 오자가 있다 — 그래서 대조는 숫자만, 받아쓰기는 공개 화면에 보이지 않는다(briefing-media.tsx).
  */
-import { chaptersFromTranscript, formatClock, type MediaChapter } from "./media";
+import { chaptersFromTranscript, formatClock, MAX_ORDINAL, ORDINAL_WORDS, type MediaChapter } from "./media";
 import { numericValues } from "./translate";
 import type { BriefingContent } from "./types";
 
@@ -34,36 +34,67 @@ export function audioSourceMarkdown(
   return o.join("\n");
 }
 
+/**
+ * 자료 머리말의 날짜 — 연도까지 (2026-11-13: 음성이 "2026년 11월 12일"이라 읽었는데 자료에 연도가 없어 숫자 대조에서 떨어졌다)
+ */
+export function audioDateLabel(date: string, locale: AudioLocale): string {
+  const [y, m, d] = date.split("-").map(Number);
+  if (locale === "ko") return `${y}년 ${m}월 ${d}일`;
+  if (locale === "zh") return `${y}年${m}月${d}日`;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[m - 1]} ${d}, ${y}`;
+}
+
+/**
+ * 대조용 자료 — 한글 수 단어를 숫자로도 적어 둔다 (자료 "백만 입력 토큰당" ↔ 받아쓰기 "100만", 2026-11-13).
+ * 자료 쪽 숫자 모음만 넓힌다: 음성이 다른 숫자를 읽으면 여전히 걸린다.
+ */
+function sourceForCompare(source: string): string {
+  const extra: string[] = [];
+  for (const m of source.matchAll(/(?<![가-힣])(십|백|천)(만|억|조)/g)) extra.push(`${{ 십: 10, 백: 100, 천: 1000 }[m[1] as "십" | "백" | "천"]}${m[2]}`);
+  return extra.length ? `${source}\n${extra.join(" ")}` : source;
+}
+
 /** NotebookLM 언어 코드 (notebooklm language list) */
 export const NOTEBOOKLM_LANG: Record<AudioLocale, string> = { ko: "ko", zh: "zh_Hans", en: "en" };
 
 /**
  * NotebookLM 음성 지시문 (brief 형식). 시험에서 틀린 곳(버전 번호·해석 문장·발음)을 직접 짚는다.
- * 서수("첫째"·"第一，"·"First,")는 장 찾기(media.ts chaptersFromTranscript)가 읽는 말 — 바꾸면 그쪽도 같이.
+ * 서수("첫째"·"第一，"·"First,")는 장 찾기(media.ts chaptersFromTranscript)가 읽는 말 — 같은 목록(ORDINAL_WORDS)에서
+ * 그 판의 주요 기사 수만큼 만든다 (2026-11-13: "다섯째"까지만 시켜 7~8개 판의 6번 이후가 장 없이 읽혔다).
  */
+function ordinalList(locale: AudioLocale, storyCount: number): string {
+  const n = Math.max(1, Math.min(MAX_ORDINAL, Math.floor(storyCount) || 5));
+  const words = ORDINAL_WORDS[locale].slice(0, n);
+  if (locale === "ko") return `주요 기사 ${n}개를 하나도 빼지 말고 1번부터 순서대로 "${words.join(", ")}"로 시작해 소개할 것.`;
+  if (locale === "zh") return `按资料中主要新闻的顺序逐条介绍全部 ${n} 条，一条也不要漏，每条分别以${words.map((w) => `“${w}，”`).join("")}开头。`;
+  return `Introduce all ${n} top stories in order without skipping any, starting each one with ${words.map((w) => `"${w},"`).join(" ")}.`;
+}
+
 const AUDIO_INSTRUCTIONS_BY: Record<AudioLocale, string> = {
   ko:
-    '한국어 1인 진행자의 짧은 아침 뉴스 브리핑. 자료의 주요 기사를 1번부터 순서대로 "첫째, 둘째, 셋째, 넷째, 다섯째"로 시작해 소개할 것. ' +
+    '한국어 1인 진행자의 짧은 아침 뉴스 브리핑. {ORDINALS} ' +
     "숫자·날짜·버전 번호(예: iOS 27.3)·금액은 자료에 적힌 표기를 한 글자도 바꾸지 말고 그대로 읽을 것. " +
     '자료에 없는 숫자·배경지식·전망·평가·의견 문장을 절대 덧붙이지 말 것 (예: "구조적 한계", "모든 영역으로 진입" 같은 해석 금지). ' +
     '각 기사의 "왜 중요한가"는 자료 문장 그대로의 뜻만 전할 것. 과장 금지. "자료", "이 자료가" 같은 말 금지. ' +
     "고유명사 발음: 千问=치엔원(치에논 아님), Kimi=키미, fal=팔, MiniMax=미니맥스, Pika=피카, UniPat=유니팻, Anthropic=앤트로픽, CyberOne=사이버원, 레이쥔, 리자치, 닝더스다이, 딥시크. " +
     '마지막 문장은 "자세한 내용과 근거 기사는 브리핑 페이지에서 확인하세요."',
   zh:
-    "用普通话、由一位主播播报的简短晨间新闻简报。按资料中主要新闻的顺序逐条介绍，每条分别以“第一，”“第二，”“第三，”“第四，”“第五，”开头。" +
+    "用普通话、由一位主播播报的简短晨间新闻简报。{ORDINALS}" +
     "数字、日期、版本号（例如 iOS 27.3）和金额必须完全按照资料中的写法读出，一个字也不要改。" +
     "绝对不要添加资料中没有的数字、背景知识、展望、评价或观点。每条新闻的“为什么重要”只传达资料原句的意思，不要夸张。不要说“资料”“这份资料”之类的话。" +
     "最后一句说：“详细内容和来源报道，请查看简报页面。”",
   en:
-    'A short morning news briefing read by a single host in English. Introduce the top stories in order, starting each one with "First," "Second," "Third," "Fourth," "Fifth,". ' +
+    'A short morning news briefing read by a single host in English. {ORDINALS} ' +
     "Read every number, date, version number (e.g. iOS 27.3) and amount exactly as written in the source; do not round, convert or change a single digit. " +
     "Never add numbers, background, outlook, evaluation or opinion that are not in the source. For each story, convey only what its \"Why it matters\" line says, without exaggeration. Do not say \"the source\" or \"this document\". " +
     "Pronunciation: Qwen = chwen, Kimi = KEE-mee, fal = fal, MiniMax = mini-max, DeepSeek = deep-seek, Anthropic = an-THROP-ik. " +
     'End with: "Full details and source articles are on the briefing page."',
 };
-export const audioInstructions = (locale: AudioLocale) => AUDIO_INSTRUCTIONS_BY[locale];
+/** 음성 지시문 — storyCount 는 그 판의 주요 기사 수 (서수를 그만큼) */
+export const audioInstructions = (locale: AudioLocale, storyCount = 5) => AUDIO_INSTRUCTIONS_BY[locale].replace("{ORDINALS}", ordinalList(locale, storyCount));
 /** 한국어 (이전 이름 — 호환) */
-export const AUDIO_INSTRUCTIONS = AUDIO_INSTRUCTIONS_BY.ko;
+export const AUDIO_INSTRUCTIONS = audioInstructions("ko");
 
 export interface TranscriptLine {
   t: number;
@@ -128,7 +159,7 @@ export interface AudioCheck {
  * 받아쓰기 오자로 생긴 가짜 숫자도 걸릴 수 있다 — 그때는 다시 만든다(더 엄격한 쪽으로 틀린다).
  */
 export function checkTranscript(transcript: string, source: string, storyCount: number): AudioCheck {
-  const src = numericValues(source);
+  const src = numericValues(sourceForCompare(source));
   // 시각 표기("A: 1:25")는 숫자 비교에서 뺀다
   const body = transcript.replace(/^\s*[A-Z]\s*:\s*\d+:\d{2}(?::\d{2})?\s*/gm, "");
   const unknownNumbers = [...numericValues(body)].filter((v) => !src.has(v));
