@@ -129,6 +129,19 @@ export function retimeByLength(lines: TranscriptLine[], durationSec: number): Tr
   });
 }
 
+/**
+ * 시각 없는 받아쓰기 글(OpenAI 받아쓰기 text) → 문장 한 줄씩 (t=0, 시각은 retimeByLength 가 매긴다).
+ * 장 찾기는 줄 첫머리 서수("첫째,"·"第一，"·"First,")를 보므로 문장 끝(. ? ! 。 ？ ！)에서 나눈다. 소수점("93.72")은 나누지 않는다.
+ */
+export function linesFromPlainText(text: string): TranscriptLine[] {
+  return String(text ?? "")
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.?!])\s+|(?<=[。？！])/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((t) => ({ t: 0, text: t }));
+}
+
 /** "A: 0:24 문장" 글 → 줄 (저장된 받아쓰기를 다시 매길 때) */
 export function linesFromTranscript(transcript: string): TranscriptLine[] {
   const out: TranscriptLine[] = [];

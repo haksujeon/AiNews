@@ -2,13 +2,14 @@
  * 브리핑 음성 만들기 (NotebookLM brief, 사용자 결정 2026-11-05) — 자료 올리기 → 음성 생성 → 받아쓰기 → 숫자 대조 → 등록.
  *
  *   npx tsx scripts/briefing-audio.ts [--date 2026-11-04] [--locale ko] [--attempts 3] [--approve-on-pass] [--dry] [--force] [--recheck]
+ * --only-if-pass: 숫자 대조를 통과한 음성만 등록 (승인된 음성을 --force 로 바꿀 때).
  * --recheck: 새로 만들지 않고 등록된 음성을 다시 받아써 대조 (받아쓰기 한도·오인식으로 실패했을 때).
  *
  * --date 가 없으면 최근 3일(BRIEFING_MEDIA_LOOKBACK_DAYS) 발행 판 가운데 음성이 승인되지 않은 가장 최신 판 (모두 승인됐으면 건너뜀). 숫자 대조(audio-check.ts checkTranscript)를 통과할 때까지 최대 --attempts 번 다시 만든다.
  * 통과하지 못하면 숫자가 가장 덜 틀린 것을 검토 중(review)으로 남긴다 (공개 화면에 안 보임). 통과 + --approve-on-pass 면 바로 승인.
  * 이미 승인된 음성이 있으면 아무것도 하지 않는다 (--force 로 다시 만들기).
  * NotebookLM: ~/.local/bin/notebooklm (로그인 세션은 그 프로필). 노트북 "AiNews 데일리 음성"을 찾거나 만들고, 자료는 끝나면 지운다.
- * 받아쓰기: LiteLLM gemini-2.5-flash (BRIEFING_TRANSCRIBE_MODEL) input_audio.
+ * 받아쓰기: LiteLLM gpt-4o-transcribe → whisper-1 → Gemini (BRIEFING_TRANSCRIBE_MODELS). 대조용 두 번째 받아쓰기는 다른 모델.
  */
 import { loadEnvConfig } from "@next/env";
 import { execFileSync } from "node:child_process";
@@ -44,35 +45,72 @@ function notebookId(): string {
   return id;
 }
 
-async function transcribe(file: string, locale: "ko" | "zh" | "en", preferLite = false): Promise<unknown> {
+/**
+ * 받아쓰기 한 번 → {lines:[{t,text}]}. 모델을 차례로 시도한다 (한도·서버 오류면 다음 모델).
+ * 2026-11-13: Gemini(flash·lite)가 하루 한도(429)로 막혀 lite 두 번이 같은 숫자를 잘못 들어(93.72→93.77) 검사에서 떨어졌다
+ * → OpenAI 받아쓰기(gpt-4o-transcribe·whisper-1, LiteLLM /v1/audio/transcriptions)를 앞에 둔다. 실측 9초 안팎, 숫자 정확.
+ * second=true(대조용 두 번째 받아쓰기)는 순서를 바꿔 첫 번째와 다른 모델이 듣게 한다.
+ */
+const TRANSCRIBE_MODELS = (process.env.BRIEFING_TRANSCRIBE_MODELS || "gpt-4o-transcribe,whisper-1,gemini-2.5-flash,gemini-2.5-flash-lite")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
+const isAudioApiModel = (m: string) => /transcribe|whisper/i.test(m);
+
+async function transcribe(file: string, locale: "ko" | "zh" | "en", second = false): Promise<unknown> {
   const { parseJsonContent } = await import("../src/lib/briefing/llm");
-  const { transcribePrompt } = await import("../src/lib/briefing/audio-check");
+  const { transcribePrompt, linesFromPlainText } = await import("../src/lib/briefing/audio-check");
   const base = (process.env.LITELLM_BASE_URL ?? "").replace(/\/+$/, "");
   const key = process.env.LITELLM_API_KEY;
   if (!base || !key) throw new Error("LITELLM_BASE_URL / LITELLM_API_KEY 미설정");
   const small = `${file}.32k.mp3`;
   execFileSync("ffmpeg", ["-y", "-v", "error", "-i", file, "-ac", "1", "-ar", "16000", "-b:a", "32k", small]);
-  const data = readFileSync(small).toString("base64");
-  // 한도(429)·서버 오류면 다음 모델로 (gemini-2.5-flash 무료 한도가 하루에 막힐 수 있다 — 2026-11-05 실측)
-  const base2 = [process.env.BRIEFING_TRANSCRIBE_MODEL || "gemini-2.5-flash", "gemini-2.5-flash-lite"];
-  const models = [...new Set(preferLite ? [...base2].reverse() : base2)];
+  const audio = readFileSync(small);
+  const models = second && TRANSCRIBE_MODELS.length > 1 ? [TRANSCRIBE_MODELS[1], TRANSCRIBE_MODELS[0], ...TRANSCRIBE_MODELS.slice(2)] : TRANSCRIBE_MODELS;
   let last = "";
   for (const model of models) {
-    const res = await fetch(`${base}/v1/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        max_tokens: 8000,
-        messages: [{ role: "user", content: [{ type: "text", text: transcribePrompt(locale) }, { type: "input_audio", input_audio: { data, format: "mp3" } }] }],
-      }),
-      signal: AbortSignal.timeout(300_000),
-    });
-    const body = (await res.json().catch(() => null)) as { choices?: { message?: { content?: string } }[]; error?: unknown } | null;
-    const content = body?.choices?.[0]?.message?.content;
-    if (res.ok && typeof content === "string") return parseJsonContent(content);
-    const err = body?.error;
-    last = `${model} ${res.status}: ${typeof err === "string" ? err : JSON.stringify(err ?? body).slice(0, 200)}`;
+    try {
+      if (isAudioApiModel(model)) {
+        const fd = new FormData();
+        fd.append("model", model);
+        fd.append("language", locale);
+        const segments = /whisper/i.test(model);
+        fd.append("response_format", segments ? "verbose_json" : "json");
+        if (segments) fd.append("timestamp_granularities[]", "segment");
+        fd.append("file", new Blob([audio], { type: "audio/mpeg" }), "audio.mp3");
+        const res = await fetch(`${base}/v1/audio/transcriptions`, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: fd, signal: AbortSignal.timeout(300_000) });
+        const body = (await res.json().catch(() => null)) as { text?: unknown; segments?: { start?: unknown; text?: unknown }[]; error?: unknown } | null;
+        if (res.ok && typeof body?.text === "string") {
+          log(`  받아쓰기 ${model}`);
+          // 시각은 어차피 글자 수 비율로 다시 매긴다(retimeByLength) — 줄(문장) 나누기만 중요하다
+          const segLines = (body.segments ?? []).flatMap((g) => linesFromPlainText(String(g.text ?? "")).map((l) => ({ t: Number(g.start) || 0, text: l.text })));
+          return { lines: segLines.length ? segLines : linesFromPlainText(body.text) };
+        }
+        const err = body?.error;
+        last = `${model} ${res.status}: ${typeof err === "string" ? err : JSON.stringify(err ?? body).slice(0, 200)}`;
+      } else {
+        const res = await fetch(`${base}/v1/chat/completions`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            max_tokens: 8000,
+            messages: [{ role: "user", content: [{ type: "text", text: transcribePrompt(locale) }, { type: "input_audio", input_audio: { data: audio.toString("base64"), format: "mp3" } }] }],
+          }),
+          signal: AbortSignal.timeout(300_000),
+        });
+        const body = (await res.json().catch(() => null)) as { choices?: { message?: { content?: string } }[]; error?: unknown } | null;
+        const content = body?.choices?.[0]?.message?.content;
+        if (res.ok && typeof content === "string") {
+          log(`  받아쓰기 ${model}`);
+          return parseJsonContent(content);
+        }
+        const err = body?.error;
+        last = `${model} ${res.status}: ${typeof err === "string" ? err : JSON.stringify(err ?? body).slice(0, 200)}`;
+      }
+    } catch (e) {
+      last = `${model}: ${(e as Error).message.slice(0, 200)}`;
+    }
     log(`  받아쓰기 실패 ${last}`);
   }
   throw new Error(`받아쓰기 실패 — ${last}`);
@@ -83,8 +121,8 @@ type AC = typeof import("../src/lib/briefing/audio-check");
 /** 받아쓰기 → 대조. 모르는 숫자가 있으면 한 번 더 받아써 양쪽에 다 나온 것만 오류로 본다 (confirmedUnknown) */
 async function verify(mp3: string, source: string, storyCount: number, ac: AC, locale: "ko" | "zh" | "en"): Promise<Omit<Attempt, "n" | "mp3">> {
   const dur = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp3]).toString().trim());
-  const once = async (preferLite: boolean) => {
-    const transcript = ac.transcriptText(ac.retimeByLength(ac.linesFromJson(await transcribe(mp3, locale, preferLite)), dur));
+  const once = async (second: boolean) => {
+    const transcript = ac.transcriptText(ac.retimeByLength(ac.linesFromJson(await transcribe(mp3, locale, second)), dur));
     return { transcript, chk: ac.checkTranscript(transcript, source, storyCount) };
   };
   let first;
@@ -226,6 +264,11 @@ async function main() {
     const note = best.ok
       ? `NotebookLM brief · 숫자 대조 통과 (시도 ${best.n}/${tries.length})`
       : `NotebookLM brief · 숫자 대조 실패: 자료에 없는 숫자 [${best.unknown.join(", ")}], 장 ${best.chaptersFound}/${b.content.top_stories.length} — 사람이 듣고 판단`;
+    // --only-if-pass: 통과하지 못하면 등록하지 않는다 (승인된 음성을 --force 로 다시 만들 때 — 실패작이 승인본을 덮지 않게)
+    if (!best.ok && flag("only-if-pass")) {
+      log(`통과 못 함 — 등록하지 않음 (기존 음성 그대로): ${note}`);
+      return;
+    }
     const r = await registerMedia({ date, locale, kind: "audio", file: best.mp3, source: "notebooklm-brief", transcriptFile: txFile, note });
     log(`등록(검토 중): ${r.abs} · ${Math.round(r.duration ?? 0)}초 · 장 ${r.chapters.length}`);
     if (best.ok && flag("approve-on-pass")) {
